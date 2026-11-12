@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light" data-app="admin">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>知行测评 · 管理端</title>
+<meta name="description" content="知行测评管理端：标签词表、题库内容工作台、组卷向导与梅花卷、阅卷中心与成绩分析。">
+<link rel="stylesheet" href="../shared/styles/tokens.css">
+<link rel="stylesheet" href="../shared/styles/app.css">
+</head>
+<body>
+<a class="skip-link" href="#view">跳到主要内容</a>
+
+<div class="app">
+  <header class="topbar" id="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg class="od-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="--od-icon-size:17px"><path d="M6.5 12.4l3.6 3.6L17.8 8.4"/></svg>
+      </span>
+      <span class="brand-text">
+        <span class="brand-name">知行测评</span>
+        <span class="brand-sub">管理端 · 在线考试与练习平台</span>
+      </span>
+    </div>
+  </header>
+
+  <div class="app-body">
+    <nav class="sidebar" id="sidebar" aria-label="主导航"></nav>
+    <main class="view" id="view" tabindex="-1">
+      <div class="view-inner" id="view-inner"></div>
+    </main>
+  </div>
+</div>
+
+<div class="toast-host" id="toast-host" aria-live="polite" aria-atomic="false"></div>
+
+<!-- 标签编辑器 -->
+<dialog id="dlg-tag" aria-labelledby="tag-editor-title">
+  <div class="dlg-head">
+    <h2 class="dlg-title" id="tag-editor-title">新建标签</h2>
+    <button type="button" class="icon-btn" data-action="dialog.close" data-dialog="dlg-tag" aria-label="关闭">
+      <svg class="od-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="dlg-body" id="tag-editor-body"></div>
+  <div class="dlg-foot">
+    <button type="button" class="btn" data-action="dialog.close" data-dialog="dlg-tag">取消</button>
+    <button type="button" class="btn btn-primary" data-action="admin.tag.save">保存标签</button>
+  </div>
+</dialog>
+
+<!-- 题库编辑器 -->
+<dialog id="dlg-bank" aria-labelledby="bank-editor-title">
+  <div class="dlg-head">
+    <h2 class="dlg-title" id="bank-editor-title">新建题库</h2>
+    <button type="button" class="icon-btn" data-action="dialog.close" data-dialog="dlg-bank" aria-label="关闭">
+      <svg class="od-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="dlg-body" id="bank-editor-body"></div>
+  <div class="dlg-foot">
+    <button type="button" class="btn" data-action="dialog.close" data-dialog="dlg-bank">取消</button>
+    <button type="button" class="btn btn-primary" data-action="admin.bank.save">保存题库</button>
+  </div>
+</dialog>
+
+<!-- 题目编辑器 -->
+<dialog id="dlg-question" aria-labelledby="q-editor-title">
+  <div class="dlg-head">
+    <h2 class="dlg-title" id="q-editor-title">新建题目</h2>
+    <button type="button" class="icon-btn" data-action="dialog.close" data-dialog="dlg-question" aria-label="关闭">
+      <svg class="od-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="dlg-body" id="q-editor-body"></div>
+  <div class="dlg-foot">
+    <button type="button" class="btn" data-action="dialog.close" data-dialog="dlg-question">取消</button>
+    <button type="button" class="btn btn-primary" data-action="admin.question.save">保存题目</button>
+  </div>
+</dialog>
+
+<!-- 试卷 / 练习 标签 -->
+<dialog id="dlg-entity-tags" aria-labelledby="entity-tags-title">
+  <div class="dlg-head">
+    <h2 class="dlg-title" id="entity-tags-title">编辑标签</h2>
+    <button type="button" class="icon-btn" data-action="dialog.close" data-dialog="dlg-entity-tags" aria-label="关闭">
+      <svg class="od-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="dlg-body">
+    <p class="section-note" id="entity-tags-sub" style="margin-bottom:var(--sp-4)"></p>
+    <div class="field">
+      <span class="field-label">标签<span class="tag-counter" id="entity-tag-counter">0/5</span></span>
+      <div class="tag-picker" id="entity-tag-picker"></div>
+      <span class="field-hint">单个对象最多挂载 5 个标签；选满后其余标签会被置灰。</span>
+    </div>
+  </div>
+  <div class="dlg-foot">
+    <button type="button" class="btn" data-action="dialog.close" data-dialog="dlg-entity-tags">取消</button>
+    <button type="button" class="btn btn-primary" data-action="admin.entity.tags.save">保存标签</button>
+  </div>
+</dialog>
+
+<!-- 答题者卷面预览 -->
+<dialog id="dlg-preview" aria-labelledby="preview-title">
+  <div class="dlg-head">
+    <h2 class="dlg-title" id="preview-title">答题者卷面</h2>
+    <button type="button" class="icon-btn" data-action="dialog.close" data-dialog="dlg-preview" aria-label="关闭">
+      <svg class="od-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="dlg-body" id="preview-body"></div>
+  <div class="dlg-foot">
+    <button type="button" class="btn" data-action="dialog.close" data-dialog="dlg-preview">关闭</button>
+  </div>
+</dialog>
+
+<!-- 通用二次确认 -->
+<dialog id="dlg-confirm" aria-labelledby="confirm-title">
+  <div class="dlg-head">
+    <h2 class="dlg-title" id="confirm-title">确认操作</h2>
+    <button type="button" class="icon-btn" data-action="dialog.close" data-dialog="dlg-confirm" aria-label="关闭">
+      <svg class="od-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="dlg-body"><p id="confirm-body" class="text-2"></p></div>
+  <div class="dlg-foot">
+    <button type="button" class="btn" data-action="dialog.close" data-dialog="dlg-confirm">取消</button>
+    <button type="button" class="btn btn-primary" id="confirm-ok" data-action="dialog.confirm">确认</button>
+  </div>
+</dialog>
+
+<script src="../shared/js/seed.js"></script>
+<script src="../shared/js/catalog.js"></script>
+<script src="../shared/js/engine.js"></script>
+<script src="js/admin-config.js"></script>
+<script src="../shared/js/app.js"></script>
+<script src="js/admin.js"></script>
+<script src="js/admin-workbench.js"></script>
+</body>
+</html>

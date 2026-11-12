@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light" data-app="exam">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>知行测评 · 在线考试与练习平台</title>
+<meta name="description" content="知行测评：在线考试与练习平台，支持单选、多选、判断、简答与综合操作题，提供练习中心、考试安排、错题本与成绩报告。">
+<link rel="stylesheet" href="../shared/styles/tokens.css">
+<link rel="stylesheet" href="../shared/styles/app.css">
+</head>
+<body>
+<a class="skip-link" href="#view">跳到主要内容</a>
+
+<div class="app">
+  <header class="topbar" id="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg class="od-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="--od-icon-size:17px"><path d="M6.5 12.4l3.6 3.6L17.8 8.4"/></svg>
+      </span>
+      <span class="brand-text">
+        <span class="brand-name">知行测评</span>
+        <span class="brand-sub">在线考试与练习平台</span>
+      </span>
+    </div>
+  </header>
+
+  <div class="app-body">
+    <nav class="sidebar" id="sidebar" aria-label="主导航"></nav>
+    <main class="view" id="view" tabindex="-1">
+      <div class="view-inner" id="view-inner"></div>
+    </main>
+  </div>
+</div>
+
+<div class="toast-host" id="toast-host" aria-live="polite" aria-atomic="false"></div>
+
+<!-- 交卷确认 -->
+<dialog id="dlg-submit" aria-labelledby="submit-title">
+  <div class="dlg-head">
+    <h2 class="dlg-title" id="submit-title">确认交卷</h2>
+    <button type="button" class="icon-btn" data-action="dialog.close" data-dialog="dlg-submit" aria-label="关闭">
+      <svg class="od-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="dlg-body" id="submit-body"></div>
+  <div class="dlg-foot">
+    <button type="button" class="btn" data-action="dialog.close" data-dialog="dlg-submit">继续作答</button>
+    <button type="button" class="btn btn-primary" data-action="exam.submit.confirm">确认交卷</button>
+  </div>
+</dialog>
+
+<!-- 通用二次确认 -->
+<dialog id="dlg-confirm" aria-labelledby="confirm-title">
+  <div class="dlg-head">
+    <h2 class="dlg-title" id="confirm-title">确认操作</h2>
+    <button type="button" class="icon-btn" data-action="dialog.close" data-dialog="dlg-confirm" aria-label="关闭">
+      <svg class="od-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="dlg-body"><p id="confirm-body" class="text-2"></p></div>
+  <div class="dlg-foot">
+    <button type="button" class="btn" data-action="dialog.close" data-dialog="dlg-confirm">取消</button>
+    <button type="button" class="btn btn-primary" id="confirm-ok" data-action="dialog.confirm">确认</button>
+  </div>
+</dialog>
+
+<script src="../shared/js/seed.js"></script>
+<script src="../shared/js/catalog.js"></script>
+<script src="../shared/js/engine.js"></script>
+<script src="js/exam-config.js"></script>
+<script src="../shared/js/app.js"></script>
+<script src="js/student.js"></script>
+</body>
+</html>

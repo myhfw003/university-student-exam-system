@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>知行测评 · 入口导航</title>
+<meta name="description" content="知行测评：在线考试与练习平台。答题端与管理端分别独立运行，共用共享内容与公共外壳。">
+<link rel="stylesheet" href="shared/styles/tokens.css">
+<link rel="stylesheet" href="shared/styles/portal.css">
+</head>
+<body>
+<main class="portal">
+  <header class="portal-head">
+    <span class="portal-mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 12.4l3.6 3.6L17.8 8.4"/></svg>
+    </span>
+    <h1 class="portal-title">知行测评</h1>
+    <p class="portal-sub">在线考试与练习平台 · 请选择要进入的应用</p>
+  </header>
+
+  <div class="portal-grid">
+    <a class="portal-card" href="exam/index.html">
+      <span class="portal-card-head">
+        <span class="portal-card-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z"/></svg>
+        </span>
+        <h2 class="portal-card-title">答题端</h2>
+      </span>
+      <p class="portal-card-desc">练习、考试与个人成绩记录。</p>
+      <ul class="portal-list">
+        <li>练习中心 · 按标签与题型组练习</li>
+        <li>考试安排 · 统一试卷与梅花卷作答</li>
+        <li>错题本 · 自动回流重练</li>
+        <li>成绩报告 · 逐题得分与趋势</li>
+      </ul>
+    </a>
+
+    <a class="portal-card" href="admin/index.html">
+      <span class="portal-card-head">
+        <span class="portal-card-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7.5 3.6v5.1c0 4.3-3 8.1-7.5 9.3-4.5-1.2-7.5-5-7.5-9.3V6.6z"/><path d="M9.2 12.2l2 2 3.6-3.9"/></svg>
+        </span>
+        <h2 class="portal-card-title">管理端</h2>
+      </span>
+      <p class="portal-card-desc">内容、题库与组卷工作台。</p>
+      <ul class="portal-list">
+        <li>概览 · 内容与成绩概况</li>
+        <li>标签与题库 · 内容维护</li>
+        <li>组卷 · 试卷与梅花卷生成</li>
+        <li>阅卷中心 · 主观题评分</li>
+      </ul>
+    </a>
+  </div>
+
+  <footer class="portal-foot">
+    两端互相独立、互不依赖入口页面；共享内容仓库与公共外壳位于 <code>shared/</code>，具体实现位于 <code>exam/</code> 与 <code>admin/</code>。
+  </footer>
+</main>
+</body>
+</html>
