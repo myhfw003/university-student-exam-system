@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: 后端构建与测试
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: 还原依赖
+        run: dotnet restore ExamManager.slnx
+      - name: 构建（警告视为错误）
+        run: dotnet build ExamManager.slnx -c Release --no-restore
+      - name: 测试与覆盖率
+        run: |
+          dotnet test ExamManager.slnx -c Release --no-build \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            --logger "trx;LogFileName=test-results.trx"
+      - name: 上传覆盖率报告
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/TestResults
+      - name: 依赖漏洞扫描
+        run: |
+          dotnet list ExamManager.slnx package --vulnerable --include-transitive --format json > vulnerabilities.json
+          if grep -q '"vulnerabilities": \[{' vulnerabilities.json; then
+            echo "检测到高危漏洞"; cat vulnerabilities.json; exit 1
+          fi
+
+  frontend:
+    name: 前端构建与测试
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+      - name: 依赖漏洞扫描（生产依赖，作为门禁）
+        # 只有 production 依赖会进入交付产物，开发工具链（ESLint / Vitest 等）的
+        # 传递依赖不进产物，单独列出仅作可见性参考。
+        # audit 接口只在官方 registry 上存在，镜像源（npmmirror）未实现该接口。
+        run: pnpm audit --prod --audit-level=high --registry=https://registry.npmjs.org
+      - name: 依赖漏洞扫描（全部依赖，仅报告不阻断）
+        run: pnpm audit --audit-level=low --registry=https://registry.npmjs.org || true
+
+  security:
+    name: 密钥扫描
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 扫描硬编码密钥
+        run: bash scripts/scan-secrets.sh
