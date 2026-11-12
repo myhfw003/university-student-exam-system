@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>知行测评 · 在线考试与练习平台</title>
+    <meta
+      name="description"
+      content="知行测评：在线考试与练习平台，支持单选、多选、判断、简答与综合操作题，提供练习中心、考试安排、错题本与成绩报告。"
+    />
+    <script>
+      // 首屏内联脚本预置主题，避免闪白
+      (function () {
+        try {
+          var stored = localStorage.getItem("exam.theme");
+          var theme =
+            stored === "light" || stored === "dark"
+              ? stored
+              : window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light";
+          document.documentElement.setAttribute("data-theme", theme);
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

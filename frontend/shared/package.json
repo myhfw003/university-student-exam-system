@@ -1,0 +1,41 @@
+{
+  "name": "@exam/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "知行测评前端共享层：设计令牌、无业务逻辑 UI 组件、API 骨架与自研 SVG 图表。",
+  "exports": {
+    ".": "./src/index.ts",
+    "./design/theme.css": "./src/design/theme.css",
+    "./design/primitives.css": "./src/design/primitives.css",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/jest-dom": "^6.10.0",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.9",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "jsdom": "^26.1.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwindcss": "^4.3.5",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.12"
+  }
+}

@@ -1,0 +1,13 @@
+packages:
+  - shared
+  - student
+  - admin
+
+# esbuild 需要执行安装脚本来落地平台二进制
+allowBuilds:
+  esbuild: true
+
+# pnpm 11 的新包发布冷静期：以下版本发布时间过近，显式放行
+minimumReleaseAgeExclude:
+  - react-hook-form@7.92.0
+  - '@hookform/resolvers@7.0.6'
