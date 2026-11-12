@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- P-01: 领域层不依赖任何 NuGet 包（除 .NET BCL）。由 Exam.ArchitectureTests 强制。 -->
+  <PropertyGroup>
+    <RootNamespace>Exam.Domain</RootNamespace>
+  </PropertyGroup>
+</Project>

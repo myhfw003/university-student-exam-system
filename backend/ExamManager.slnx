@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Exam.Application/Exam.Application.csproj" />
+    <Project Path="src/Exam.Domain/Exam.Domain.csproj" />
+    <Project Path="src/Exam.Infrastructure/Exam.Infrastructure.csproj" />
+    <Project Path="src/Exam.Web/Exam.Web.csproj" />
+    <Project Path="src/Exam.Worker/Exam.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Exam.Application.UnitTests/Exam.Application.UnitTests.csproj" />
+    <Project Path="tests/Exam.ArchitectureTests/Exam.ArchitectureTests.csproj" />
+    <Project Path="tests/Exam.Domain.UnitTests/Exam.Domain.UnitTests.csproj" />
+    <Project Path="tests/Exam.Infrastructure.IntegrationTests/Exam.Infrastructure.IntegrationTests.csproj" />
+    <Project Path="tests/Exam.Web.FunctionalTests/Exam.Web.FunctionalTests.csproj" />
+  </Folder>
+</Solution>
