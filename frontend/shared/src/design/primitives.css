@@ -13,10 +13,82 @@
       仍然可以覆盖这些基线样式。
    ========================================================================== */
 
+@layer od-layout {
+  [hidden]:not([hidden="until-found" i]) { display: none !important; }
+  dialog:not([open]) { display: none !important; }
+
+  :where(.od-stack,.od-row,.od-row-top,.od-cluster,.od-grid,.od-field,.od-stat,.od-cell,.od-tile) > :where(*) { min-width: 0; }
+
+  /* containers */
+  .od-stack   { display: flex; flex-direction: column; gap: var(--od-gap, 8px); }
+  .od-row     { display: flex; align-items: center; gap: var(--od-gap, 8px); }
+  .od-row-top { display: flex; align-items: flex-start; gap: var(--od-gap, 8px); }
+  .od-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-gap, 8px); }
+  .od-fill    { flex: 1 1 0; min-width: 0; }
+  .od-fixed   { flex: none; }
+  .od-grid    { display: grid; gap: var(--od-gap, 12px); grid-template-columns: repeat(var(--od-cols, 3), minmax(0, 1fr)); }
+
+  /* stacked information: each piece is its own line — never sibling inline spans */
+  .od-stat, .od-field, .od-cell { display: grid; gap: var(--od-gap, 2px); }
+  :where(.od-stat,.od-field,.od-cell) > :where(*) { display: block; }
+  .od-tile { display: grid; grid-template-rows: auto 1fr; }
+  :where(.od-tile) > :where(*) { display: block; }
+
+  /* media keeps its intrinsic ratio by default; never a distorted or cropped
+     cover by accident. height:auto lets the ratio win over an <img height="…">
+     attribute. Cropping to a uniform box is an explicit opt-in: set --od-ratio
+     AND add .od-media-cover together (per the core rule, only where a crop is
+     deliberate — tile thumbs, decorative fills — never on full-frame content). */
+  .od-media { display: block; width: 100%; height: auto; aspect-ratio: var(--od-ratio, auto); }
+  .od-media-cover { object-fit: cover; }
+
+  /* functional inline SVG icons opt into bounded geometry; content SVGs keep their own */
+  .od-icon { display: inline-block; inline-size: var(--od-icon-size, 1em); block-size: var(--od-icon-size, 1em); flex: none; }
+
+  /* data text only — authored copy is rewritten to its budget instead */
+  .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .od-clamp-2, .od-clamp-3 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .od-clamp-2 { -webkit-line-clamp: 2; }
+  .od-clamp-3 { -webkit-line-clamp: 3; }
+  .od-lines-2 { min-height: calc(2 * 1.4em); }   /* block-level reservation for a shared baseline */
+  .od-nowrap  { white-space: nowrap; }           /* 数字+单位 · 价格+起 · 日期+星期 */
+  .od-keep    { word-break: keep-all; overflow-wrap: anywhere; } /* CJK labels break at spaces / <wbr> first */
+
+  /* screen skeleton (optional): bars take their own space, the middle scrolls — no padding guessed for chrome */
+  .od-screen { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; }
+  .od-scroll { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+
+  /* horizontal rail: the next chip peeks at the edge; trailing room survives overflow */
+  .od-rail { display: flex; gap: var(--od-gap, 8px); overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+             padding-inline: var(--od-rail-pad, 16px); scroll-padding-inline: var(--od-rail-pad, 16px); }
+  .od-rail::-webkit-scrollbar { display: none; }
+  :where(.od-rail) > :where(*) { flex: none; scroll-snap-align: start; }
+  :where(.od-rail) > :where(:last-child) { margin-inline-end: var(--od-rail-pad, 16px); }
+
+  .od-spacer { flex: none; visibility: hidden; pointer-events: none; }
+  .od-touch  { min-width: 44px; min-height: 44px; }
+}
+
 @layer components {
   /* ==========================================================================
      基础
      ========================================================================== */
+
+  /* 键盘用户的第一：聚焦才显形 */
+  .skip-link {
+    position: absolute; left: -999px; top: 0; z-index: 100;
+    background: var(--c-primary); color: var(--c-on-primary);
+    padding: 10px 16px; border-radius: 0 0 var(--r-md) 0;
+  }
+
+  .skip-link:focus { left: 0; }
+
+  /* 仅供屏幕阅读器读取 */
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
   h1,
   h2,
   h3,
@@ -786,6 +858,8 @@
   /* ==========================================================================
      表单
      ========================================================================== */
+  .input.is-invalid, .textarea.is-invalid { border-color: var(--c-danger); }
+
   .field {
     display: grid;
     gap: 6px;
@@ -1068,6 +1142,10 @@
   /* ==========================================================================
      列表行 / 键值表
      ========================================================================== */
+  .list { list-style: none; margin: 0; padding: 0; }
+
+  .list > .list-row:last-child { border-bottom: none; }
+
   .list-row {
     display: flex;
     align-items: center;
@@ -1308,6 +1386,61 @@
     font-size: 11px;
     font-family: var(--font-sans);
   }
+
+  /* ==========================================================================
+     梅花卷矩阵（答题者 × 题目 对照）
+     ========================================================================== */
+  .matrix-scroll {
+    overflow: auto;
+    max-height: 460px;
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-md);
+    background: var(--c-surface);
+  }
+
+  .matrix {
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: var(--fs-xs);
+    width: max-content;
+    min-width: 100%;
+  }
+
+  .matrix th, .matrix td {
+    border-right: 1px solid var(--c-border);
+    border-bottom: 1px solid var(--c-border);
+    padding: 0;
+    background: var(--c-surface);
+  }
+
+  .matrix thead th {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--c-surface-2);
+    color: var(--c-text-3);
+    font-weight: 600;
+    text-align: center;
+    padding: 6px 8px;
+    white-space: nowrap;
+  }
+
+  .matrix .m-student {
+    position: sticky; left: 0; z-index: 1;
+    background: var(--c-surface);
+    padding: 6px 10px;
+    min-width: 132px;
+    text-align: left;
+    border-right: 1px solid var(--c-border-strong);
+  }
+
+  .matrix thead th.m-student { z-index: 3; background: var(--c-surface-2); }
+
+  .matrix tbody tr:hover .m-student { background: var(--c-surface-2); }
+
+  .m-no { font-family: var(--font-mono); color: var(--c-text-3); }
+
+  .mcell.is-qdiff .m-no { color: var(--c-primary-ink); font-weight: 600; }
+
+  .matrix-legend { display: flex; flex-wrap: wrap; gap: var(--sp-4); font-size: var(--fs-xs); color: var(--c-text-3); }
 
   /* ==========================================================================
      响应式：PC 优先，窄窗口降级
@@ -1645,14 +1778,6 @@
 
   .filter-group-label {
     font-size: var(--fs-xs); color: var(--c-text-3); padding-top: 4px; letter-spacing: 0.04em;
-  }
-
-  .od-fill {
-    flex: 1 1 0; min-width: 0;
-  }
-
-  .od-truncate {
-    display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
   }
 
   .chip.is-tag {

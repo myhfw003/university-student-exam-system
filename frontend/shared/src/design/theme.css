@@ -30,6 +30,13 @@
    保证设计稿标注（tokens.css）与代码实现始终逐值对得上。
    ========================================================================== */
 
+/* 层叠顺序：先声明的层优先级低。
+   od-layout 是结构原语层（原型的 OD-LAYOUT-PRIMITIVES），
+   必须排在 theme/base/components/utilities **之前**，
+   这样产品样式与 Tailwind 工具类都能覆盖它（原样式的约定）。
+   @layer 语句允许出现在 @import 之前。 */
+@layer od-layout, theme, base, components, utilities;
+
 @import "tailwindcss";
 
 /* 入口门户页是静态 HTML，需显式纳入内容扫描。 */
