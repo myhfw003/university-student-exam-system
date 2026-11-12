@@ -5,6 +5,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "@exam/shared";
 import { initTheme } from "./themeStore";
 
 function createQueryClient(): QueryClient {
@@ -31,5 +32,10 @@ export function AppProviders({ children }: AppProvidersProps) {
     initTheme();
   }, []);
 
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+      <Toaster />
+    </QueryClientProvider>
+  );
 }

@@ -52,6 +52,10 @@ export function AppLayout() {
             </span>
           </div>
           <div className="topbar-spacer" />
+          {/* 跨端互链：与答题端互相独立（原型 shared/js/app.js 的 .top-link）。 */}
+          <a className="top-link" href="/">
+            答题端
+          </a>
           <IconButton
             label={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
             onClick={toggleTheme}

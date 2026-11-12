@@ -1,10 +1,28 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["vite/client", "vitest/globals"],
+    "types": [
+      "vite/client",
+      "vitest/globals"
+    ],
     "jsx": "react-jsx",
     "noEmit": true,
-    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.tsbuildinfo"
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.tsbuildinfo",
+    "baseUrl": "..",
+    "paths": {
+      "@/*": [
+        "./student/src/*"
+      ],
+      "@exam/shared": [
+        "./shared/src/index.ts"
+      ],
+      "@exam/shared/*": [
+        "./shared/src/*"
+      ]
+    }
   },
-  "include": ["src", "vite.config.ts"]
+  "include": [
+    "src",
+    "vite.config.ts"
+  ]
 }

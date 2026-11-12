@@ -8,7 +8,9 @@
     ".": "./src/index.ts",
     "./design/theme.css": "./src/design/theme.css",
     "./design/primitives.css": "./src/design/primitives.css",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./domain": "./src/domain/index.ts",
+    "./domain/attempt": "./src/domain/attempt.ts"
   },
   "files": [
     "src"
@@ -37,5 +39,8 @@
     "tailwindcss": "^4.3.5",
     "typescript": "~5.9.3",
     "vitest": "^4.1.12"
+  },
+  "dependencies": {
+    "zustand": "^5.1.0"
   }
 }

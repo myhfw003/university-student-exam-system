@@ -20,4 +20,8 @@ FROM nginx:1.27-alpine AS runtime
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/student/dist /usr/share/nginx/html
 COPY --from=build /app/admin/dist    /usr/share/nginx/html/admin
+
+# 入口门户页是静态 HTML，引用学生端产出的稳定文件名 app.css
+COPY --from=build /app/portal/index.html /usr/share/nginx/html/portal/index.html
+
 EXPOSE 80

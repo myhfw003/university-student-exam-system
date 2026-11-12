@@ -48,7 +48,7 @@ export function ConfirmDialog({
         </>
       }
     >
-      <p className="text-2">{message}</p>
+      <div className="text-2">{message}</div>
     </Dialog>
   );
 }

@@ -708,3 +708,97 @@ Hub 地址：`/hubs/proctoring`（管理端）与 `/hubs/exam`（学生端，接
 - 字段新增为**向后兼容**，客户端必须忽略未知字段。
 - 字段删除或语义变更必须升版本。
 - OpenAPI 文档由代码生成，CI 中与已提交的基线做差异检查，未同步更新即失败。
+
+---
+
+## 附录 A · 前端 mock 模型与 API 的字段映射
+
+> 原型实现阶段，前端数据全部来自本地 mock 层（`frontend/shared/src/mock/`）。
+> 本表给出**逐字段**的映射，接后端时按此对照即可，界面层不用改。
+
+### A.1 标识符
+
+| 前端 | API | 说明 |
+|---|---|---|
+| `Question.id`（`"q-m-01"`） | `questionId`（long） | 前端用可读字符串便于 mock 与调试；API 边界做映射 |
+| `ExamPaper.id`（`"exam-net-mid"`） | `paperId`（long） | 同上 |
+| `Tag.id`（`"t-dom-calc"`） | `tagId`（long） | 同上 |
+| `Student.id`（`"2023120101"`） | `userId`（long） | 学号是账号，不是主键 |
+| `Student.classId`（`"c2301"`） | `organizationTagId`（long） | **组织维度以标签表达**，不是外键到组织树 |
+
+### A.2 题目
+
+| 前端字段 | API 字段 | 说明 |
+|---|---|---|
+| `Question.code` | `code` | 题号，全局唯一 |
+| `Question.type` | `type` | `single` / `multi` / `judge` / `short` / `comprehensive` |
+| `Question.stem` | `stem` | 题干（Markdown） |
+| `Question.defaultScore` | `defaultScore` | 默认分值 1..40 |
+| `Question.status` | `status` | `draft` / `published` / `disabled` |
+| `Question.source` | `source` | `manual` / `import` / `generated`（原型用 `ai`，API 用 `generated`） |
+| `Question.tags` | `tagIds` | 最多 5 个；不含难度维度（难度单列） |
+| `Question.difficultyTagId` | `difficultyTagId` | 难度维度的冗余列 |
+| `Question.options` | `options` | `{ key, text }[]` |
+| `Question.answer` | `referenceAnswerKeys` | 客观题的正确选项键数组 |
+| `Question.keypoints` | `keypoints` | `{ text, keywords }[]` |
+| `Question.steps` | `steps` | `{ id, prompt, answer, keywords, score }[]` |
+| `Question.analysis` | `analysis` | 解析 |
+| `Question.reference` | `referenceAnswer` | 参考答案（简答题） |
+
+### A.3 卷面与配分
+
+| 前端 | API | 说明 |
+|---|---|---|
+| `ExamPaper.items`（`{qid, score}[]`） | `paperItems`（`{questionId, score}[]`） | **配分口径的唯一来源**，三处（抽题、判分、发布校验）必须一致 |
+| `ExamPaper.questionIds` | 由 `paperItems` 派生 | 前端存两份只为方便，API 只存 items |
+| `ExamPaper.plum.mode` | `variantMode` | `standard` / `small` / `large` |
+| `ExamPaper.scope`（名单组 ID） | `scopeTagIds` | 组织维度标签 ID 数组，空 = 全员开放 |
+| `ExamPaper.publishAnswer` | `publishAnswerPolicy` | `after_close` / `after_submit` / `on_open`（原型 `immediately` → API `on_open`） |
+| `ExamPaper.passScore` | `passScore` | 及格分 |
+
+### A.4 答案载荷
+
+| 前端（`AnswerPayload`） | API（`payload`） | 说明 |
+|---|---|---|
+| `selectedOptionKey` | `{ selectedOptionKeys: [...] }` | 统一用数组承载单选（单值数组） |
+| `selectedOptionKeys` | `{ selectedOptionKeys: [...] }` | 多选，去重排序 |
+| `text` | `{ text }` | 简答 |
+| `steps`（`{stepCode, text}[]`） | `{ steps: [{ code, text }] }` | 综合题逐步作答 |
+| — | `{ selectedOptionKeys }` | **存显示字母还是原题键？** |
+
+**待确认（会影响正确性）**：前端当前存**卷面显示字母**，判分时经卷面的 `toOriginal` 还原成原题键。
+服务端判分时同样需要「显示字母 → 原题键」的映射。建议服务端存**原题键**（由客户端在提交时用
+`toOriginal` 转换），这样服务端不需要知道卷面的置换规则；客户端保留显示字母仅用于回看展示。
+
+> 这条必须在 P4 接后端前定下来，否则会出现「客户端按显示字母判、服务端按原题键判」的口径分裂。
+
+### A.5 作答批次
+
+| 前端 | API | 说明 |
+|---|---|---|
+| `AnswerBatch.attemptId` | `attemptId` | 会话 ID |
+| `AnswerBatch.clientSeq` | `clientSeq` | 会话内单调递增，**批次创建时分配并持久化，重放不变** |
+| `AnswerBatch.items` | `items` | `{ questionId, payload }[]` |
+| `AnswerBatch.createdAt` | `clientSentAt` | 客户端发送时间 |
+| — | `acceptedClientSeq`（响应） | 服务端已接受的最大序号；客户端删除 `clientSeq ≤` 的批次 |
+
+### A.6 阅卷
+
+| 前端 | API | 说明 |
+|---|---|---|
+| `ReviewItem.qid` | `questionId` | |
+| `ReviewItem.stepId` | `stepId` | 综合题按步骤拆分时非空 |
+| `ReviewItem.attempt` | `attemptNo` | **必须匹配**，重考不串号 |
+| `ReviewItem.teacherScore` | `teacherScore` | |
+| `ReviewItem.comment` | `comment` | 答题端成绩报告可见 |
+
+### A.7 标签
+
+| 前端 | API | 说明 |
+|---|---|---|
+| `Tag.group`（英文枚举） | `group`（枚举 `domain`/`knowledge_point`/`ability`/`difficulty`/`organization`） | 展示时用 `TAG_GROUP_LABEL` 映射中文名 |
+| `Tag.level` | `level` | 仅难度分组下有值 1/2/3 |
+| `Tag.id`（`"t-dom-calc"`） | `tagId`（long） | |
+
+**组织维度**：前端当前类型 `TagGroup` 只含前四组——组织维度**只挂用户**，不挂题目与试卷。
+接后端时给 `User` 增加 `organizationTagIds`，`TagGroup` 补 `organization` 即可。

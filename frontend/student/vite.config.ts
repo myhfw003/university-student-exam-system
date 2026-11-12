@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
       "@exam/shared": fileURLToPath(new URL("../shared/src", import.meta.url)),
     },
   },
@@ -17,6 +18,11 @@ export default defineConfig({
     chunkSizeWarningLimit: 400,
     rollupOptions: {
       output: {
+        // CSS 用稳定文件名：入口门户页是静态 HTML，引用 /assets/app.css。
+        assetFileNames: (assetInfo) =>
+          assetInfo.name?.endsWith(".css")
+            ? "assets/app.css"
+            : "assets/[name]-[hash][extname]",
         manualChunks: {
           react: ["react", "react-dom", "react-router-dom"],
           query: ["@tanstack/react-query"],

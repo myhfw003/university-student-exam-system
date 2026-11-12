@@ -21,43 +21,43 @@ const LoginPage = lazy(async () => ({
   default: (await import("./features/auth/LoginPage")).LoginPage,
 }));
 const OverviewPage = lazy(async () => ({
-  default: (await import("./features/pages")).OverviewPage,
+  default: (await import("./features/overview/OverviewPage")).OverviewPage,
 }));
 const TagsPage = lazy(async () => ({
-  default: (await import("./features/pages")).TagsPage,
+  default: (await import("./features/tags/TagsPage")).TagsPage,
 }));
 const BanksPage = lazy(async () => ({
-  default: (await import("./features/pages")).BanksPage,
+  default: (await import("./features/banks/BanksPage")).BanksPage,
 }));
 const BankWorkbenchPage = lazy(async () => ({
-  default: (await import("./features/pages")).BankWorkbenchPage,
+  default: (await import("./features/banks/BankWorkbenchPage")).BankWorkbenchPage,
 }));
 const PaperListPage = lazy(async () => ({
-  default: (await import("./features/pages")).PaperListPage,
+  default: (await import("./features/papers/PaperListPage")).PaperListPage,
 }));
 const PaperWizardPage = lazy(async () => ({
-  default: (await import("./features/pages")).PaperWizardPage,
+  default: (await import("./features/papers/PaperWizardPage")).PaperWizardPage,
 }));
 const ExamSessionListPage = lazy(async () => ({
-  default: (await import("./features/pages")).ExamSessionListPage,
+  default: (await import("./features/sessions/ExamSessionListPage")).ExamSessionListPage,
 }));
 const ExamSessionDetailPage = lazy(async () => ({
-  default: (await import("./features/pages")).ExamSessionDetailPage,
+  default: (await import("./features/sessions/ExamSessionDetailPage")).ExamSessionDetailPage,
 }));
 const ProctoringPage = lazy(async () => ({
-  default: (await import("./features/pages")).ProctoringPage,
+  default: (await import("./features/monitoring/ProctoringPage")).ProctoringPage,
 }));
 const ReviewCenterPage = lazy(async () => ({
-  default: (await import("./features/pages")).ReviewCenterPage,
+  default: (await import("./features/review/ReviewCenterPage")).ReviewCenterPage,
 }));
 const AnalyticsPage = lazy(async () => ({
-  default: (await import("./features/pages")).AnalyticsPage,
+  default: (await import("./features/analytics/AnalyticsPage")).AnalyticsPage,
 }));
 const UsersPage = lazy(async () => ({
-  default: (await import("./features/pages")).UsersPage,
+  default: (await import("./features/users/UsersPage")).UsersPage,
 }));
 const AuditLogPage = lazy(async () => ({
-  default: (await import("./features/pages")).AuditLogPage,
+  default: (await import("./features/audit/AuditLogPage")).AuditLogPage,
 }));
 
 function Fallback() {

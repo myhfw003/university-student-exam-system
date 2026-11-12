@@ -507,3 +507,46 @@ GET /api/v1/system/time  →  { serverTime, monotonicTime }
 | 管理端无监考 | 新增实时监考大屏 | 已确认决策 |
 | 图表用 `EX.chart` 生成 SVG | 自研 React SVG 组件 | 与 React 状态集成 |
 | 深浅主题切换 | 保留，改用 `@theme` | 一致性 |
+
+---
+
+## 14. 本轮实现状态（2026-11-12）
+
+原型已完整实现为两个可运行 SPA，详见 `docs/development/01-task-breakdown.md` 附录 A。
+
+### 14.1 实际落地结构
+
+```
+frontend/shared/src/
+├── design/theme.css          设计令牌（@theme static，与原型逐值一致）
+├── design/primitives.css     语义化类基线（2003 行，含从原型移植的 86 个专有类）
+├── domain/types.ts           实体与枚举（字符串 ID 口径）
+├── domain/attempt.ts         答案载荷与作答批次
+├── engine/random.ts          hash32 / mulberry32 / Fisher–Yates / autoSeed
+├── engine/paper.ts           卷面构建（标准卷 / 小梅花 / 大梅花）
+├── engine/scoring.ts         判分与阅卷回填
+├── engine/blueprint.ts       配额矩阵抽题 + 分值分配
+├── mock/seed.ts              示例数据（由原型 seed.js 求值转写）
+├── mock/catalog.ts           内容仓库（Zustand + 纯函数读写）
+├── mock/adminOps.ts          运维数据（场次 / 账号 / 审计 / 监考，原型无此四模块）
+├── ui/                       27 个无业务 UI 原语
+└── charts/                   4 张自研 SVG 图表
+```
+
+### 14.2 与本文各节的对齐说明
+
+| 本文章节 | 落地位置 | 说明 |
+|---|---|---|
+| §4 作答可靠性四层 | `student/src/stores/draftQueue.ts`、`student/src/lib/syncEngine.ts` | 客户端未提交即进队列；重放保持 `clientSeq` 不变 |
+| §5 服务端时钟权威 | `student/src/lib/useServerTime.ts`、`serverTimeSource.ts` | 采样取中位数；后端 `/api/v1/system/time` 已可用 |
+| §6 防作弊交互 | `student/src/features/exam-taking/FocusGuard.ts`、`Watermark.tsx` | 500ms 窗口去重；练习不启用 |
+| §7 实时监考大屏 | `admin/src/features/monitoring/ProctoringPage.tsx`、`useProctorFeed.ts` | SignalR 未就绪，暂用 2 秒批量轮询，轮询逻辑单独成 hook |
+| §8 路由与守卫 | 两个 SPA 的 `router.tsx` | 全部 `React.lazy` 懒加载；刷新停留当前页。学生端 9 个路由、管理端 13 个路由 |
+| §3 组卷向导 | `admin/src/features/papers/PaperWizardPage.tsx` | 四步 + **一键出卷**（配额矩阵确定性抽题，池量不足报错并列出缺口） |
+| §9 可访问性 | `shared/src/ui/Field.tsx` | `Field` 的 `htmlFor` 与控件 `id` 程序化关联；51 处表单已补齐 |
+| §2 设计令牌落地 | `shared/src/design/theme.css` + `primitives.css` | 与原型逐值一致，深浅主题均已验证 |
+
+### 14.3 ID 口径
+
+前端统一使用**字符串 ID**（`q-m-01` / `t-dom-calc` / `exam-net-mid` / `2023120101`），
+与原型 mock 数据一致，也便于与后端 long 主键在 API 边界做映射。前端领域层不感知主键类型。

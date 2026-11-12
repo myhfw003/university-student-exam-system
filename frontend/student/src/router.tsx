@@ -21,31 +21,31 @@ const LoginPage = lazy(async () => ({
   default: (await import("./features/auth/LoginPage")).LoginPage,
 }));
 const DashboardPage = lazy(async () => ({
-  default: (await import("./features/pages")).DashboardPage,
+  default: (await import("./features/dashboard/DashboardPage")).DashboardPage,
 }));
 const PracticeListPage = lazy(async () => ({
-  default: (await import("./features/pages")).PracticeListPage,
+  default: (await import("./features/practice/PracticeListPage")).PracticeListPage,
 }));
 const PracticeSessionPage = lazy(async () => ({
-  default: (await import("./features/pages")).PracticeSessionPage,
+  default: (await import("./features/exam-taking/PracticeSessionPage")).PracticeSessionPage,
 }));
 const ExamListPage = lazy(async () => ({
-  default: (await import("./features/pages")).ExamListPage,
+  default: (await import("./features/exam/ExamListPage")).ExamListPage,
 }));
 const ExamSessionPage = lazy(async () => ({
-  default: (await import("./features/pages")).ExamSessionPage,
+  default: (await import("./features/exam-taking/ExamSessionPage")).ExamSessionPage,
 }));
 const ExamReportPage = lazy(async () => ({
-  default: (await import("./features/pages")).ExamReportPage,
+  default: (await import("./features/reports/ExamReportPage")).ExamReportPage,
 }));
 const ReportListPage = lazy(async () => ({
-  default: (await import("./features/pages")).ReportListPage,
+  default: (await import("./features/reports/ReportListPage")).ReportListPage,
 }));
 const MistakesPage = lazy(async () => ({
-  default: (await import("./features/pages")).MistakesPage,
+  default: (await import("./features/mistakes/MistakesPage")).MistakesPage,
 }));
 const ProfilePage = lazy(async () => ({
-  default: (await import("./features/pages")).ProfilePage,
+  default: (await import("./features/profile/ProfilePage")).ProfilePage,
 }));
 
 function Fallback() {

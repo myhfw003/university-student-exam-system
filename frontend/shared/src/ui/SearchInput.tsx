@@ -12,6 +12,8 @@ export interface SearchInputProps {
   placeholder?: string;
   /** 输入框的无障碍名称。 */
   label?: string;
+  /** 输入框 id，便于与外部可见标签的 htmlFor 关联。 */
+  id?: string;
   /** 防抖时长，默认 180ms。 */
   delay?: number;
   className?: string;
@@ -33,6 +35,7 @@ export function SearchInput({
   onChange,
   placeholder = "搜索",
   label = "搜索",
+  id,
   delay = 180,
   className,
   autoFocus = false,
@@ -82,6 +85,7 @@ export function SearchInput({
   return (
     <input
       ref={inputRef}
+      id={id}
       type="search"
       className={classes}
       aria-label={label}

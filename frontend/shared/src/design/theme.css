@@ -32,6 +32,9 @@
 
 @import "tailwindcss";
 
+/* 入口门户页是静态 HTML，需显式纳入内容扫描。 */
+@source "../../../portal/index.html";
+
 @theme static {
   /* ---------- 表面与文字 ---------- */
   --color-canvas: #eef2f3;
