@@ -64,6 +64,19 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
+      - name: 安装 headless 浏览器（渲染冒烟检查用）
+        # 渲染冒烟检查需要真实的 Chromium。CI 里用 playwright 只做浏览器下载，
+        # 检查脚本本身零依赖（直接走 CDP），本地也复用 playwright 的缓存。
+        run: npx --yes playwright@1.65.0 install --with-deps chromium
+      - name: 渲染冒烟检查（真实浏览器逐路由复核）
+        # 样式漏移植、产物路径撞车这类问题 typecheck / lint / 单测都发现不了，
+        # 只有真实浏览器渲染才暴露。缺浏览器即失败，不静默跳过。
+        #
+        # --serve-dist：脚本自起一个与 nginx 布局一致的静态服务器
+        # （/ → 学生端，/admin/ → 管理端），直接检查生产产物本身。
+        # 不用 vite preview —— 它的 SPA 回退会把 /admin/assets/*.js 也回退成
+        # index.html，产物路径根本测不到。
+        run: node scripts/smoke-render.mjs --serve-dist --require-browser
       - name: 依赖漏洞扫描（生产依赖，作为门禁）
         # 只有 production 依赖会进入交付产物，开发工具链（ESLint / Vitest 等）的
         # 传递依赖不进产物，单独列出仅作可见性参考。

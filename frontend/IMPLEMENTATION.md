@@ -30,9 +30,12 @@ pnpm --filter @exam/admin typecheck
 pnpm --filter @exam/admin test
 pnpm --filter @exam/shared typecheck
 pnpm -r typecheck                         # 全量
+pnpm smoke                                # 渲染冒烟（查 5173 / 5174 的 dev server）
+pnpm smoke:preview                        # 渲染冒烟（查 4173 / 4174 的 vite preview）
 ```
 
-交付前必须：`pnpm -r typecheck` 零错误，`pnpm -r test` 全绿。
+交付前必须：`pnpm -r typecheck` 零错误，`pnpm -r test` 全绿，
+**并且 `pnpm smoke` 全部路由通过**（见 §10）。
 
 ---
 
@@ -208,3 +211,29 @@ import { useAdminOps, getSession, createSession, publishSession, cancelSession,
 - 禁止跳过校验直接改数据（题目发布、试卷发布都必须走 `preflight`）。
 - 禁止在 `shared` 里引入 `student` / `admin` 的业务概念。
 - 禁止把中英文文案混写。
+
+---
+
+## 10. 渲染冒烟检查（每次改动后必做）
+
+```bash
+cd frontend
+pnpm smoke            # dev server 起好后跑
+pnpm smoke:preview    # 或者对生产构建跑
+```
+
+**为什么单独要一道**：样式漏移植、产物路径撞车这类问题，
+typecheck、lint、单元测试**全都发现不了** —— 它们不碰真实浏览器。
+管理端曾因两个 SPA 的产物目录撞车而整页空白，`curl` 返回 200，
+只有真实渲染才暴露；也有一版侧栏图标被撑成上百像素，因为共享层漏了
+原型的一条 `.od-icon` 规则。
+
+检查内容（`frontend/scripts/smoke-render.mjs`，零依赖，直接走 CDP）：
+
+1. 页面是否真的渲染出内容（防白屏）
+2. 是否出现控制台错误 / 未捕获异常
+3. 是否有失败的资源请求（防 404 导致的局部失效）
+4. 关键文案是否出现（防路由串页、守卫失效）
+
+**规矩：改完前端必须跑一次并确认全绿**，把输出贴进交付说明。
+新增页面时，同步在脚本的路由表里加一条（路径 + 关键文案 + 正文最小字数）。

@@ -266,9 +266,27 @@ public void Generate_WithInsufficientPool_ThrowsWithGapDetails()
 | 单元 | Vitest | 格式化、图表计算、同步引擎队列逻辑 |
 | 组件 | Vitest + Testing Library | 题目渲染、答题卡状态、校验清单 |
 | 网络 | MSW | 错误处理、令牌刷新重放、限流提示 |
+| 渲染冒烟 | headless Chromium（CDP，零依赖脚本 `frontend/scripts/smoke-render.mjs`） | 逐路由验证真实渲染：防白屏、防控制台报错、防资源 404、防守卫失效 |
 | 端到端 | Playwright | 考试、组卷、练习三条主流程 |
 
-### 4.6 端到端测试场景（必须覆盖）
+### 4.6 渲染冒烟检查（每次改动后必做）
+
+单元测试与组件测试跑在 jsdom 里，**不反映真实浏览器**。样式漏移植、
+产物路径撞车这类问题在它们那里全部隐形。因此前端每次改动后必须跑：
+
+```bash
+cd frontend
+pnpm smoke            # 对 dev server
+pnpm smoke:preview    # 对生产构建
+```
+
+它用 headless Chromium 逐路由检查四件事：正文是否渲染出来（防白屏）、
+有无控制台错误与未捕获异常、有无失败的资源请求、关键文案是否出现。
+
+CI 把它作为**门禁**（缺浏览器即失败，不静默跳过）。新增页面时，
+同步在 `scripts/smoke-render.mjs` 的路由表里补一条。
+
+### 4.7 端到端测试场景（必须覆盖）
 
 1. **考试主流程**：登录 → 进入考试 → 作答 3 题 → 刷新页面（答案还在）→ 断网 → 继续作答 → 恢复网络 → 同步 → 交卷 → 看到成绩报告。
 2. **防作弊流程**：考试中切屏 3 次 → 第 3 次被强制交卷 → 学生端看到强制交卷原因 → 教师端监考大屏出现该考生状态。
