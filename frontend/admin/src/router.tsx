@@ -76,7 +76,7 @@ function lazyPage(Component: ComponentType) {
   );
 }
 
-const router = createBrowserRouter([
+const routes = [
   {
     path: "/login",
     element: lazyPage(LoginPage),
@@ -109,7 +109,12 @@ const router = createBrowserRouter([
       },
     ],
   },
-]);
+];
+
+const router = createBrowserRouter(routes, {
+  // 与 Vite 的 base 一致：构建产物在 /admin/ 下，路由也要认这个前缀。
+  basename: import.meta.env.BASE_URL,
+});
 
 export function App() {
   return (

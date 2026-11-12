@@ -2,8 +2,18 @@ import { fileURLToPath, URL } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react()],
+  /**
+   * 构建产物挂在 `/admin/` 下（nginx 用 `location /admin/` 独立托管）。
+   *
+   * **必须与学生端错开**：两个 SPA 都用 `/` 打包时，产物会落到同一个
+   * `/assets/` 目录，容器里管理端 index.html 会引用到学生端的同名文件，
+   * 表现为页面 200 但 React 不挂载（整页空白）。
+   *
+   * 开发时保持 `/`，dev server 直接跑在根路径。
+   */
+  base: command === "build" ? "/admin/" : "/",
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
@@ -32,4 +42,4 @@ export default defineConfig({
     include: ["src/**/*.test.{ts,tsx}"],
     setupFiles: ["./src/test/setup.ts"],
   },
-});
+}));

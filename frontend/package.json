@@ -6,7 +6,7 @@
   "packageManager": "pnpm@11.20.0",
   "scripts": {
     "dev": "pnpm --parallel --filter @exam/student --filter @exam/admin dev",
-    "build": "pnpm --filter @exam/student --filter @exam/admin build",
+    "build": "pnpm --filter @exam/student build && pnpm --filter @exam/admin build && node scripts/check-build-output.mjs",
     "test": "pnpm --filter @exam/shared --filter @exam/student --filter @exam/admin test",
     "lint": "eslint .",
     "typecheck": "pnpm --filter @exam/shared --filter @exam/student --filter @exam/admin typecheck",

@@ -14,6 +14,9 @@ COPY . .
 # shared 是源码包（exports 指向 src/index.ts），无需构建产物
 RUN pnpm --filter @exam/student build
 RUN pnpm --filter @exam/admin build
+# 两个 SPA 的产物目录必须错开（学生端 /assets/，管理端 /admin/assets/）。
+# 撞了不会让构建失败，但容器里管理端会整页空白，故在这里硬校验。
+RUN node scripts/check-build-output.mjs
 
 # ---------- 运行 ----------
 FROM nginx:1.27-alpine AS runtime
