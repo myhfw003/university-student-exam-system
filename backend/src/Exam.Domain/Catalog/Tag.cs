@@ -208,7 +208,10 @@ public sealed class Tag : AuditableEntity
 
         foreach (var ch in trimmed)
         {
-            var ok = char.IsAsciiLetterOrDigit(ch) || ch is '_' or '.' or '-';
+            // 允许中文：组织维度标签的编码由「计算机学院」这类中文名派生。
+            var ok = char.IsAsciiLetterOrDigit(ch)
+                || ch is '_' or '.' or '-'
+                || char.IsLetter(ch) && !char.IsAscii(ch);
             if (!ok)
             {
                 throw new BusinessRuleException("标签编码只能包含字母、数字、下划线、点和中划线。");

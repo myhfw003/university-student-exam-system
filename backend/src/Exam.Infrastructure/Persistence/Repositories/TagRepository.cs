@@ -44,6 +44,14 @@ public sealed class TagRepository : ITagRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<Tag?> GetByParentAndNameAsync(
+        long? parentId,
+        string name,
+        CancellationToken cancellationToken = default) =>
+        await _db.Tags.AsNoTracking().FirstOrDefaultAsync(
+            x => x.ParentId == parentId && x.Name == name,
+            cancellationToken);
+
     public async Task<IReadOnlyList<Tag>> GetChildrenAsync(
         long parentId,
         CancellationToken cancellationToken = default) =>

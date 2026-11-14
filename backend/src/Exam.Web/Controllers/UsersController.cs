@@ -2,6 +2,7 @@ using Exam.Application.Identity.Commands;
 using Exam.Application.Identity.Contracts;
 using Exam.Application.Identity.Queries;
 using Exam.Domain.Identity;
+using Exam.Domain.SharedKernel.Exceptions;
 using Exam.Web.Api.Contracts;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -97,6 +98,32 @@ public sealed class UsersController : ControllerBase
         AssignRolesRequest request,
         CancellationToken cancellationToken) =>
         await _mediator.Send(new AssignUserRolesCommand(id, request.RoleIds), cancellationToken);
+
+    /// <summary>
+    /// 批量导入学生名单（CSV）。逐行处理：单行出错只跳过该行并记录原因，不阻断整批。
+    /// </summary>
+    [HttpPost("import")]
+    [Authorize(Policy = PermissionCatalog.UserImport)]
+    [RequestSizeLimit(10 * 1024 * 1024)]
+    [ProducesResponseType(typeof(UserImportResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<UserImportResult> Import(
+        IFormFile? file,
+        CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+        {
+            throw new BusinessRuleException("请上传名单文件。");
+        }
+
+        await using var stream = file.OpenReadStream();
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, cancellationToken);
+
+        return await _mediator.Send(
+            new ImportUserRosterCommand(buffer.ToArray(), file.FileName),
+            cancellationToken);
+    }
 
     /// <summary>取回用户挂载的组织标签与完整组织路径。</summary>
     [HttpGet("{id:long}/tags")]

@@ -12,11 +12,16 @@ public sealed class ExceptionHandlingMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<ExceptionHandlingMiddleware> _logger;
+    private readonly IHostEnvironment _environment;
 
-    public ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger)
+    public ExceptionHandlingMiddleware(
+        RequestDelegate next,
+        ILogger<ExceptionHandlingMiddleware> logger,
+        IHostEnvironment environment)
     {
         _next = next;
         _logger = logger;
+        _environment = environment;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -62,10 +67,16 @@ public sealed class ExceptionHandlingMiddleware
         catch (Exception ex)
         {
             _logger.LogError(ex, "未处理异常：{Path}", context.Request.Path);
+
+            // 非生产环境把异常细节带出来，否则开发期只能看到一个 500 和 TraceId。
+            var detail = _environment.IsProduction()
+                ? "服务器内部错误，请稍后重试并提供 TraceId。"
+                : $"服务器内部错误：{ex.GetType().Name}: {ex.Message}";
+
             await WriteProblemAsync(
                 context,
                 20500,
-                "服务器内部错误，请稍后重试并提供 TraceId。",
+                detail,
                 StatusCodes.Status500InternalServerError,
                 null);
         }

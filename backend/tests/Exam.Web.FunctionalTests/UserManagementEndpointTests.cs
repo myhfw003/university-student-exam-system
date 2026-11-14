@@ -50,9 +50,13 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
         _adminRoleId = await SeedRoleAsync(db, "admin_role", "管理员", [
             PermissionCatalog.UserRead, PermissionCatalog.UserWrite,
             PermissionCatalog.RoleRead, PermissionCatalog.RoleWrite,
-            PermissionCatalog.UserTagAssign,
+            PermissionCatalog.UserTagAssign, PermissionCatalog.UserImport,
             PermissionCatalog.TagRead, PermissionCatalog.TagWrite]);
         _readerRoleId = await SeedRoleAsync(db, "reader_role", "只读", [PermissionCatalog.UserRead]);
+
+        // 名单导入会按角色编码查找角色，系统角色必须先在库里。
+        await SeedSystemRoleAsync(db, Role.Codes.Student, "在校学生");
+        await SeedSystemRoleAsync(db, Role.Codes.GeneralUser, "社会人士");
 
         _adminUserId = await SeedUserAsync(db, AdminUsername, AdminPassword, "系统管理员", _adminRoleId);
     }
@@ -233,7 +237,7 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
 
         var roles = await response.Content.ReadFromJsonAsync<JsonElement>();
         var adminRole = roles.EnumerateArray().First(r => r.GetProperty("code").GetString() == "admin_role");
-        adminRole.GetProperty("permissions").GetArrayLength().ShouldBe(7);
+        adminRole.GetProperty("permissions").GetArrayLength().ShouldBe(8);
     }
 
     [Fact]
@@ -332,6 +336,116 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
         problem.GetProperty("errorCode").GetInt32().ShouldBe(22101);
     }
 
+    [Fact]
+    public async Task 名单导入_逐行处理且自动创建组织标签()
+    {
+        var adminToken = await LoginAsync(AdminUsername, AdminPassword);
+        UseToken(adminToken);
+
+        var csv = string.Join("\n", [
+            "账号,姓名,学院,专业,班级,邮箱,角色",
+            "20230001,张三,计算机学院,计算机科学与技术,计科2301班,zhangsan@example.edu,",
+            "20230002,李四,计算机学院,计算机科学与技术,计科2302班,,",
+            "20230003,王五,,,,,",
+            "非法账号,赵六,计算机学院,,,",
+            "20230001,张三改名,计算机学院,计算机科学与技术,计科2301班,,",
+        ]);
+
+        var response = await PostCsvAsync("/api/v1/users/import", csv, "名单.csv");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("total").GetInt32().ShouldBe(5);
+        body.GetProperty("created").GetInt32().ShouldBe(3);
+        body.GetProperty("updated").GetInt32().ShouldBe(1);
+        body.GetProperty("failed").GetArrayLength().ShouldBe(1);
+
+        var failure = body.GetProperty("failed")[0];
+        failure.GetProperty("rowNumber").GetInt32().ShouldBe(5);
+        failure.GetProperty("reason").GetString()!.ShouldContain("账号格式不正确");
+
+        // 自动创建的院系 / 专业 / 班级标签按层级挂接
+        var tags = await _client.GetAsync("/api/v1/tags?group=organization");
+        var tagBody = await tags.Content.ReadFromJsonAsync<JsonElement>();
+        var organizationTags = tagBody.GetProperty("groups")[0].GetProperty("tags").EnumerateArray()
+            .Select(t => t.GetProperty("name").GetString())
+            .ToList();
+
+        organizationTags.ShouldContain("计算机学院");
+        organizationTags.ShouldContain("计算机科学与技术");
+        organizationTags.ShouldContain("计科2301班");
+        organizationTags.ShouldContain("计科2302班");
+    }
+
+    [Fact]
+    public async Task 名单导入_重复账号更新且不重置密码()
+    {
+        var adminToken = await LoginAsync(AdminUsername, AdminPassword);
+        UseToken(adminToken);
+
+        var csv = string.Join("\n", [
+            "账号,姓名,学院,专业,班级",
+            "20231001,周八,数学学院,数学,数应2301班",
+        ]);
+
+        var first = await PostCsvAsync("/api/v1/users/import", csv, "名单.csv");
+        first.StatusCode.ShouldBe(HttpStatusCode.OK, await first.Content.ReadAsStringAsync());
+
+        var firstBody = await first.Content.ReadFromJsonAsync<JsonElement>();
+        var generatedPassword = firstBody.GetProperty("generatedPasswords")[0].GetProperty("password").GetString();
+        generatedPassword.ShouldNotBeNullOrWhiteSpace();
+
+        // 再次导入同一账号：更新而非报错，密码保持不变。
+        var second = await PostCsvAsync("/api/v1/users/import", csv, "名单.csv");
+        second.StatusCode.ShouldBe(HttpStatusCode.OK, await second.Content.ReadAsStringAsync());
+
+        var secondBody = await second.Content.ReadFromJsonAsync<JsonElement>();
+        secondBody.GetProperty("created").GetInt32().ShouldBe(0);
+        secondBody.GetProperty("updated").GetInt32().ShouldBe(1);
+        secondBody.GetProperty("failed").GetArrayLength().ShouldBe(0);
+
+        var login = await _client.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new { username = "20231001", password = generatedPassword });
+        login.StatusCode.ShouldBe(HttpStatusCode.OK, "重复导入不应重置密码。");
+    }
+
+    [Fact]
+    public async Task 名单导入_三列为空的账号是社会人士且不挂组织标签()
+    {
+        var adminToken = await LoginAsync(AdminUsername, AdminPassword);
+        UseToken(adminToken);
+
+        var csv = string.Join("\n", [
+            "账号,姓名,学院,专业,班级",
+            "20232001,吴九,,,",
+        ]);
+
+        var response = await PostCsvAsync("/api/v1/users/import", csv, "名单.csv");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+
+        var users = await _client.GetAsync("/api/v1/users?keyword=20232001");
+        var listBody = await users.Content.ReadFromJsonAsync<JsonElement>();
+        var item = listBody.GetProperty("items")[0];
+        item.GetProperty("roles")[0].GetString().ShouldBe("general_user");
+
+        var userId = item.GetProperty("id").GetInt64();
+        var tags = await _client.GetAsync($"/api/v1/users/{userId}/tags");
+        var tagBody = await tags.Content.ReadFromJsonAsync<JsonElement>();
+        tagBody.GetProperty("tags").GetArrayLength().ShouldBe(0);
+        tagBody.GetProperty("organizationPath").ValueKind.ShouldBe(System.Text.Json.JsonValueKind.Null);
+    }
+
+    private async Task<HttpResponseMessage> PostCsvAsync(string path, string content, string fileName)
+    {
+        using var body = new MultipartFormDataContent();
+        var fileContent = new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes(content));
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/csv");
+        body.Add(fileContent, "file", fileName);
+
+        return await _client.PostAsync(path, body);
+    }
+
     private async Task<long> CreateOrgTagAsync(string code, string name, long? parentId)
     {
         var response = await _client.PostAsJsonAsync(
@@ -397,6 +511,18 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
 
         await db.SaveChangesAsync();
         return role.Id;
+    }
+
+    private static async Task SeedSystemRoleAsync(AppDbContext db, string code, string name)
+    {
+        var exists = await db.Roles.AnyAsync(r => r.Code == code);
+        if (exists)
+        {
+            return;
+        }
+
+        await db.Roles.AddAsync(Role.CreateSystem(code, name, DateTimeOffset.UtcNow));
+        await db.SaveChangesAsync();
     }
 
     private static async Task<long> SeedUserAsync(

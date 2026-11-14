@@ -54,10 +54,12 @@ public static class DependencyInjection
         services.AddScoped<ITagRepository, TagRepository>();
         services.AddScoped<IUserPermissionService, UserPermissionService>();
         services.AddScoped<Exam.Application.Identity.Services.UserOrganizationResolver, Exam.Application.Identity.Services.UserOrganizationResolver>();
+        services.AddScoped<Exam.Application.Catalog.Services.OrganizationTagProvisioner, Exam.Application.Catalog.Services.OrganizationTagProvisioner>();
         services.AddScoped<IAuditRecorder, AuditRecorder>();
         services.AddScoped<Seeding.DataSeeder>();
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IPasswordVerifier, Pbkdf2PasswordVerifier>();
+        services.AddSingleton<IUserRosterParser, UserRosterCsvParser>();
         services.AddSingleton<ITokenService, JwtTokenService>();
         services.AddSingleton<RedisCacheNamespace>();
         services.AddSingleton<ITokenBlacklist, HybridTokenBlacklist>();
