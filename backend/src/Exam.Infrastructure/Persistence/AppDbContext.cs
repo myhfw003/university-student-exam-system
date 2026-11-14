@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Exam.Domain.Authoring;
+using Exam.Domain.Delivery;
 using Exam.Domain.Catalog;
 using Exam.Domain.Identity;
 using Exam.Domain.SharedKernel.Abstractions;
@@ -21,6 +22,9 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
 
     /// <summary>组卷上下文所在 Schema。</summary>
     public const string AuthoringSchema = "authoring";
+
+    /// <summary>考试组织与作答上下文所在 Schema。</summary>
+    public const string DeliverySchema = "delivery";
 
     public AppDbContext(DbContextOptions<AppDbContext> options)
         : base(options) { }
@@ -72,6 +76,8 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
     public DbSet<PaperSnapshot> PaperSnapshots => Set<PaperSnapshot>();
 
     public DbSet<SnapshotItem> SnapshotItems => Set<SnapshotItem>();
+
+    public DbSet<ExamSession> ExamSessions => Set<ExamSession>();
 
     public DbSet<QuestionBankItem> QuestionBankItems => Set<QuestionBankItem>();
 

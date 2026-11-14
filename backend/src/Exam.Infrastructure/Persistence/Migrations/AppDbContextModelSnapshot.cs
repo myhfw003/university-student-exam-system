@@ -1425,6 +1425,136 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Exam.Domain.Delivery.ExamSession", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CloseAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("close_at");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<int>("DurationMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_minutes");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text")
+                        .HasColumnName("note");
+
+                    b.Property<DateTimeOffset>("OpenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("open_at");
+
+                    b.Property<long>("PaperId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("paper_id");
+
+                    b.Property<string>("ParticipantMode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("participant_mode");
+
+                    b.PrimitiveCollection<long[]>("ParticipantTagIds")
+                        .IsRequired()
+                        .HasColumnType("bigint[]")
+                        .HasColumnName("participant_tag_ids");
+
+                    b.PrimitiveCollection<long[]>("ParticipantUserIds")
+                        .IsRequired()
+                        .HasColumnType("bigint[]")
+                        .HasColumnName("participant_user_ids");
+
+                    b.Property<DateTimeOffset?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("published_at");
+
+                    b.Property<string>("Rules")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("rules");
+
+                    b.Property<long?>("SnapshotId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("snapshot_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long?>("UpdatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("updated_by");
+
+                    b.Property<string>("VariantRule")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("variant_rule");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_exam_session");
+
+                    b.HasIndex("PaperId")
+                        .HasDatabaseName("ix_exam_session_paper_id");
+
+                    b.HasIndex("Status", "OpenAt")
+                        .HasDatabaseName("ix_exam_session_status")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("exam_session", "delivery", t =>
+                        {
+                            t.HasCheckConstraint("ck_exam_session_duration", "duration_minutes > 0");
+
+                            t.HasCheckConstraint("ck_exam_session_participant_mode", "participant_mode IN ('tags','direct','open')");
+
+                            t.HasCheckConstraint("ck_exam_session_status", "status IN ('scheduled','in_progress','closed','cancelled')");
+
+                            t.HasCheckConstraint("ck_exam_session_variant_rule", "variant_rule IN ('standard','small_plum','large_plum')");
+
+                            t.HasCheckConstraint("ck_exam_session_window", "open_at < close_at");
+                        });
+                });
+
             modelBuilder.Entity("Exam.Domain.Identity.Permission", b =>
                 {
                     b.Property<long>("Id")
@@ -1981,6 +2111,16 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ParentId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_tag_tag_parent_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Delivery.ExamSession", b =>
+                {
+                    b.HasOne("Exam.Domain.Authoring.Paper", null)
+                        .WithMany()
+                        .HasForeignKey("PaperId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_exam_session_papers_paper_id");
                 });
 
             modelBuilder.Entity("Exam.Domain.Authoring.Paper", b =>

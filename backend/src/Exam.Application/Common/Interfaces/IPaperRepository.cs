@@ -14,6 +14,11 @@ public interface IPaperRepository
         int take,
         CancellationToken cancellationToken = default);
 
+    /// <summary>按主键集合取回试卷。</summary>
+    Task<IReadOnlyList<Paper>> GetByIdsAsync(
+        IReadOnlyCollection<long> ids,
+        CancellationToken cancellationToken = default);
+
     Task<int> CountAsync(
         PaperKind? kind,
         PaperStatus? status,

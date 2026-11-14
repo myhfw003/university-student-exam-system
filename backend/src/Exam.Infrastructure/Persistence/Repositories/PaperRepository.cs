@@ -36,6 +36,23 @@ public sealed class PaperRepository : IPaperRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Paper>> GetByIdsAsync(
+        IReadOnlyCollection<long> ids,
+        CancellationToken cancellationToken = default)
+    {
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        var idList = ids.ToList();
+        return await _db.Papers
+            .AsNoTracking()
+            .Include(p => p.Items)
+            .Where(p => idList.Contains(p.Id))
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<int> CountAsync(
         PaperKind? kind,
         PaperStatus? status,
