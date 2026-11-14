@@ -156,6 +156,37 @@ public sealed class GradeReviewTests
     }
 
     [Fact]
+    public void 采纳系统建议分后状态为已阅完()
+    {
+        var task = PendingTask();
+        task.Claim(reviewerId: 7, now: Now);
+
+        task.AdoptSuggestion(reviewerId: 7, comment: "系统初判，已批量采纳", now: Now);
+
+        task.Status.ShouldBe(ReviewTaskStatus.Reviewed);
+        task.FinalScore!.Value.ShouldBe(5m);
+        task.Comment.ShouldBe("系统初判，已批量采纳");
+    }
+
+    [Fact]
+    public void 没有建议分就没有东西可采纳()
+    {
+        var task = ReviewTask.Create(
+            attemptId: 1,
+            examSessionId: 1,
+            questionId: 2,
+            stepCode: null,
+            answerText: "作答",
+            suggestedScore: null,
+            maxScore: Score.Paper(10m),
+            now: Now);
+
+        var act = () => task.AdoptSuggestion(reviewerId: 7, comment: null, now: Now);
+
+        act.ShouldThrow<BusinessRuleException>();
+    }
+
+    [Fact]
     public void 改分流水保留改前与改后的分数()
     {
         var revision = GradeRevision.Create(

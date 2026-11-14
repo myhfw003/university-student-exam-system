@@ -108,3 +108,23 @@ public sealed record GradeRevisionListResponse(
     long AttemptId,
     IReadOnlyList<GradeRevisionDto> Items,
     int Total);
+
+/// <summary>批量采纳初判：逐条结果。</summary>
+public sealed record BatchAdoptItemDto(
+    long TaskId,
+    string Status,
+    string StatusLabel,
+    decimal? FinalScore,
+    string? Message);
+
+/// <summary>
+/// 批量采纳初判的结果。
+/// <para>
+/// 逐条给出：哪些采纳了、哪些跳过了、跳过是为什么。
+/// </para>
+/// </summary>
+public sealed record BatchAdoptResponse(
+    int Total,
+    int Adopted,
+    int Skipped,
+    IReadOnlyList<BatchAdoptItemDto> Items);

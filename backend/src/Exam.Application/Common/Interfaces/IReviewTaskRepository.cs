@@ -55,6 +55,22 @@ public interface IReviewTaskRepository
         long questionId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>按主键集合取回阅卷任务。找不到的不会出现在结果里。</summary>
+    Task<IReadOnlyList<ReviewTask>> GetByIdsAsync(
+        IReadOnlyCollection<long> ids,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 取回若干次作答里若干道题的全部阅卷任务。
+    /// <para>
+    /// 批量定分要知道一道题还剩几步没评——这些任务就是那几步。
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<ReviewTask>> ListByAttemptQuestionsAsync(
+        IReadOnlyCollection<long> attemptIds,
+        IReadOnlyCollection<long> questionIds,
+        CancellationToken cancellationToken = default);
+
     Task AddRangeAsync(IReadOnlyCollection<ReviewTask> tasks, CancellationToken cancellationToken = default);
 
     void Update(ReviewTask task);

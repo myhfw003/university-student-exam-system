@@ -174,11 +174,20 @@ public sealed class ReviewTask : AuditableEntity, IAuditedEntity
         Touch(now, reviewerId);
     }
 
-    /// <summary>采纳系统建议分。</summary>
-    public void AdoptSuggestion(long reviewerId, DateTimeOffset now)
+    /// <summary>
+    /// 采纳系统建议分，转为最终分。
+    /// <para>
+    /// 没有建议分就没有东西可采纳——这种情况当场拒绝，不给 0 分糊弄过去。
+    /// </para>
+    /// </summary>
+    public void AdoptSuggestion(long reviewerId, string? comment, DateTimeOffset now)
     {
-        var score = SuggestedScore ?? Score.Zero;
-        Grade(score, Comment, reviewerId, now);
+        if (SuggestedScore is not { } suggested)
+        {
+            throw new BusinessRuleException("这份作答没有系统建议分，无法采纳。");
+        }
+
+        Grade(suggested, comment, reviewerId, now);
     }
 }
 

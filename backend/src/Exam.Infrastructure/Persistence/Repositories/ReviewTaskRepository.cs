@@ -111,6 +111,37 @@ public sealed class ReviewTaskRepository : IReviewTaskRepository
             .OrderBy(t => t.Id)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<ReviewTask>> GetByIdsAsync(
+        IReadOnlyCollection<long> ids,
+        CancellationToken cancellationToken = default)
+    {
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        return await _db.Set<ReviewTask>()
+            .Where(t => ids.Contains(t.Id))
+            .OrderBy(t => t.Id)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ReviewTask>> ListByAttemptQuestionsAsync(
+        IReadOnlyCollection<long> attemptIds,
+        IReadOnlyCollection<long> questionIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (attemptIds.Count == 0 || questionIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await _db.Set<ReviewTask>()
+            .Where(t => attemptIds.Contains(t.AttemptId) && questionIds.Contains(t.QuestionId))
+            .OrderBy(t => t.Id)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task AddRangeAsync(
         IReadOnlyCollection<ReviewTask> tasks,
         CancellationToken cancellationToken = default)

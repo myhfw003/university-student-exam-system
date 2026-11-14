@@ -92,6 +92,27 @@ public sealed class ReviewTasksController : ControllerBase
             new GradeReviewTaskCommand(id, request.Score, request.Comment),
             cancellationToken);
 
+    /// <summary>
+    /// 批量采纳初判建议。只影响待领取的任务，逐条给出采纳与跳过的结果。
+    /// </summary>
+    [HttpPost("batch-adopt")]
+    [Authorize(Policy = PermissionCatalog.ReviewBatchAdopt)]
+    [ProducesResponseType(typeof(BatchAdoptResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<BatchAdoptResponse> BatchAdopt(
+        BatchAdoptReviewTasksRequest request,
+        CancellationToken cancellationToken = default) =>
+        await _mediator.Send(
+            new BatchAdoptReviewTasksCommand(
+                request.TaskIds,
+                request.ExamSessionId,
+                request.QuestionId,
+                request.MaxCount,
+                request.Comment,
+                request.Confirm),
+            cancellationToken);
+
     /// <summary>队列中的上一份 / 下一份，连续阅卷用。</summary>
     [HttpGet("{id:long}/neighbors")]
     [Authorize(Policy = PermissionCatalog.ReviewGrade)]

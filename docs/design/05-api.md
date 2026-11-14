@@ -622,6 +622,24 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
   "scoreResultStatus": "final", "revision": 1 }
 ```
 
+**`POST /review-tasks/batch-adopt`**
+
+```json
+// 请求：点名任务，或按场次批量（两者至少给一个）
+{ "taskIds": [501, 502], "examSessionId": 30, "questionId": 12,
+  "comment": "系统初判，已批量采纳", "maxCount": 200, "confirm": true }
+```
+
+```json
+// 200：逐条给出采纳与跳过
+{ "total": 2, "adopted": 1, "skipped": 1,
+  "items": [
+    { "taskId": 501, "status": "adopted", "statusLabel": "已采纳", "finalScore": 7.5, "message": null },
+    { "taskId": 502, "status": "skipped", "statusLabel": "已跳过", "finalScore": null,
+      "message": "任务已不在待领取状态。" }
+  ] }
+```
+
 **`POST /exam-sessions/{id}/publish-grades`**
 
 ```json
