@@ -117,6 +117,9 @@ cd frontend && pnpm typecheck && pnpm lint && pnpm test && pnpm build
 # 安全
 bash scripts/scan-secrets.sh
 dotnet list backend/ExamManager.slnx package --vulnerable --include-transitive
+
+# 提交（仓库同时托管在 Gitee 与 GitHub，两个远端一起推）
+bash scripts/push-all.sh          # 或 git pushall，推当前分支
 ```
 
 ---
