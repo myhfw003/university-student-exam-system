@@ -23,3 +23,12 @@ public sealed record AnswerStepRequest(string? Code, string? Text);
 
 /// <summary>交卷。客户端只能表达「主动交卷」，其它原因由服务端判定。</summary>
 public sealed record SubmitAttemptRequest(string? Reason);
+
+/// <summary>上报焦点事件。</summary>
+public sealed record ReportFocusEventsRequest(IReadOnlyList<FocusEventRequest>? Events);
+
+/// <summary>一条焦点事件。</summary>
+public sealed record FocusEventRequest(
+    string Type,
+    long? QuestionId = null,
+    DateTimeOffset? ClientAt = null);

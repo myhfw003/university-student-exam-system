@@ -81,6 +81,24 @@ public sealed class AttemptsController : ControllerBase
         CancellationToken cancellationToken) =>
         await _mediator.Send(new SubmitAttemptCommand(id, request?.Reason), cancellationToken);
 
+    /// <summary>上报焦点事件。切屏计数以服务端为准。</summary>
+    [HttpPost("{id:long}/focus-events")]
+    [Authorize(Policy = PermissionCatalog.AttemptTake)]
+    [ProducesResponseType(typeof(FocusEventsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<FocusEventsResponse> ReportFocusEvents(
+        long id,
+        ReportFocusEventsRequest? request,
+        CancellationToken cancellationToken) =>
+        await _mediator.Send(
+            new ReportFocusEventsCommand(
+                id,
+                new ReportFocusEventsInput(
+                    (request?.Events ?? [])
+                        .Select(e => new FocusEventInput(e.Type, e.QuestionId, e.ClientAt))
+                        .ToList())),
+            cancellationToken);
+
     /// <summary>恢复作答状态。</summary>
     [HttpGet("{id:long}")]
     [Authorize(Policy = PermissionCatalog.AttemptReadOwn)]

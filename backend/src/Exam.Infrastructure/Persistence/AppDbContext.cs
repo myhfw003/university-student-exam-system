@@ -90,6 +90,8 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
 
     public DbSet<AnswerRevision> AnswerRevisions => Set<AnswerRevision>();
 
+    public DbSet<FocusEvent> FocusEvents => Set<FocusEvent>();
+
     public DbSet<QuestionBankItem> QuestionBankItems => Set<QuestionBankItem>();
 
     /// <summary>工作单元提交。EF Core 的单次 SaveChanges 本身即一个事务。</summary>

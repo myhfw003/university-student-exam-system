@@ -1860,6 +1860,49 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Exam.Domain.Delivery.FocusEvent", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("AttemptId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("attempt_id");
+
+                    b.Property<DateTimeOffset?>("ClientAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("client_at");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("event_type");
+
+                    b.Property<long?>("QuestionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("question_id");
+
+                    b.Property<DateTimeOffset>("ServerReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("server_received_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_focus_event");
+
+                    b.HasIndex("AttemptId", "ServerReceivedAt")
+                        .HasDatabaseName("ix_focus_event_attempt");
+
+                    b.ToTable("focus_event", "app", t =>
+                        {
+                            t.HasCheckConstraint("ck_focus_event_type", "event_type IN ('window_blur','page_hidden','fullscreen_exit','copy_attempt','paste_attempt','context_menu','heartbeat_timeout')");
+                        });
+                });
+
             modelBuilder.Entity("Exam.Domain.Identity.Permission", b =>
                 {
                     b.Property<long>("Id")

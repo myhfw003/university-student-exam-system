@@ -210,11 +210,20 @@ public sealed class Attempt : AuditableEntity, IAuditedEntity
         return true;
     }
 
-    /// <summary>切屏计数 +1。</summary>
-    public int RecordFocusLoss(DateTimeOffset now)
+    /// <summary>
+    /// 切屏计数 +1。达到上限时抛出 <see cref="FocusLimitExceededException"/>，
+    /// 由应用层按场次策略处置（警告或强制交卷）。
+    /// </summary>
+    public int RecordFocusLoss(DateTimeOffset now, int? limit = null)
     {
         FocusLossCount++;
         Touch(now, UserId);
+
+        if (limit is > 0 && FocusLossCount >= limit)
+        {
+            throw new FocusLimitExceededException($"切屏次数已达上限（{limit} 次）。");
+        }
+
         return FocusLossCount;
     }
 
