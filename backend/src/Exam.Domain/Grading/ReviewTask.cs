@@ -93,12 +93,22 @@ public sealed class ReviewTask : AuditableEntity, IAuditedEntity
         DateTimeOffset now) =>
         new(attemptId, examSessionId, questionId, stepCode, answerText, suggestedScore, maxScore, now);
 
-    /// <summary>领取任务。先到先得：已被领取就失败。</summary>
+    /// <summary>
+    /// 领取任务。先到先得：已被领取就失败。
+    /// <para>
+    /// 指派过的任务只有指派人本人能领——指派不是摆设。
+    /// </para>
+    /// </summary>
     public void Claim(long reviewerId, DateTimeOffset now)
     {
         if (Status != ReviewTaskStatus.Pending)
         {
             throw new BusinessRuleException("该任务已被领取或已阅完。");
+        }
+
+        if (AssigneeId is { } assignee && assignee != reviewerId)
+        {
+            throw new BusinessRuleException("该任务已指派给其他阅卷人。");
         }
 
         Status = ReviewTaskStatus.InReview;
@@ -107,17 +117,26 @@ public sealed class ReviewTask : AuditableEntity, IAuditedEntity
         Touch(now, reviewerId);
     }
 
-    /// <summary>指派给指定阅卷人。</summary>
-    public void Assign(long userId, DateTimeOffset now)
+    /// <summary>
+    /// 指派给指定阅卷人。指派只是「分给他」，任务仍在待领取队列里等人来领。
+    /// <para>
+    /// 已在阅卷中的任务不能改派：卷子已经在别人手里了。
+    /// </para>
+    /// </summary>
+    public void Assign(long assigneeId, long actorId, DateTimeOffset now)
     {
         if (Status == ReviewTaskStatus.Reviewed)
         {
             throw new BusinessRuleException("已阅完的任务不能再指派。");
         }
 
-        AssigneeId = userId;
-        Status = ReviewTaskStatus.InReview;
-        Touch(now, userId);
+        if (Status == ReviewTaskStatus.InReview)
+        {
+            throw new BusinessRuleException("任务已在阅卷中，不能改派。");
+        }
+
+        AssigneeId = assigneeId;
+        Touch(now, actorId);
     }
 
     /// <summary>评分并写评语。</summary>

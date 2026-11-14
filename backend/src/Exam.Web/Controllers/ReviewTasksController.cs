@@ -1,6 +1,8 @@
+using Exam.Application.Grading.Commands;
 using Exam.Application.Grading.Contracts;
 using Exam.Application.Grading.Queries;
 using Exam.Domain.Identity;
+using Exam.Web.Api.Contracts;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -24,12 +26,14 @@ public sealed class ReviewTasksController : ControllerBase
     public async Task<ReviewTaskListResponse> List(
         [FromQuery] string? status,
         [FromQuery] long? examSessionId,
+        [FromQuery] long? questionId,
+        [FromQuery] long? assigneeId,
         [FromQuery] bool mine = false,
         [FromQuery] int page = 1,
         [FromQuery] int size = 20,
         CancellationToken cancellationToken = default) =>
         await _mediator.Send(
-            new ListReviewTasksQuery(status, examSessionId, mine, page, size),
+            new ListReviewTasksQuery(status, examSessionId, questionId, assigneeId, mine, page, size),
             cancellationToken);
 
     /// <summary>阅卷任务计数（待领取 / 阅卷中 / 已阅完 / 我的）。</summary>
@@ -40,4 +44,51 @@ public sealed class ReviewTasksController : ControllerBase
         [FromQuery] long? examSessionId,
         CancellationToken cancellationToken = default) =>
         await _mediator.Send(new GetReviewTaskCountQuery(examSessionId), cancellationToken);
+
+    /// <summary>阅卷卷宗详情：作答原文、参考答案与系统初判的要点命中。</summary>
+    [HttpGet("{id:long}")]
+    [Authorize(Policy = PermissionCatalog.ReviewGrade)]
+    [ProducesResponseType(typeof(ReviewTaskDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ReviewTaskDetailDto> Get(long id, CancellationToken cancellationToken = default) =>
+        await _mediator.Send(new GetReviewTaskDetailQuery(id), cancellationToken);
+
+    /// <summary>
+    /// 领取阅卷任务。先到先得：任务被别人领走后再领就失败。
+    /// </summary>
+    [HttpPost("{id:long}/claim")]
+    [Authorize(Policy = PermissionCatalog.ReviewGrade)]
+    [ProducesResponseType(typeof(ReviewTaskDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ReviewTaskDto> Claim(long id, CancellationToken cancellationToken = default) =>
+        await _mediator.Send(new ClaimReviewTaskCommand(id), cancellationToken);
+
+    /// <summary>指派阅卷任务给指定阅卷人。</summary>
+    [HttpPost("{id:long}/assign")]
+    [Authorize(Policy = PermissionCatalog.ReviewGrade)]
+    [ProducesResponseType(typeof(ReviewTaskDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ReviewTaskDto> Assign(
+        long id,
+        AssignReviewTaskRequest request,
+        CancellationToken cancellationToken = default) =>
+        await _mediator.Send(new AssignReviewTaskCommand(id, request.UserId), cancellationToken);
+
+    /// <summary>队列中的上一份 / 下一份，连续阅卷用。</summary>
+    [HttpGet("{id:long}/neighbors")]
+    [Authorize(Policy = PermissionCatalog.ReviewGrade)]
+    [ProducesResponseType(typeof(ReviewTaskNeighborsDto), StatusCodes.Status200OK)]
+    public async Task<ReviewTaskNeighborsDto> Neighbors(
+        long id,
+        [FromQuery] string? status,
+        [FromQuery] long? examSessionId,
+        [FromQuery] long? questionId,
+        [FromQuery] long? assigneeId,
+        [FromQuery] bool mine = false,
+        CancellationToken cancellationToken = default) =>
+        await _mediator.Send(
+            new GetReviewTaskNeighborsQuery(id, status, examSessionId, questionId, assigneeId, mine),
+            cancellationToken);
 }

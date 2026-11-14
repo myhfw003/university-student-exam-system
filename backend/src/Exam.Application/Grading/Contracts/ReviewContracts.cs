@@ -36,3 +36,41 @@ public sealed record ReviewTaskCountDto(
     int InReview,
     int Reviewed,
     int Mine);
+
+/// <summary>
+/// 队列中的上一份 / 下一份。
+/// <para>
+/// 连续阅卷用：交完一份就能接着领下一份，不用翻页。
+/// </para>
+/// </summary>
+public sealed record ReviewTaskNeighborsDto(
+    long? PreviousId,
+    long? NextId);
+
+/// <summary>阅卷卷宗详情：作答原文 + 参考答案 + 系统初判的要点命中。</summary>
+public sealed record ReviewTaskDetailDto(
+    ReviewTaskDto Task,
+    string Stem,
+    string QuestionType,
+    string QuestionTypeLabel,
+    string? ReferenceAnswer,
+    string? Analysis,
+    IReadOnlyList<ReviewKeypointDto> Keypoints,
+    IReadOnlyList<ReviewStepDto> Steps,
+    IReadOnlyList<string> HitItems,
+    IReadOnlyList<string> MissedItems,
+    IReadOnlyList<string> Notes,
+    string? StudentUsername,
+    string? StudentDisplayName);
+
+/// <summary>评分要点的命中情况。</summary>
+public sealed record ReviewKeypointDto(
+    string Text,
+    bool Hit);
+
+/// <summary>综合题步骤的命中情况。</summary>
+public sealed record ReviewStepDto(
+    string Code,
+    string Prompt,
+    decimal Score,
+    bool Hit);

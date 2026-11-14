@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using Exam.Domain.Authoring;
 using Exam.Domain.Delivery;
+using Exam.Application.Common.Exceptions;
 using Exam.Domain.Grading;
 using Exam.Domain.Catalog;
 using Exam.Domain.Identity;
@@ -105,8 +106,22 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
     public DbSet<QuestionBankItem> QuestionBankItems => Set<QuestionBankItem>();
 
     /// <summary>工作单元提交。EF Core 的单次 SaveChanges 本身即一个事务。</summary>
-    Task<int> IUnitOfWork.SaveChangesAsync(CancellationToken cancellationToken) =>
-        base.SaveChangesAsync(cancellationToken);
+    /// <para>
+    /// 乐观并发冲突（xmin 令牌不匹配）翻译成应用层的并发异常，
+    /// 上层只认得业务异常，翻译放在这里做一次。
+    /// </para>
+    async Task<int> IUnitOfWork.SaveChangesAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await base.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // 不带 EF 的原始消息：内部细节不进响应体。
+            throw new ConcurrencyConflictException();
+        }
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
