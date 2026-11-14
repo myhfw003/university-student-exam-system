@@ -25,17 +25,20 @@ public sealed class GetAttemptGradeRevisionsHandler
     private readonly IAttemptRepository _attempts;
     private readonly IScoreResultRepository _scoreResults;
     private readonly IGradeRevisionRepository _revisions;
+    private readonly Exam.Application.Grading.Services.GradeVisibilityResolver _visibility;
     private readonly ICurrentUser _currentUser;
 
     public GetAttemptGradeRevisionsHandler(
         IAttemptRepository attempts,
         IScoreResultRepository scoreResults,
         IGradeRevisionRepository revisions,
+        Exam.Application.Grading.Services.GradeVisibilityResolver visibility,
         ICurrentUser currentUser)
     {
         _attempts = attempts;
         _scoreResults = scoreResults;
         _revisions = revisions;
+        _visibility = visibility;
         _currentUser = currentUser;
     }
 
@@ -52,7 +55,20 @@ public sealed class GetAttemptGradeRevisionsHandler
             throw new ForbiddenException("只能查看自己的改分记录。");
         }
 
+        // 成绩没发布之前，改分记录也是分数的一部分——先不露出去。
         var results = await _scoreResults.ListByAttemptAsync(attempt.Id, cancellationToken);
+        var pending = Exam.Application.Delivery.Contracts.AttemptScoreSummaryFactory.IsSubjectivePending(results);
+        var visibility = await _visibility.ResolveAsync(
+            attempt.ExamSessionId,
+            attempt.Id,
+            pending,
+            cancellationToken);
+
+        if (visibility != Exam.Application.Delivery.Contracts.GradeVisibilities.Published)
+        {
+            return new GradeRevisionListResponse(attempt.Id, [], 0);
+        }
+
         var questionByResult = results.ToDictionary(r => r.Id, r => r.QuestionId);
 
         var revisions = await _revisions.ListByAttemptAsync(attempt.Id, cancellationToken);

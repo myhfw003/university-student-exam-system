@@ -9,6 +9,11 @@ public interface IScoreResultRepository
         long attemptId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>取回多次作答的全部评分结果。</summary>
+    Task<IReadOnlyList<ScoreResult>> ListByAttemptsAsync(
+        IReadOnlyCollection<long> attemptIds,
+        CancellationToken cancellationToken = default);
+
     /// <summary>取回某次作答中某道题的评分结果。</summary>
     Task<ScoreResult?> GetAsync(long attemptId, long questionId, CancellationToken cancellationToken = default);
 

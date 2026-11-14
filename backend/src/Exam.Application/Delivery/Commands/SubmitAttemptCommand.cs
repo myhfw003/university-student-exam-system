@@ -32,6 +32,7 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
     private readonly IPaperRepository _papers;
     private readonly AttemptScoringService _scoring;
     private readonly Exam.Application.Grading.Services.ReviewTaskGenerator _reviewTasks;
+    private readonly Exam.Application.Grading.Services.GradeVisibilityResolver _visibility;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAuditRecorder _audit;
     private readonly IClock _clock;
@@ -47,6 +48,7 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
         IPaperRepository papers,
         AttemptScoringService scoring,
         Exam.Application.Grading.Services.ReviewTaskGenerator reviewTasks,
+        Exam.Application.Grading.Services.GradeVisibilityResolver visibility,
         IUnitOfWork unitOfWork,
         IAuditRecorder audit,
         IClock clock,
@@ -61,6 +63,7 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
         _papers = papers;
         _scoring = scoring;
         _reviewTasks = reviewTasks;
+        _visibility = visibility;
         _unitOfWork = unitOfWork;
         _audit = audit;
         _clock = clock;
@@ -136,7 +139,15 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return BuildResponse(attempt, scoreResults);
+        // 成绩没发布之前，主观题的部分不露出去。
+        var pending = AttemptScoreSummaryFactory.IsSubjectivePending(scoreResults);
+        var visibility = await _visibility.ResolveAsync(
+            attempt.ExamSessionId,
+            attempt.Id,
+            pending,
+            cancellationToken);
+
+        return BuildResponse(attempt, scoreResults, visibility);
     }
 
     private async Task<SubmitAttemptResponse> BuildResponseAsync(
@@ -144,14 +155,24 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
         CancellationToken cancellationToken)
     {
         var results = await _scoreResults.ListByAttemptAsync(attempt.Id, cancellationToken);
-        return BuildResponse(attempt, results);
+
+        // 成绩没发布之前，主观题的部分不露出去。
+        var pending = AttemptScoreSummaryFactory.IsSubjectivePending(results);
+        var visibility = await _visibility.ResolveAsync(
+            attempt.ExamSessionId,
+            attempt.Id,
+            pending,
+            cancellationToken);
+
+        return BuildResponse(attempt, results, visibility);
     }
 
     private static SubmitAttemptResponse BuildResponse(
         Attempt attempt,
-        IReadOnlyList<Domain.Grading.ScoreResult> results)
+        IReadOnlyList<Domain.Grading.ScoreResult> results,
+        string visibility)
     {
-        var summary = AttemptScoreSummaryFactory.Build(results);
+        var summary = AttemptScoreSummaryFactory.Build(results, visibility);
 
         return new SubmitAttemptResponse(
             attempt.Id,

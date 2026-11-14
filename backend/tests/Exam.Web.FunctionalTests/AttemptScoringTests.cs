@@ -102,7 +102,7 @@ public sealed class AttemptScoringTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task 主观题产出建议分并标记待阅()
+    public async Task 主观题的建议分发布前不露出来()
     {
         var attemptId = await StartAttemptAsync();
 
@@ -117,8 +117,9 @@ public sealed class AttemptScoringTests : IAsyncLifetime
         body.GetProperty("subjectivePending").GetBoolean().ShouldBeTrue();
         body.GetProperty("gradeVisibility").GetString().ShouldBe("pending_review");
 
-        // 命中一个要点（共两个）→ 建议分一半。
-        body.GetProperty("totalScore").GetDecimal().ShouldBe(5m);
+        // 建议分已经算出来了，但成绩没发布之前不露出来：
+        // 总分只算客观题那部分（客观题没作答，是 0 分）。
+        body.GetProperty("totalScore").GetDecimal().ShouldBe(0m);
         body.GetProperty("totalMax").GetDecimal().ShouldBe(20m);
     }
 
@@ -149,9 +150,10 @@ public sealed class AttemptScoringTests : IAsyncLifetime
         subjective.GetProperty("status").GetString().ShouldBe("suggested");
         subjective.GetProperty("method").GetString().ShouldBe("auto_suggested");
 
-        // 主观题没作答：两个要点都没命中。
+        // 成绩没发布：主观题的分与要点命中都捂着（那等于把答案抖出来）。
+        subjective.GetProperty("score").ValueKind.ShouldBe(JsonValueKind.Null);
         subjective.GetProperty("hitItems").GetArrayLength().ShouldBe(0);
-        subjective.GetProperty("missedItems").GetArrayLength().ShouldBe(2);
+        subjective.GetProperty("missedItems").GetArrayLength().ShouldBe(0);
     }
 
     private async Task SaveAnswerAsync(long attemptId, long questionId, object payload)

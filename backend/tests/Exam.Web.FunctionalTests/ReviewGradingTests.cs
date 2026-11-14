@@ -38,6 +38,7 @@ public sealed class ReviewGradingTests : IAsyncLifetime
     private HttpClient _client = null!;
     private long _shortQuestionId;
     private long _comprehensiveQuestionId;
+    private long _sessionId;
 
     public async Task InitializeAsync()
     {
@@ -63,7 +64,8 @@ public sealed class ReviewGradingTests : IAsyncLifetime
             PermissionCatalog.QuestionRead,
             PermissionCatalog.QuestionPublish,
             PermissionCatalog.TagRead,
-            PermissionCatalog.ReviewGrade);
+            PermissionCatalog.ReviewGrade,
+            PermissionCatalog.GradePublish);
 
         await SeedUserAsync(db, TeacherA, TeacherPassword, teacherRoleId);
         await SeedUserAsync(db, TeacherB, TeacherPassword, teacherRoleId);
@@ -108,7 +110,9 @@ public sealed class ReviewGradingTests : IAsyncLifetime
         body.GetProperty("scoreResultStatus").GetString().ShouldBe("final");
         body.GetProperty("revision").GetInt32().ShouldBe(1);
 
-        // 学生端看到的是定分后的成绩。
+        // 成绩发布之后，学生端看到的是定分后的完整成绩。
+        await PublishGradesAsync();
+
         await LoginAsync(StudentUsername, StudentPassword);
         var scores = await _client.GetAsync($"/api/v1/attempts/{attemptId}/scores");
         scores.StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -189,7 +193,9 @@ public sealed class ReviewGradingTests : IAsyncLifetime
         body.GetProperty("finalScore").GetDecimal().ShouldBe(9m);
         body.GetProperty("revision").GetInt32().ShouldBe(2);
 
-        // 学生端能看到改分记录。
+        // 学生端能看到改分记录——成绩发布之后。
+        await PublishGradesAsync();
+
         await LoginAsync(StudentUsername, StudentPassword);
         var revisions = await _client.GetAsync($"/api/v1/attempts/{attemptId}/grade-revisions");
         revisions.StatusCode.ShouldBe(HttpStatusCode.OK, await revisions.Content.ReadAsStringAsync());
@@ -273,6 +279,8 @@ public sealed class ReviewGradingTests : IAsyncLifetime
         secondBody.GetProperty("revision").GetInt32().ShouldBe(2);
 
         // 学生端：两道改分流水都指向这道题。
+        await PublishGradesAsync();
+
         await LoginAsync(StudentUsername, StudentPassword);
         var revisions = await _client.GetAsync($"/api/v1/attempts/{attemptId}/grade-revisions");
         revisions.StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -405,6 +413,7 @@ public sealed class ReviewGradingTests : IAsyncLifetime
     {
         await LoginAsync(TeacherA, TeacherPassword);
         var sessionId = await CreateSessionAsync(questionIds);
+        _sessionId = sessionId;
 
         await LoginAsync(StudentUsername, StudentPassword);
 
@@ -464,6 +473,18 @@ public sealed class ReviewGradingTests : IAsyncLifetime
         publish.StatusCode.ShouldBe(HttpStatusCode.OK, await publish.Content.ReadAsStringAsync());
 
         return sessionId;
+    }
+
+    /// <summary>发布成绩。成绩没发布之前，学生看不到主观题的分。</summary>
+    private async Task PublishGradesAsync()
+    {
+        await LoginAsync(TeacherA, TeacherPassword);
+
+        var publish = await _client.PostAsJsonAsync(
+            $"/api/v1/exam-sessions/{_sessionId}/publish-grades",
+            new { scope = "all" });
+
+        publish.StatusCode.ShouldBe(HttpStatusCode.OK, await publish.Content.ReadAsStringAsync());
     }
 
     private async Task LoginAsync(string username, string password)

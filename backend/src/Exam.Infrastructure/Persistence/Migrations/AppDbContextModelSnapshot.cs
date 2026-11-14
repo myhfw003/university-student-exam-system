@@ -1965,6 +1965,76 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Exam.Domain.Grading.GradePublication", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<long>("ExamSessionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("exam_session_id");
+
+                    b.Property<long[]>("IncludedAttemptIds")
+                        .IsRequired()
+                        .HasColumnType("bigint[]")
+                        .HasColumnName("included_attempt_ids");
+
+                    b.Property<DateTimeOffset>("PublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("published_at");
+
+                    b.Property<long>("PublishedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("published_by");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("scope");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long?>("UpdatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_grade_publication");
+
+                    b.HasIndex("ExamSessionId")
+                        .HasDatabaseName("ix_grade_publication_session");
+
+                    b.ToTable("grade_publication", "grading", t =>
+                        {
+                            t.HasCheckConstraint("ck_grade_publication_scope", "scope IN ('all','objective_only')");
+                        });
+                });
+
             modelBuilder.Entity("Exam.Domain.Grading.GradeRevision", b =>
                 {
                     b.Property<long>("Id")
@@ -2819,6 +2889,16 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_proctor_action_exam_session_exam_session_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Grading.GradePublication", b =>
+                {
+                    b.HasOne("Exam.Domain.Delivery.ExamSession", null)
+                        .WithMany()
+                        .HasForeignKey("ExamSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_grade_publication_exam_session_exam_session_id");
                 });
 
             modelBuilder.Entity("Exam.Domain.Grading.ReviewTask", b =>

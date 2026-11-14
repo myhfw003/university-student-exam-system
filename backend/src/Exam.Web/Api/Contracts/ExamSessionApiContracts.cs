@@ -31,3 +31,14 @@ public sealed record UpdateExamSessionRequest(
 
 /// <summary>设置场次名单（按组织标签）。</summary>
 public sealed record SetExamParticipantsRequest(IReadOnlyList<long>? ParticipantTagIds);
+
+/// <summary>
+/// 发布成绩。
+/// <para>
+/// <c>scope</c>：<c>all</c>（全部成绩）或 <c>objective_only</c>（只发布客观题）。
+/// <c>includeAttemptIds</c> 不给就按发布那一刻已经交卷的作答来。
+/// </para>
+/// </summary>
+public sealed record PublishGradesRequest(
+    string Scope,
+    IReadOnlyList<long>? IncludeAttemptIds);

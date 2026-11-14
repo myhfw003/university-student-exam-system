@@ -2,6 +2,9 @@ using Exam.Application.Common.Interfaces;
 using Exam.Application.Delivery.Commands;
 using Exam.Application.Delivery.Contracts;
 using Exam.Application.Delivery.Queries;
+using Exam.Application.Grading.Commands;
+using Exam.Application.Grading.Contracts;
+using Exam.Application.Grading.Queries;
 using Exam.Domain.Identity;
 using Exam.Web.Api.Contracts;
 using MediatR;
@@ -39,6 +42,32 @@ public sealed class ExamSessionsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ExamSessionDetailDto> Get(long id, CancellationToken cancellationToken) =>
         await _mediator.Send(new GetExamSessionQuery(id), cancellationToken);
+
+    /// <summary>
+    /// 发布成绩。全部成绩（<c>all</c>）或只发布客观题（<c>objective_only</c>）。
+    /// </summary>
+    [HttpPost("{id:long}/publish-grades")]
+    [Authorize(Policy = PermissionCatalog.GradePublish)]
+    [ProducesResponseType(typeof(GradePublicationDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<GradePublicationDto> PublishGrades(
+        long id,
+        PublishGradesRequest request,
+        CancellationToken cancellationToken = default) =>
+        await _mediator.Send(
+            new PublishExamGradesCommand(id, request.Scope, request.IncludeAttemptIds),
+            cancellationToken);
+
+    /// <summary>场次成绩列表（教师视角）。</summary>
+    [HttpGet("{id:long}/grades")]
+    [Authorize(Policy = PermissionCatalog.AnalyticsRead)]
+    [ProducesResponseType(typeof(ExamSessionGradeListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ExamSessionGradeListResponse> Grades(
+        long id,
+        CancellationToken cancellationToken = default) =>
+        await _mediator.Send(new GetExamSessionGradesQuery(id), cancellationToken);
 
     /// <summary>新建考试场次。</summary>
     [HttpPost]

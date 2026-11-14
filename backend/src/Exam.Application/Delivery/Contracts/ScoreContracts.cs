@@ -5,7 +5,7 @@ namespace Exam.Application.Delivery.Contracts;
 /// <summary>一道题的评分结果。</summary>
 public sealed record ScoreResultDto(
     long QuestionId,
-    decimal Score,
+    decimal? Score,
     decimal MaxScore,
     string Method,
     string MethodLabel,
@@ -49,26 +49,37 @@ public static class AttemptScoreSummaryFactory
     /// <summary>
     /// 汇总一次作答的成绩。
     /// <para>
-    /// 客观题（自动评分）计入客观分；主观题的建议分计入总分但同时标记「待阅」。
+    /// 成绩没发布之前，主观题的得分与要点命中不露出去，总分只算已经定下来的客观题分；
+    /// 发布之后才给完整成绩。
     /// </para>
     /// </summary>
-    public static AttemptScoreSummaryDto Build(IReadOnlyList<Domain.Grading.ScoreResult> results)
+    public static AttemptScoreSummaryDto Build(
+        IReadOnlyList<Domain.Grading.ScoreResult> results,
+        string visibility)
     {
+        var revealSubjective = visibility == GradeVisibilities.Published;
+
         var items = results
             .OrderBy(r => r.QuestionId)
-            .Select(r => new ScoreResultDto(
-                r.QuestionId,
-                r.Score.Value,
-                r.MaxScore.Value,
-                r.Method.ToStorage(),
-                r.Method.Label(),
-                r.Status.ToStorage(),
-                r.Status.Label(),
-                r.ScoredBy,
-                r.ScoredAt,
-                r.Detail.HitItems,
-                r.Detail.MissedItems,
-                r.Detail.Notes))
+            .Select(r =>
+            {
+                // 成绩没发布：主观题的分与要点命中（那等于把答案抖出来）先捂着。
+                var withhold = !revealSubjective && r.Method != Domain.Grading.ScoringMethod.AutoScored;
+
+                return new ScoreResultDto(
+                    r.QuestionId,
+                    withhold ? null : r.Score.Value,
+                    r.MaxScore.Value,
+                    r.Method.ToStorage(),
+                    r.Method.Label(),
+                    r.Status.ToStorage(),
+                    r.Status.Label(),
+                    r.ScoredBy,
+                    r.ScoredAt,
+                    withhold ? [] : r.Detail.HitItems,
+                    withhold ? [] : r.Detail.MissedItems,
+                    withhold ? [] : r.Detail.Notes);
+            })
             .ToList();
 
         var objective = results
@@ -78,26 +89,31 @@ public static class AttemptScoreSummaryFactory
         var objectiveScore = objective.Sum(r => r.Score.Value);
         var objectiveMax = objective.Sum(r => r.MaxScore.Value);
 
-        var totalScore = results.Sum(r => r.Score.Value);
+        // 成绩没发布时，总分只算客观题那部分——主观题的分不该提前露出去。
+        var totalScore = revealSubjective
+            ? results.Sum(r => r.Score.Value)
+            : objectiveScore;
+
         var totalMax = results.Sum(r => r.MaxScore.Value);
-
-        // 主观题还没定分时，成绩只能算「待阅」。
-        // 综合题按步骤拆分阅卷：一步评完只更新总分，全部评完才定分——期间仍是「待阅」。
-        var subjectivePending = results.Any(r =>
-            r.Status == Domain.Grading.ScoringStatus.Suggested
-            || r.Status == Domain.Grading.ScoringStatus.Pending);
-
-        var visibility = subjectivePending
-            ? GradeVisibilities.PendingReview
-            : GradeVisibilities.ObjectiveOnly;
 
         return new AttemptScoreSummaryDto(
             objectiveScore,
             objectiveMax,
-            subjectivePending,
+            IsSubjectivePending(results),
             totalScore,
             totalMax,
             visibility,
             items);
     }
+
+    /// <summary>
+    /// 主观题还没定分吗？
+    /// <para>
+    /// 综合题按步骤拆分阅卷：一步评完只更新总分，全部评完才定分——期间仍是「待阅」。
+    /// </para>
+    /// </summary>
+    public static bool IsSubjectivePending(IReadOnlyList<Domain.Grading.ScoreResult> results) =>
+        results.Any(r =>
+            r.Status == Domain.Grading.ScoringStatus.Suggested
+            || r.Status == Domain.Grading.ScoringStatus.Pending);
 }

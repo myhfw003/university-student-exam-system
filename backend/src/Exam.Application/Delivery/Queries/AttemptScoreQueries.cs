@@ -19,15 +19,18 @@ public sealed class GetAttemptScoresHandler : IRequestHandler<GetAttemptScoresQu
 {
     private readonly IAttemptRepository _attempts;
     private readonly IScoreResultRepository _scoreResults;
+    private readonly Exam.Application.Grading.Services.GradeVisibilityResolver _visibility;
     private readonly ICurrentUser _currentUser;
 
     public GetAttemptScoresHandler(
         IAttemptRepository attempts,
         IScoreResultRepository scoreResults,
+        Exam.Application.Grading.Services.GradeVisibilityResolver visibility,
         ICurrentUser currentUser)
     {
         _attempts = attempts;
         _scoreResults = scoreResults;
+        _visibility = visibility;
         _currentUser = currentUser;
     }
 
@@ -45,6 +48,15 @@ public sealed class GetAttemptScoresHandler : IRequestHandler<GetAttemptScoresQu
         }
 
         var results = await _scoreResults.ListByAttemptAsync(attempt.Id, cancellationToken);
-        return AttemptScoreSummaryFactory.Build(results);
+
+        // 成绩没发布之前，主观题的部分不露出去。
+        var pending = AttemptScoreSummaryFactory.IsSubjectivePending(results);
+        var visibility = await _visibility.ResolveAsync(
+            attempt.ExamSessionId,
+            attempt.Id,
+            pending,
+            cancellationToken);
+
+        return AttemptScoreSummaryFactory.Build(results, visibility);
     }
 }

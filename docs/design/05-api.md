@@ -643,8 +643,19 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 **`POST /exam-sessions/{id}/publish-grades`**
 
 ```json
+// 请求：范围 all（全部成绩）或 objective_only（只发布客观题）；
+// includeAttemptIds 不给就按发布那一刻已经交卷的作答来
 { "scope": "all", "includeAttemptIds": [8821, 8822] }
 ```
+
+```json
+// 200
+{ "id": 17, "examSessionId": 30, "scope": "all", "scopeLabel": "全部成绩",
+  "publishedAt": "2026-11-14T09:00:00Z", "publishedBy": 5,
+  "includedAttemptIds": [8821, 8822], "affectedAttempts": 2 }
+```
+
+发布之前，学生端只拿得到客观题分与「待阅」；发布之后才给完整成绩与改分流水。
 
 ---
 

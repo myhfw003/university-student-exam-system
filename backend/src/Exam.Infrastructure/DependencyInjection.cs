@@ -1,6 +1,7 @@
 using Exam.Application.Authoring.Services;
 using Exam.Application.Delivery.Services;
 using Exam.Application.Common.Interfaces;
+using Exam.Application.Grading.Services;
 using Exam.Application.Identity.Services;
 using Exam.Domain.SharedKernel.Abstractions;
 using Exam.Infrastructure.Audit;
@@ -74,6 +75,8 @@ public static class DependencyInjection
         services.AddScoped<IScoreResultRepository, ScoreResultRepository>();
         services.AddScoped<IReviewTaskRepository, ReviewTaskRepository>();
         services.AddScoped<IGradeRevisionRepository, GradeRevisionRepository>();
+        services.AddScoped<IGradePublicationRepository, GradePublicationRepository>();
+        services.AddScoped<GradeVisibilityResolver, GradeVisibilityResolver>();
         services.AddScoped<AttemptPaperSurfaceBuilder>();
         services.AddScoped<ExamMonitoringService>();
         services.AddScoped<AttemptScoringService>();
