@@ -50,6 +50,7 @@ public static class DependencyInjection
         services.AddScoped<IUserRoleRepository, UserRoleRepository>();
         services.AddScoped<IRolePermissionRepository, RolePermissionRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<ITagRepository, TagRepository>();
         services.AddScoped<IUserPermissionService, UserPermissionService>();
         services.AddScoped<IAuditRecorder, AuditRecorder>();
         services.AddScoped<Seeding.DataSeeder>();

@@ -1,3 +1,4 @@
+using Exam.Domain.Catalog;
 using Exam.Domain.Identity;
 using Exam.Domain.SharedKernel.Abstractions;
 using Exam.Infrastructure.Identity;
@@ -13,7 +14,7 @@ namespace Exam.Infrastructure.Seeding;
 /// </summary>
 public sealed class DataSeeder
 {
-    public const string MarkerName = "iam.v1";
+    public const string MarkerName = "iam.v2";
 
     private readonly AppDbContext _db;
     private readonly IClock _clock;
@@ -30,6 +31,31 @@ public sealed class DataSeeder
         _clock = clock;
         _passwordVerifier = passwordVerifier;
         _logger = logger;
+    }
+
+    /// <summary>写入系统预置的难度标签。已存在则跳过，保证幂等。</summary>
+    private async Task SeedSystemTagsAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        (string Code, string Name, int Level)[] difficulties =
+        [
+            ("difficulty.basic", "基础", 1),
+            ("difficulty.medium", "中等", 2),
+            ("difficulty.hard", "较难", 3),
+        ];
+
+        foreach (var (code, name, level) in difficulties)
+        {
+            var exists = await _db.Tags.AnyAsync(x => x.Code == code, cancellationToken);
+            if (exists)
+            {
+                continue;
+            }
+
+            var tag = Tag.Create(code, name, TagGroup.Difficulty, level, null, level, now, null, isSystem: true);
+            await _db.Tags.AddAsync(tag, cancellationToken);
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<SeedOutcome> SeedAsync(
@@ -120,7 +146,10 @@ public sealed class DataSeeder
             }
         }
 
-        // 3. 管理员账号
+        // 3. 系统预置标签（难度维度三档）。系统标签不可删除。
+        await SeedSystemTagsAsync(now, cancellationToken);
+
+        // 4. 管理员账号
         var admin = await _db.Users.FirstOrDefaultAsync(x => x.Username == adminUsername, cancellationToken);
         string effectivePassword = adminPassword ?? string.Empty;
 
@@ -139,7 +168,7 @@ public sealed class DataSeeder
             _logger.LogInformation("已创建管理员账号 {Username}，初始密码：{Password}", adminUsername, effectivePassword);
         }
 
-        // 4. 标记
+        // 5. 标记
         await _db.Set<SeedMarker>().AddAsync(SeedMarker.Create(MarkerName, now));
         await _db.SaveChangesAsync(cancellationToken);
 

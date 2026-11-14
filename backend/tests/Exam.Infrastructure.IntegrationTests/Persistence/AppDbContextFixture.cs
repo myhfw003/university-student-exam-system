@@ -48,7 +48,8 @@ public sealed class AppDbContextFixture : IAsyncLifetime
         DbContext.ChangeTracker.Clear();
 
         await DbContext.Database.ExecuteSqlRawAsync("""
-            TRUNCATE iam.user_role, iam.role_permission, iam.refresh_token,
+            TRUNCATE catalog.tag,
+                     iam.user_role, iam.role_permission, iam.refresh_token,
                      iam.user, iam.role, iam.permission, iam.seed_markers RESTART IDENTITY CASCADE
             """);
     }

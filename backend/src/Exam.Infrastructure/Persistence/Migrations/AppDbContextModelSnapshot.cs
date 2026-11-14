@@ -96,6 +96,107 @@ namespace Exam.Infrastructure.Persistence.Migrations
                     b.ToTable("audit_log", "audit");
                 });
 
+            modelBuilder.Entity("Exam.Domain.Catalog.Tag", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("Group")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("group_name");
+
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_system");
+
+                    b.Property<int?>("Level")
+                        .HasColumnType("integer")
+                        .HasColumnName("level");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("name");
+
+                    b.Property<long?>("ParentId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("parent_id");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long?>("UpdatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("UsageCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("usage_count");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tag");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("uq_tag_code")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("Group")
+                        .HasDatabaseName("ix_tag_group")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("ParentId")
+                        .HasDatabaseName("ix_tag_parent");
+
+                    b.ToTable("tag", "catalog", t =>
+                        {
+                            t.HasCheckConstraint("ck_tag_group_name", "group_name IN ('domain','knowledge_point','ability','difficulty','organization')");
+
+                            t.HasCheckConstraint("ck_tag_level_by_group", "(group_name = 'difficulty' AND level IS NOT NULL AND level BETWEEN 1 AND 5 AND parent_id IS NULL) OR (group_name <> 'difficulty' AND level IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("Exam.Domain.Identity.Permission", b =>
                 {
                     b.Property<long>("Id")
@@ -469,6 +570,15 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .HasName("pk_seed_markers");
 
                     b.ToTable("seed_markers", "iam");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Catalog.Tag", b =>
+                {
+                    b.HasOne("Exam.Domain.Catalog.Tag", null)
+                        .WithMany()
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_tag_tag_parent_id");
                 });
 #pragma warning restore 612, 618
         }

@@ -7,6 +7,7 @@ using Exam.Web.HealthChecks;
 using Exam.Web.Middleware;
 using Exam.Web.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
@@ -93,6 +94,9 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddSingleton<DefaultAuthorizationPolicyProvider>();
+builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
+builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
 // ---------------------------------------------------------------- 限流
 var globalPerMinute = builder.Configuration.GetValue("RateLimiting:GlobalPerMinute", 6000);

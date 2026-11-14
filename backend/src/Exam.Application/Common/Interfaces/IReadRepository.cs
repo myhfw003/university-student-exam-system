@@ -1,11 +1,13 @@
 namespace Exam.Application.Common.Interfaces;
 
 /// <summary>
-/// 只读仓储。返回 <see cref="IQueryable{T}"/>（BCL 类型）以便在应用层做投影，
-/// 同时避免应用层依赖 EF Core。
+/// 只读仓储基类。
+/// <para>
+/// 刻意不暴露 <see cref="IQueryable{T}"/>：应用层不得依赖 EF Core，
+/// 异步物化只能在基础设施层完成，因此每个查询都由仓储显式声明。
+/// </para>
 /// </summary>
 public interface IReadRepository<T>
     where T : class
 {
-    IQueryable<T> Query();
 }

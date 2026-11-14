@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Exam.Domain.Catalog;
 using Exam.Domain.Identity;
 using Exam.Domain.SharedKernel.Abstractions;
 using Exam.Domain.SharedKernel.Entities;
@@ -13,6 +14,9 @@ namespace Exam.Infrastructure.Persistence;
 public sealed class AppDbContext : DbContext, IUnitOfWork
 {
     public const string DefaultSchema = "iam";
+
+    /// <summary>题库与内容上下文所在 Schema。</summary>
+    public const string CatalogSchema = "catalog";
 
     public AppDbContext(DbContextOptions<AppDbContext> options)
         : base(options) { }
@@ -30,6 +34,8 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     public DbSet<SeedMarker> SeedMarkers => Set<SeedMarker>();
+
+    public DbSet<Tag> Tags => Set<Tag>();
 
     /// <summary>工作单元提交。EF Core 的单次 SaveChanges 本身即一个事务。</summary>
     Task<int> IUnitOfWork.SaveChangesAsync(CancellationToken cancellationToken) =>
