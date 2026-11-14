@@ -71,6 +71,7 @@ public static class DependencyInjection
         services.AddScoped<IAnswerRevisionRepository, AnswerRevisionRepository>();
         services.AddScoped<IFocusEventRepository, FocusEventRepository>();
         services.AddScoped<AttemptPaperSurfaceBuilder>();
+        services.AddScoped<ExamMonitoringService>();
         services.AddScoped<BlueprintPoolBuilder>();
         services.AddSingleton<IQuestionFileParser, QuestionFileParser>();
         services.AddScoped<IUserPermissionService, UserPermissionService>();

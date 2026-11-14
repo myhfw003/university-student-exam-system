@@ -47,6 +47,26 @@ public sealed class AnswerRepository : IAnswerRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyDictionary<long, int>> CountAnsweredAsync(
+        IReadOnlyCollection<long> attemptIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (attemptIds.Count == 0)
+        {
+            return new Dictionary<long, int>();
+        }
+
+        var idList = attemptIds.ToList();
+        var rows = await _db.Set<Answer>()
+            .AsNoTracking()
+            .Where(a => idList.Contains(a.AttemptId) && !a.IsBlank)
+            .GroupBy(a => a.AttemptId)
+            .Select(g => new { AttemptId = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        return rows.ToDictionary(r => r.AttemptId, r => r.Count);
+    }
+
     /// <summary>
     /// 原生 SQL upsert：一批答案一次往返。
     /// <para>

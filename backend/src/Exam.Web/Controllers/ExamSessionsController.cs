@@ -95,6 +95,14 @@ public sealed class ExamSessionsController : ControllerBase
     public async Task<ExamSessionDetailDto> Publish(long id, CancellationToken cancellationToken) =>
         await _mediator.Send(new PublishExamSessionCommand(id), cancellationToken);
 
+    /// <summary>监考初始快照。实时通道断线重连后也用它补齐数据。</summary>
+    [HttpGet("{id:long}/monitoring")]
+    [Authorize(Policy = PermissionCatalog.ProctorMonitor)]
+    [ProducesResponseType(typeof(ExamStatusBatchDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ExamStatusBatchDto> GetMonitoring(long id, CancellationToken cancellationToken) =>
+        await _mediator.Send(new GetExamMonitoringQuery(id), cancellationToken);
+
     /// <summary>取回场次名单。</summary>
     [HttpGet("{id:long}/participants")]
     [Authorize(Policy = PermissionCatalog.ExamRead)]

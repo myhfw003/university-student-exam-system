@@ -25,6 +25,16 @@ public sealed class AttemptRepository : IAttemptRepository
             .OrderByDescending(a => a.AttemptNo)
             .FirstOrDefaultAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Attempt>> ListBySessionAsync(
+        long examSessionId,
+        CancellationToken cancellationToken = default) =>
+        await _db.Set<Attempt>()
+            .AsNoTracking()
+            .Where(a => a.ExamSessionId == examSessionId)
+            .OrderBy(a => a.UserId)
+            .ThenBy(a => a.AttemptNo)
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<Attempt>> ListByUserAsync(
         long userId,
         CancellationToken cancellationToken = default) =>

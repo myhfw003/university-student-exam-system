@@ -9,6 +9,11 @@ public interface IAttemptRepository
     /// <summary>取回某人在某场考试下尚未结束的会话（幂等恢复用）。</summary>
     Task<Attempt?> GetActiveAsync(long userId, long examSessionId, CancellationToken cancellationToken = default);
 
+    /// <summary>列出某场考试的全部会话。</summary>
+    Task<IReadOnlyList<Attempt>> ListBySessionAsync(
+        long examSessionId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>列出某人的全部会话。</summary>
     Task<IReadOnlyList<Attempt>> ListByUserAsync(long userId, CancellationToken cancellationToken = default);
 

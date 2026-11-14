@@ -7,6 +7,7 @@ using Exam.Infrastructure;
 using Exam.Infrastructure.Identity;
 using Exam.Web.HealthChecks;
 using Exam.Web.Hubs;
+using Exam.Web.Monitoring;
 using Exam.Web.Middleware;
 using Exam.Web.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -55,6 +56,9 @@ builder.Services.AddControllers();
 // ---------------------------------------------------------------- 实时通道（SignalR）
 // 多实例部署时靠 Redis Backplane 广播，客户端不必连到同一台机器。
 // 连接复用基础设施已注册的那个 Redis 连接 multiplexer。
+// 监考状态每两秒聚合推送一批。
+builder.Services.AddHostedService<ProctoringBroadcaster>();
+
 IServiceProvider? rootProvider = null;
 builder.Services
     .AddSignalR()

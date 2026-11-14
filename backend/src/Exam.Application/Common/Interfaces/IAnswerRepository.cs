@@ -23,6 +23,11 @@ public interface IAnswerRepository
         IReadOnlyCollection<long> questionIds,
         CancellationToken cancellationToken = default);
 
+    /// <summary>统计各会话已作答题数（不含未作答）。</summary>
+    Task<IReadOnlyDictionary<long, int>> CountAnsweredAsync(
+        IReadOnlyCollection<long> attemptIds,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// 批量写入当前答案。同一 (attempt, question) 覆盖写并把修订序号 +1。
     /// </summary>
