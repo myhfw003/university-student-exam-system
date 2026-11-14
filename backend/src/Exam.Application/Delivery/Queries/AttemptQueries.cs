@@ -54,10 +54,11 @@ public sealed class GetAttemptHandler : IRequestHandler<GetAttemptQuery, Attempt
             throw new ForbiddenException("只能查看自己的作答。");
         }
 
-        var session = await _sessions.GetByIdAsync(attempt.ExamSessionId!.Value, cancellationToken)
-            ?? throw new NotFoundException("考试场次不存在。");
+        var session = attempt.ExamSessionId is { } sessionId
+            ? await _sessions.GetByIdAsync(sessionId, cancellationToken)
+            : null;
 
-        var surface = await _surfaceBuilder.BuildAsync(session, attempt.UserId, cancellationToken);
+        var surface = await _surfaceBuilder.BuildForAttemptAsync(attempt, attempt.UserId, cancellationToken);
         var answers = await _answers.ListByAttemptAsync(attempt.Id, cancellationToken);
         var now = _clock.UtcNow;
 

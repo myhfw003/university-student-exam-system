@@ -28,8 +28,7 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
     private readonly IScoreResultRepository _scoreResults;
     private readonly IReviewTaskRepository _reviewTaskRepository;
     private readonly IExamParticipantRepository _participants;
-    private readonly IExamSessionRepository _sessions;
-    private readonly IPaperRepository _papers;
+    private readonly AttemptPaperResolver _resolver;
     private readonly AttemptScoringService _scoring;
     private readonly Exam.Application.Grading.Services.ReviewTaskGenerator _reviewTasks;
     private readonly Exam.Application.Grading.Services.GradeVisibilityResolver _visibility;
@@ -44,8 +43,7 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
         IScoreResultRepository scoreResults,
         IReviewTaskRepository reviewTaskRepository,
         IExamParticipantRepository participants,
-        IExamSessionRepository sessions,
-        IPaperRepository papers,
+        AttemptPaperResolver resolver,
         AttemptScoringService scoring,
         Exam.Application.Grading.Services.ReviewTaskGenerator reviewTasks,
         Exam.Application.Grading.Services.GradeVisibilityResolver visibility,
@@ -59,8 +57,7 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
         _scoreResults = scoreResults;
         _reviewTaskRepository = reviewTaskRepository;
         _participants = participants;
-        _sessions = sessions;
-        _papers = papers;
+        _resolver = resolver;
         _scoring = scoring;
         _reviewTasks = reviewTasks;
         _visibility = visibility;
@@ -83,8 +80,8 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
             throw new ForbiddenException("只能提交自己的作答。");
         }
 
-        var session = await _sessions.GetByIdAsync(attempt.ExamSessionId!.Value, cancellationToken)
-            ?? throw new NotFoundException("考试场次不存在。");
+        // 考试走场次快照；练习走练习开放单挂的试卷。
+        var paper = await _resolver.ResolveAsync(attempt, cancellationToken);
 
         var now = _clock.UtcNow;
 
@@ -101,18 +98,23 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
         _attempts.Update(attempt);
 
         // 交卷事务内完成判分：客观题直接定分，主观题给建议分。
-        var paper = await _papers.GetByIdAsync(session.PaperId, cancellationToken);
         var scoreResults = await _scoring.ScoreAsync(
             attempt,
-            session,
-            paper?.Items.ToList(),
+            paper.Snapshot,
+            paper.PaperItems,
             now,
             cancellationToken);
 
         await _scoreResults.AddRangeAsync(scoreResults, cancellationToken);
 
         // 主观题生成待阅任务：综合题按步骤拆开。
-        var reviewTasks = await _reviewTasks.GenerateAsync(attempt, session, scoreResults, now, cancellationToken);
+        var reviewTasks = await _reviewTasks.GenerateAsync(
+            attempt,
+            attempt.ExamSessionId,
+            paper.Snapshot,
+            scoreResults,
+            now,
+            cancellationToken);
         await _reviewTaskRepository.AddRangeAsync(reviewTasks, cancellationToken);
 
         if (attempt.ExamSessionId is { } sessionId)
@@ -131,7 +133,7 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
             attempt.Id.ToString(),
             new Dictionary<string, object?>
             {
-                ["sessionId"] = session.Id,
+                ["sessionId"] = attempt.ExamSessionId,
                 ["submitReason"] = reason.ToStorage(),
                 ["durationSpentSeconds"] = attempt.DurationSpentSeconds,
             },

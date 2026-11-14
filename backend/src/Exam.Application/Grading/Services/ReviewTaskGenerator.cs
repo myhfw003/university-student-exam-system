@@ -15,18 +15,17 @@ namespace Exam.Application.Grading.Services;
 /// </summary>
 public sealed class ReviewTaskGenerator
 {
-    private readonly IPaperSnapshotRepository _snapshots;
     private readonly IAnswerRepository _answers;
 
-    public ReviewTaskGenerator(IPaperSnapshotRepository snapshots, IAnswerRepository answers)
+    public ReviewTaskGenerator(IAnswerRepository answers)
     {
-        _snapshots = snapshots;
         _answers = answers;
     }
 
     public async Task<IReadOnlyList<ReviewTask>> GenerateAsync(
         Attempt attempt,
-        ExamSession session,
+        long? examSessionId,
+        PaperSnapshot snapshot,
         IReadOnlyList<ScoreResult> scoreResults,
         DateTimeOffset now,
         CancellationToken cancellationToken = default)
@@ -36,13 +35,7 @@ public sealed class ReviewTaskGenerator
             .Where(r => r.Method == ScoringMethod.AutoSuggested || r.Status == ScoringStatus.Pending)
             .ToList();
 
-        if (subjective.Count == 0 || session.SnapshotId is not { } snapshotId)
-        {
-            return [];
-        }
-
-        var snapshot = await _snapshots.GetByIdAsync(snapshotId, cancellationToken);
-        if (snapshot is null)
+        if (subjective.Count == 0)
         {
             return [];
         }
@@ -72,7 +65,7 @@ public sealed class ReviewTaskGenerator
 
             if (type == QuestionType.Comprehensive && item.Steps.Count > 0)
             {
-                tasks.AddRange(SplitByStep(attempt, session, result, item, payload, now));
+                tasks.AddRange(SplitByStep(attempt, examSessionId, result, item, payload, now));
                 continue;
             }
 
@@ -82,7 +75,7 @@ public sealed class ReviewTaskGenerator
 
             tasks.Add(ReviewTask.Create(
                 attempt.Id,
-                session.Id,
+                examSessionId,
                 result.QuestionId,
                 null,
                 text,
@@ -97,7 +90,7 @@ public sealed class ReviewTaskGenerator
     /// <summary>综合题按步骤拆成多条任务。</summary>
     private static IEnumerable<ReviewTask> SplitByStep(
         Attempt attempt,
-        ExamSession session,
+        long? examSessionId,
         ScoreResult result,
         SnapshotItem item,
         AnswerPayload payload,
@@ -119,7 +112,7 @@ public sealed class ReviewTaskGenerator
 
             yield return ReviewTask.Create(
                 attempt.Id,
-                session.Id,
+                examSessionId,
                 result.QuestionId,
                 step.Code,
                 text,

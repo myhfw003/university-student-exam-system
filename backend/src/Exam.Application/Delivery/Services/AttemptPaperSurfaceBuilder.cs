@@ -27,18 +27,37 @@ public sealed class AttemptPaperSurfaceBuilder
     private readonly IPaperSnapshotRepository _snapshots;
     private readonly IQuestionRepository _questions;
     private readonly ITagRepository _tags;
+    private readonly AttemptPaperResolver _resolver;
 
     public AttemptPaperSurfaceBuilder(
         IPaperSnapshotRepository snapshots,
         IQuestionRepository questions,
-        ITagRepository tags)
+        ITagRepository tags,
+        AttemptPaperResolver resolver)
     {
         _snapshots = snapshots;
         _questions = questions;
         _tags = tags;
+        _resolver = resolver;
     }
 
-    public async Task<AttemptPaperSurface> BuildAsync(
+    /// <summary>按作答解析卷面：考试走场次快照，练习走练习开放单挂的试卷。</summary>
+    public async Task<AttemptPaperSurface> BuildForAttemptAsync(
+        Attempt attempt,
+        long userId,
+        CancellationToken cancellationToken = default)
+    {
+        var context = await _resolver.ResolveAsync(attempt, cancellationToken);
+
+        // 考试按场次的卷型置换；练习不置换——重做就是要看清原题。
+        var variantRule = context.Session?.VariantRule ?? VariantRule.Standard;
+        var seed = (context.Session?.Id ?? context.PracticeAssignment!.Id).ToString();
+
+        return await BuildAsync(context.Snapshot, variantRule, userId, seed, cancellationToken);
+    }
+
+    /// <summary>按场次构建卷面（开始考试时用：会话还没建）。</summary>
+    public async Task<AttemptPaperSurface> BuildForSessionAsync(
         ExamSession session,
         long userId,
         CancellationToken cancellationToken = default)
@@ -51,9 +70,19 @@ public sealed class AttemptPaperSurfaceBuilder
         var snapshot = await _snapshots.GetByIdAsync(session.SnapshotId.Value, cancellationToken)
             ?? throw new NotFoundException("试卷快照不存在。");
 
+        return await BuildAsync(snapshot, session.VariantRule, userId, session.Id.ToString(), cancellationToken);
+    }
+
+    public async Task<AttemptPaperSurface> BuildAsync(
+        PaperSnapshot snapshot,
+        VariantRule variantRule,
+        long userId,
+        string seed,
+        CancellationToken cancellationToken = default)
+    {
         var studentKey = userId.ToString();
-        var sessionSeed = session.Id.ToString();
-        var variant = PaperVariantBuilder.Build(snapshot, session.VariantRule, studentKey, sessionSeed);
+        var sessionSeed = seed;
+        var variant = PaperVariantBuilder.Build(snapshot, variantRule, studentKey, sessionSeed);
 
         // 难度标签名：给卷面一个可读的难度标签。
         var questionIds = snapshot.Items.Select(i => i.QuestionId).ToList();

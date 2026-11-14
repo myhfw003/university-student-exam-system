@@ -1,4 +1,5 @@
 using Exam.Application.Authoring.Contracts;
+using Exam.Domain.Authoring;
 using Exam.Domain.Delivery;
 
 namespace Exam.Application.Delivery.Contracts;
@@ -65,7 +66,7 @@ public static class AttemptResponseFactory
 {
     public static AttemptResponse Build(
         Attempt attempt,
-        ExamSession session,
+        ExamSession? session,
         Services.AttemptPaperSurface surface,
         IReadOnlyList<Answer> answers,
         DateTimeOffset serverTime) =>
@@ -80,7 +81,7 @@ public static class AttemptResponseFactory
             attempt.DeadlineAt,
             attempt.RemainingSeconds(serverTime),
             attempt.VariantKey ?? surface.VariantKey,
-            ExamRulesDto.From(session.Rules),
+            ExamRulesDto.From(session?.Rules ?? ExamRules.Default),
             surface.Questions,
             answers
                 .Select(a => new AttemptAnswerDto(a.QuestionId, a.Payload, a.ClientSeq))

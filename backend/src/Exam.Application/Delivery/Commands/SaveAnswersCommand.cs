@@ -3,6 +3,7 @@ using Exam.Application.Common.Exceptions;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
 using Exam.Application.Delivery.Contracts;
+using Exam.Application.Delivery.Services;
 using Exam.Domain.Authoring;
 using Exam.Domain.Catalog;
 using Exam.Domain.Delivery;
@@ -47,8 +48,7 @@ public sealed class SaveAnswersHandler : IRequestHandler<SaveAnswersCommand, Sav
     private readonly IAttemptRepository _attempts;
     private readonly IAnswerRepository _answers;
     private readonly IAnswerRevisionRepository _revisions;
-    private readonly IExamSessionRepository _sessions;
-    private readonly IPaperSnapshotRepository _snapshots;
+    private readonly AttemptPaperResolver _resolver;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
     private readonly ICurrentUser _currentUser;
@@ -57,8 +57,7 @@ public sealed class SaveAnswersHandler : IRequestHandler<SaveAnswersCommand, Sav
         IAttemptRepository attempts,
         IAnswerRepository answers,
         IAnswerRevisionRepository revisions,
-        IExamSessionRepository sessions,
-        IPaperSnapshotRepository snapshots,
+        AttemptPaperResolver resolver,
         IUnitOfWork unitOfWork,
         IClock clock,
         ICurrentUser currentUser)
@@ -66,8 +65,7 @@ public sealed class SaveAnswersHandler : IRequestHandler<SaveAnswersCommand, Sav
         _attempts = attempts;
         _answers = answers;
         _revisions = revisions;
-        _sessions = sessions;
-        _snapshots = snapshots;
+        _resolver = resolver;
         _unitOfWork = unitOfWork;
         _clock = clock;
         _currentUser = currentUser;
@@ -86,10 +84,10 @@ public sealed class SaveAnswersHandler : IRequestHandler<SaveAnswersCommand, Sav
             throw new ForbiddenException("只能保存自己的作答。");
         }
 
-        var session = await _sessions.GetByIdAsync(attempt.ExamSessionId!.Value, cancellationToken)
-            ?? throw new NotFoundException("考试场次不存在。");
+        var paper = await _resolver.ResolveAsync(attempt, cancellationToken);
 
-        if (session.Status == ExamSessionStatus.Cancelled)
+        // 场次被取消才停；练习没有场次，不受这一条约束。
+        if (paper.Session is { Status: ExamSessionStatus.Cancelled })
         {
             throw new BusinessRuleException("场次已取消，不能继续作答。");
         }
@@ -109,8 +107,7 @@ public sealed class SaveAnswersHandler : IRequestHandler<SaveAnswersCommand, Sav
                 []);
         }
 
-        var snapshot = await _snapshots.GetByIdAsync(session.SnapshotId!.Value, cancellationToken)
-            ?? throw new NotFoundException("试卷快照不存在。");
+        var snapshot = paper.Snapshot;
 
         var itemsByQuestion = snapshot.Items.ToDictionary(i => i.QuestionId);
         var rejected = new List<RejectedAnswerDto>();

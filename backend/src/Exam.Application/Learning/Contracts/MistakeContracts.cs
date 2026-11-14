@@ -18,6 +18,16 @@ public sealed record MistakeDto(
     DateTimeOffset? ResolvedAt,
     long? SourceAttemptId);
 
+/// <summary>单题重做的结果。</summary>
+public sealed record RedoMistakeResponse(
+    long PracticeAssignmentId,
+    long AttemptId,
+    long QuestionId,
+    string QuestionCode,
+    string QuestionType,
+    string Title,
+    DateTimeOffset DeadlineAt);
+
 /// <summary>错题本列表。</summary>
 public sealed record MistakeListResponse(
     IReadOnlyList<MistakeDto> Items,

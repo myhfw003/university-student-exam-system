@@ -78,7 +78,7 @@ public sealed class StartAttemptHandler : IRequestHandler<StartAttemptCommand, A
         var active = await _attempts.GetActiveAsync(userId, session.Id, cancellationToken);
         if (active is not null)
         {
-            return await BuildResponseAsync(active, session, cancellationToken);
+            return await BuildResponseAsync(active, cancellationToken);
         }
 
         var used = await _attempts.CountByUserAsync(userId, session.Id, cancellationToken);
@@ -90,7 +90,7 @@ public sealed class StartAttemptHandler : IRequestHandler<StartAttemptCommand, A
             throw new BusinessRuleException("本场考试不允许重考。");
         }
 
-        var surface = await _surfaceBuilder.BuildAsync(session, userId, cancellationToken);
+        var surface = await _surfaceBuilder.BuildForSessionAsync(session, userId, cancellationToken);
 
         var attempt = Attempt.CreateExam(
             session.Id,
@@ -134,12 +134,15 @@ public sealed class StartAttemptHandler : IRequestHandler<StartAttemptCommand, A
 
     private async Task<AttemptResponse> BuildResponseAsync(
         Attempt attempt,
-        ExamSession session,
         CancellationToken cancellationToken)
     {
-        var surface = await _surfaceBuilder.BuildAsync(session, attempt.UserId, cancellationToken);
+        var surface = await _surfaceBuilder.BuildForAttemptAsync(attempt, attempt.UserId, cancellationToken);
         var answers = await _answers.ListByAttemptAsync(attempt.Id, cancellationToken);
         var now = _clock.UtcNow;
+
+        var session = attempt.ExamSessionId is { } sessionId
+            ? await _sessions.GetByIdAsync(sessionId, cancellationToken)
+            : null;
 
         return AttemptResponseFactory.Build(attempt, session, surface, answers, now);
     }

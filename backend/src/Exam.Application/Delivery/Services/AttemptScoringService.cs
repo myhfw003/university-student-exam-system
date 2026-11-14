@@ -27,22 +27,11 @@ public sealed class AttemptScoringService
     /// <summary>对一次作答判分，返回每道题的评分结果。</summary>
     public async Task<IReadOnlyList<ScoreResult>> ScoreAsync(
         Attempt attempt,
-        ExamSession session,
+        PaperSnapshot snapshot,
         IReadOnlyList<PaperItem>? paperItems,
         DateTimeOffset now,
         CancellationToken cancellationToken = default)
     {
-        if (session.SnapshotId is not { } snapshotId)
-        {
-            return [];
-        }
-
-        var snapshot = await _snapshots.GetByIdAsync(snapshotId, cancellationToken);
-        if (snapshot is null)
-        {
-            return [];
-        }
-
         var answers = await _answers.ListByAttemptAsync(attempt.Id, cancellationToken);
         var answerByQuestion = answers.ToDictionary(a => a.QuestionId);
         var paperItemByQuestion = paperItems?.ToDictionary(i => i.QuestionId) ?? [];

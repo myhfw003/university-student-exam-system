@@ -36,6 +36,17 @@ public sealed class MistakesController : ControllerBase
             new ListMistakesQuery(tagId, questionType, from, to, includeResolved, page, size),
             cancellationToken);
 
+    /// <summary>单题重做：把这道题做成一份只有一道题的练习，并直接开好会话。</summary>
+    [HttpPost("{questionId:long}/redo")]
+    [Authorize(Policy = PermissionCatalog.AttemptReadOwn)]
+    [ProducesResponseType(typeof(RedoMistakeResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<RedoMistakeResponse> Redo(
+        long questionId,
+        CancellationToken cancellationToken = default) =>
+        await _mediator.Send(new RedoMistakeCommand(questionId), cancellationToken);
+
     /// <summary>标记已掌握：这道题不再留在错题本里。</summary>
     [HttpPost("{questionId:long}/resolve")]
     [Authorize(Policy = PermissionCatalog.AttemptReadOwn)]

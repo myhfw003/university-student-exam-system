@@ -667,12 +667,23 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 |---|---|---|---|
 | GET | `/mistakes` | 登录 | 错题本（过滤：标签、题型、时间范围） |
 | POST | `/mistakes/{questionId}/resolve` | 登录 | 重做正确后标记已掌握 |
-| POST | `/mistakes/{id}/redo` | 登录 | 生成单题重做练习 |
+| POST | `/mistakes/{questionId}/redo` | 登录 | 生成单题重做练习 |
 | GET | `/abilities/profile` | 登录 | 能力画像 |
 | GET | `/practices` | 登录 | 可见练习列表 |
 | GET | `/dashboard/summary` | 登录 | 工作台汇总 |
 | GET | `/statistics/exam-sessions/{id}` | `analytics:read` | 成绩分析 |
 | GET | `/statistics/questions/{id}` | `analytics:read` | 逐题正确率 |
+
+**`GET /mistakes`**：查询参数 `tagId`、`questionType`、`from`、`to`、`includeResolved`、`page`、`size`。标签过滤含标签子树。
+
+**`POST /mistakes/{questionId}/redo`**
+
+```json
+// 200
+{ "practiceAssignmentId": 9, "attemptId": 8802, "questionId": 501,
+  "questionCode": "Q-2026-00123", "questionType": "single",
+  "title": "错题重做：Q-2026-00123", "deadlineAt": "2026-11-15T09:00:00Z" }
+```
 
 **`GET /dashboard/summary`**
 

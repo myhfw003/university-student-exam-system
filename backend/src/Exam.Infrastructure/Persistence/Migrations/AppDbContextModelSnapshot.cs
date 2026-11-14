@@ -2777,6 +2777,94 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Exam.Domain.Learning.PracticeAssignment", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset?>("CloseAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("close_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateTimeOffset?>("OpenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("open_at");
+
+                    b.Property<long>("PaperId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("paper_id");
+
+                    b.Property<DateTimeOffset?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("published_at");
+
+                    b.Property<string>("Rules")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("rules");
+
+                    b.Property<string>("ScopeTagIds")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("scope");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long?>("UpdatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_practice_assignment");
+
+                    b.HasIndex("PaperId")
+                        .HasDatabaseName("ix_practice_assignment_paper");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_practice_assignment_status");
+
+                    b.ToTable("practice_assignment", "learning", t =>
+                        {
+                            t.HasCheckConstraint("ck_practice_assignment_status", "status IN ('draft','published','archived')");
+                        });
+                });
+
             modelBuilder.Entity("Exam.Infrastructure.Persistence.OutboxMessage", b =>
                 {
                     b.Property<long>("Id")
@@ -3060,6 +3148,16 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_score_result_attempt_attempt_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Learning.PracticeAssignment", b =>
+                {
+                    b.HasOne("Exam.Domain.Authoring.Paper", null)
+                        .WithMany()
+                        .HasForeignKey("PaperId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_practice_assignment_paper_paper_id");
                 });
 
             modelBuilder.Entity("Exam.Domain.Authoring.Paper", b =>
