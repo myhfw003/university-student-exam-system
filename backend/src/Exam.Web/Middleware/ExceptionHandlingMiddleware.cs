@@ -53,7 +53,13 @@ public sealed class ExceptionHandlingMiddleware
         catch (DomainException ex)
         {
             _logger.LogWarning(ex, "业务规则拒绝：{ErrorCode} {Message}", ex.ErrorCode, ex.Message);
-            await WriteProblemAsync(context, ex.ErrorCode, ex.Message, StatusCodes.Status422UnprocessableEntity, ex.Errors);
+            await WriteProblemAsync(
+                context,
+                ex.ErrorCode,
+                ex.Message,
+                StatusCodes.Status422UnprocessableEntity,
+                ex.Errors,
+                ex.Payload);
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -87,7 +93,8 @@ public sealed class ExceptionHandlingMiddleware
         int errorCode,
         string detail,
         int statusCode,
-        IReadOnlyDictionary<string, string[]>? errors)
+        IReadOnlyDictionary<string, string[]>? errors,
+        IReadOnlyDictionary<string, object?>? payload = null)
     {
         if (context.Response.HasStarted)
         {
@@ -109,6 +116,15 @@ public sealed class ExceptionHandlingMiddleware
         if (errors is { Count: > 0 })
         {
             problem.Extensions["errors"] = errors;
+        }
+
+        // 结构化载荷：缺什么、差多少这类明细直接进响应体。
+        if (payload is { Count: > 0 })
+        {
+            foreach (var (key, value) in payload)
+            {
+                problem.Extensions[key] = value;
+            }
         }
 
         context.Response.StatusCode = statusCode;

@@ -13,9 +13,26 @@ public class DomainException : Exception
         Errors = errors;
     }
 
+    /// <summary>
+    /// 带结构化载荷的异常。载荷会原样写进错误响应，
+    /// 让前端能直接拿到「缺什么、差多少」这类明细，而不用再发一次请求。
+    /// </summary>
+    public DomainException(
+        string message,
+        int errorCode,
+        IReadOnlyDictionary<string, object?> payload)
+        : base(message)
+    {
+        ErrorCode = errorCode;
+        Payload = payload;
+    }
+
     public int ErrorCode { get; }
 
     public IReadOnlyDictionary<string, string[]> Errors { get; } = new Dictionary<string, string[]>();
+
+    /// <summary>错误响应里的附加数据。</summary>
+    public IReadOnlyDictionary<string, object?> Payload { get; } = new Dictionary<string, object?>();
 }
 
 /// <summary>违反业务规则。</summary>

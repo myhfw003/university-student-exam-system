@@ -96,6 +96,97 @@ namespace Exam.Infrastructure.Persistence.Migrations
                     b.ToTable("audit_log", "audit");
                 });
 
+            modelBuilder.Entity("Exam.Domain.Authoring.Blueprint", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateTimeOffset?>("GeneratedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("generated_at");
+
+                    b.Property<long?>("GeneratedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("generated_by");
+
+                    b.Property<bool>("ManualModified")
+                        .HasColumnType("boolean")
+                        .HasColumnName("manual_modified");
+
+                    b.Property<long>("PaperId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("paper_id");
+
+                    b.Property<string>("Plan")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("generated_items");
+
+                    b.Property<string>("Rules")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("rules");
+
+                    b.Property<string>("Seed")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("seed");
+
+                    b.Property<string>("Shortfalls")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("shortfalls");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long?>("UpdatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_blueprint");
+
+                    b.HasIndex("PaperId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_blueprint_paper");
+
+                    b.ToTable("blueprint", "authoring", t =>
+                        {
+                            t.HasCheckConstraint("ck_blueprint_status", "status IN ('draft','generated','modified')");
+                        });
+                });
+
             modelBuilder.Entity("Exam.Domain.Authoring.Paper", b =>
                 {
                     b.Property<long>("Id")
@@ -1621,6 +1712,16 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .HasName("pk_seed_markers");
 
                     b.ToTable("seed_markers", "iam");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Authoring.Blueprint", b =>
+                {
+                    b.HasOne("Exam.Domain.Authoring.Paper", null)
+                        .WithMany()
+                        .HasForeignKey("PaperId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_blueprint_papers_paper_id");
                 });
 
             modelBuilder.Entity("Exam.Domain.Authoring.PaperItem", b =>

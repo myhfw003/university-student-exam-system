@@ -136,6 +136,14 @@ public sealed class Paper : AuditableEntity, IAuditedEntity
         Touch(now, actorId);
     }
 
+    /// <summary>调整目标总分。组卷生成后同步试卷的目标总分，保证发布校验能对上。</summary>
+    public void SetTargetTotalScore(Score targetTotalScore, DateTimeOffset now, long? actorId = null)
+    {
+        EnsureEditable();
+        TargetTotalScore = targetTotalScore;
+        Touch(now, actorId);
+    }
+
     /// <summary>加入题目。题目须为已发布，同题不可重复入卷。</summary>
     public void AddItem(Question question, Score score, int sortOrder, DateTimeOffset now, long? actorId = null)
     {
@@ -403,11 +411,34 @@ public sealed class PaperImmutableException : DomainException
         : base(message, ErrorCodes.PaperImmutable) { }
 }
 
+/// <summary>校验项在错误响应里的载荷。</summary>
+public sealed record ValidationDetail(
+    string Key,
+    string Label,
+    bool Passed,
+    string Severity,
+    string? Detail,
+    IReadOnlyList<long> Targets);
+
 /// <summary>发布校验未通过。</summary>
 public sealed class PaperPublicationException : DomainException
 {
     public PaperPublicationException(string message, IReadOnlyList<ValidationItem> items)
-        : base(message, ErrorCodes.PaperPublicationRejected)
+        : base(
+            message,
+            ErrorCodes.PaperPublicationRejected,
+            new Dictionary<string, object?>
+            {
+                ["items"] = items
+                    .Select(i => new ValidationDetail(
+                        i.Key,
+                        i.Label,
+                        i.Passed,
+                        i.Severity == ValidationSeverity.Blocking ? "blocking" : "warning",
+                        i.Detail,
+                        i.Targets))
+                    .ToList(),
+            })
     {
         Items = items;
     }

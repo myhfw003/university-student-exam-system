@@ -204,6 +204,57 @@ public sealed class PapersController : ControllerBase
     public async Task<PaperSnapshotDetailDto> GetSnapshot(long id, int version, CancellationToken cancellationToken) =>
         await _mediator.Send(new GetPaperSnapshotQuery(id, version), cancellationToken);
 
+    /// <summary>取回试卷的组卷方案。</summary>
+    [HttpGet("{id:long}/blueprint")]
+    [Authorize(Policy = PermissionCatalog.PaperRead)]
+    [ProducesResponseType(typeof(BlueprintDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<BlueprintDto> GetBlueprint(long id, CancellationToken cancellationToken) =>
+        await _mediator.Send(new GetBlueprintQuery(id), cancellationToken);
+
+    /// <summary>保存组卷规则。</summary>
+    [HttpPut("{id:long}/blueprint")]
+    [Authorize(Policy = PermissionCatalog.BlueprintGenerate)]
+    [ProducesResponseType(typeof(BlueprintDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<BlueprintDto> SaveBlueprint(
+        long id,
+        SaveBlueprintRequest request,
+        CancellationToken cancellationToken)
+    {
+        var rules = request.Rules;
+        return await _mediator.Send(
+            new SaveBlueprintRulesCommand(
+                id,
+                request.Seed,
+                new BlueprintRulesInput(
+                    rules.TagIds ?? [],
+                    rules.IncludeDescendants,
+                    rules.MatchMode,
+                    rules.DifficultyQuota ?? new Dictionary<long, int>(),
+                    rules.TypeQuota ?? new Dictionary<string, int>(),
+                    rules.TargetTotalScore,
+                    rules.OrderRule,
+                    rules.ScoreAllocation)),
+            cancellationToken);
+    }
+
+    /// <summary>执行抽题。题池不足返回 422 并逐条列出缺口。</summary>
+    [HttpPost("{id:long}/blueprint/generate")]
+    [Authorize(Policy = PermissionCatalog.BlueprintGenerate)]
+    [ProducesResponseType(typeof(GenerateBlueprintResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<GenerateBlueprintResponse> GenerateBlueprint(long id, CancellationToken cancellationToken) =>
+        await _mediator.Send(new GenerateBlueprintCommand(id), cancellationToken);
+
+    /// <summary>方案与试卷当前题位的差异。</summary>
+    [HttpGet("{id:long}/blueprint/diff")]
+    [Authorize(Policy = PermissionCatalog.PaperRead)]
+    [ProducesResponseType(typeof(BlueprintDiffDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<BlueprintDiffDto> GetBlueprintDiff(long id, CancellationToken cancellationToken) =>
+        await _mediator.Send(new GetBlueprintDiffQuery(id), cancellationToken);
+
     /// <summary>归档 / 下架。</summary>
     [HttpPost("{id:long}/archive")]
     [Authorize(Policy = PermissionCatalog.PaperPublish)]
