@@ -96,6 +96,270 @@ namespace Exam.Infrastructure.Persistence.Migrations
                     b.ToTable("audit_log", "audit");
                 });
 
+            modelBuilder.Entity("Exam.Domain.Authoring.Paper", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("AllowRetake")
+                        .HasColumnType("boolean")
+                        .HasColumnName("allow_retake");
+
+                    b.Property<string>("AnswerPolicy")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("answer_policy");
+
+                    b.Property<string>("Batch")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("batch");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("description");
+
+                    b.Property<int>("DurationMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_minutes");
+
+                    b.Property<string>("ExamRules")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("exam_rules");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text")
+                        .HasColumnName("note");
+
+                    b.Property<string>("OrderRule")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("order_rule");
+
+                    b.Property<decimal?>("PassScore")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("numeric(8,2)")
+                        .HasColumnName("pass_score");
+
+                    b.Property<string>("PracticeRules")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("practice_rules");
+
+                    b.Property<long?>("PublishedSnapshotId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("published_snapshot_id");
+
+                    b.Property<bool>("RetakeKeepsBest")
+                        .HasColumnType("boolean")
+                        .HasColumnName("retake_keeps_best");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<decimal>("TargetTotalScore")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("numeric(8,2)")
+                        .HasColumnName("total_score");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long?>("UpdatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("updated_by");
+
+                    b.Property<string>("VariantRule")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("variant_rule");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_paper");
+
+                    b.HasIndex("Kind", "Status")
+                        .HasDatabaseName("ix_paper_kind_status")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("paper", "authoring", t =>
+                        {
+                            t.HasCheckConstraint("ck_paper_answer_policy", "answer_policy IN ('immediately','after_submit','after_close')");
+
+                            t.HasCheckConstraint("ck_paper_duration", "duration_minutes BETWEEN 1 AND 300");
+
+                            t.HasCheckConstraint("ck_paper_kind", "kind IN ('exam','practice')");
+
+                            t.HasCheckConstraint("ck_paper_order_rule", "order_rule IN ('by_type','manual')");
+
+                            t.HasCheckConstraint("ck_paper_rules_exclusive", "(kind = 'exam' AND exam_rules IS NOT NULL AND practice_rules IS NULL) OR (kind = 'practice' AND practice_rules IS NOT NULL AND exam_rules IS NULL)");
+
+                            t.HasCheckConstraint("ck_paper_status", "status IN ('draft','published','archived')");
+
+                            t.HasCheckConstraint("ck_paper_variant_rule", "variant_rule IN ('standard','small_plum','large_plum')");
+                        });
+                });
+
+            modelBuilder.Entity("Exam.Domain.Authoring.PaperItem", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("PaperId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("paper_id");
+
+                    b.Property<long>("QuestionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("question_id");
+
+                    b.Property<decimal>("Score")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("score");
+
+                    b.Property<long?>("SectionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("section_id");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.HasKey("Id")
+                        .HasName("pk_paper_item");
+
+                    b.HasIndex("QuestionId")
+                        .HasDatabaseName("ix_paper_item_question");
+
+                    b.HasIndex("PaperId", "QuestionId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_paper_item_question");
+
+                    b.HasIndex("PaperId", "SortOrder")
+                        .HasDatabaseName("ix_paper_item_paper_order");
+
+                    b.ToTable("paper_item", "authoring", t =>
+                        {
+                            t.HasCheckConstraint("ck_paper_item_score", "score >= 0 AND score <= 40");
+                        });
+                });
+
+            modelBuilder.Entity("Exam.Domain.Authoring.PaperSection", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Instructions")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("instructions");
+
+                    b.Property<long>("PaperId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("paper_id");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
+
+                    b.HasKey("Id")
+                        .HasName("pk_paper_section");
+
+                    b.HasIndex("PaperId")
+                        .HasDatabaseName("ix_paper_section_paper");
+
+                    b.ToTable("paper_section", "authoring");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Authoring.PaperTag", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("AssignedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("assigned_at");
+
+                    b.Property<long>("PaperId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("paper_id");
+
+                    b.Property<long>("TagId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("tag_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_paper_tag");
+
+                    b.HasIndex("TagId")
+                        .HasDatabaseName("ix_paper_tag_tag");
+
+                    b.HasIndex("PaperId", "TagId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_paper_tag");
+
+                    b.ToTable("paper_tag", "authoring");
+                });
+
             modelBuilder.Entity("Exam.Domain.Catalog.ImportBatch", b =>
                 {
                     b.Property<long>("Id")
@@ -1203,6 +1467,36 @@ namespace Exam.Infrastructure.Persistence.Migrations
                     b.ToTable("seed_markers", "iam");
                 });
 
+            modelBuilder.Entity("Exam.Domain.Authoring.PaperItem", b =>
+                {
+                    b.HasOne("Exam.Domain.Authoring.Paper", null)
+                        .WithMany("Items")
+                        .HasForeignKey("PaperId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_paper_item_paper_paper_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Authoring.PaperSection", b =>
+                {
+                    b.HasOne("Exam.Domain.Authoring.Paper", null)
+                        .WithMany("Sections")
+                        .HasForeignKey("PaperId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_paper_section_paper_paper_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Authoring.PaperTag", b =>
+                {
+                    b.HasOne("Exam.Domain.Authoring.Paper", null)
+                        .WithMany("Tags")
+                        .HasForeignKey("PaperId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_paper_tag_paper_paper_id");
+                });
+
             modelBuilder.Entity("Exam.Domain.Catalog.ImportRow", b =>
                 {
                     b.HasOne("Exam.Domain.Catalog.ImportBatch", null)
@@ -1280,6 +1574,15 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ParentId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_tag_tag_parent_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Authoring.Paper", b =>
+                {
+                    b.Navigation("Items");
+
+                    b.Navigation("Sections");
+
+                    b.Navigation("Tags");
                 });
 
             modelBuilder.Entity("Exam.Domain.Catalog.ImportBatch", b =>

@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Exam.Domain.Authoring;
 using Exam.Domain.Catalog;
 using Exam.Domain.Identity;
 using Exam.Domain.SharedKernel.Abstractions;
@@ -17,6 +18,9 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
 
     /// <summary>题库与内容上下文所在 Schema。</summary>
     public const string CatalogSchema = "catalog";
+
+    /// <summary>组卷上下文所在 Schema。</summary>
+    public const string AuthoringSchema = "authoring";
 
     public AppDbContext(DbContextOptions<AppDbContext> options)
         : base(options) { }
@@ -56,6 +60,14 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
     public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
 
     public DbSet<ImportRow> ImportRows => Set<ImportRow>();
+
+    public DbSet<Paper> Papers => Set<Paper>();
+
+    public DbSet<PaperItem> PaperItems => Set<PaperItem>();
+
+    public DbSet<PaperSection> PaperSections => Set<PaperSection>();
+
+    public DbSet<PaperTag> PaperTags => Set<PaperTag>();
 
     public DbSet<QuestionBankItem> QuestionBankItems => Set<QuestionBankItem>();
 
