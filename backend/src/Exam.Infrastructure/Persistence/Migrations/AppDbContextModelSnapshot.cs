@@ -1425,6 +1425,209 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Exam.Domain.Delivery.Answer", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("AttemptId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("attempt_id");
+
+                    b.Property<int>("ClientSeq")
+                        .HasColumnType("integer")
+                        .HasColumnName("client_seq");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsBlank")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_blank");
+
+                    b.Property<long?>("PaperItemId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("paper_item_id");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload");
+
+                    b.Property<long>("QuestionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("question_id");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision");
+
+                    b.Property<DateTimeOffset>("SavedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("saved_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_answer");
+
+                    b.HasIndex("AttemptId")
+                        .HasDatabaseName("ix_answer_attempt");
+
+                    b.HasIndex("AttemptId", "QuestionId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_answer_attempt_question");
+
+                    b.ToTable("answer", "delivery");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Delivery.Attempt", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AttemptNo")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempt_no");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset>("DeadlineAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deadline_at");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<int>("DisconnectCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("disconnect_count");
+
+                    b.Property<int?>("DurationSpentSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_spent_seconds");
+
+                    b.Property<long?>("ExamSessionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("exam_session_id");
+
+                    b.Property<int>("FocusLossCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("focus_loss_count");
+
+                    b.Property<int>("LastClientSeq")
+                        .HasColumnType("integer")
+                        .HasColumnName("last_client_seq");
+
+                    b.Property<DateTimeOffset?>("LastSavedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_saved_at");
+
+                    b.Property<long?>("PracticeAssignmentId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("practice_assignment_id");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("SubmitReason")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("submit_reason");
+
+                    b.Property<DateTimeOffset?>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("submitted_at");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("target_type");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long?>("UpdatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("updated_by");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("VariantKey")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("variant_key");
+
+                    b.Property<string>("VariantSeed")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("variant_seed");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<int>("WarningCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("warning_count");
+
+                    b.HasKey("Id")
+                        .HasName("pk_attempt");
+
+                    b.HasIndex("ExamSessionId", "Status")
+                        .HasDatabaseName("ix_attempt_session_status");
+
+                    b.HasIndex("Status", "DeadlineAt")
+                        .HasDatabaseName("ix_attempt_active")
+                        .HasFilter("status = 'in_progress' AND deleted_at IS NULL");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .HasDatabaseName("ix_attempt_user");
+
+                    b.HasIndex("ExamSessionId", "UserId", "AttemptNo")
+                        .IsUnique()
+                        .HasDatabaseName("uq_attempt_exam_user_no")
+                        .HasFilter("target_type = 'exam' AND deleted_at IS NULL");
+
+                    b.ToTable("attempt", "delivery", t =>
+                        {
+                            t.HasCheckConstraint("ck_attempt_status", "status IN ('not_started','in_progress','submitted','auto_submitted','force_submitted','abandoned')");
+
+                            t.HasCheckConstraint("ck_attempt_submit_reason", "submit_reason IS NULL OR submit_reason IN ('manual','time_up','proctor_force','admin_force','network_timeout')");
+
+                            t.HasCheckConstraint("ck_attempt_target", "(target_type = 'exam' AND exam_session_id IS NOT NULL AND practice_assignment_id IS NULL) OR (target_type = 'practice' AND practice_assignment_id IS NOT NULL AND exam_session_id IS NULL)");
+
+                            t.HasCheckConstraint("ck_attempt_target_type", "target_type IN ('exam','practice')");
+                        });
+                });
+
             modelBuilder.Entity("Exam.Domain.Delivery.ExamParticipant", b =>
                 {
                     b.Property<long>("Id")

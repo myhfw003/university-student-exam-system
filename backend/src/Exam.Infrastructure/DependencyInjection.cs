@@ -66,6 +66,9 @@ public static class DependencyInjection
         services.AddScoped<IExamSessionRepository, ExamSessionRepository>();
         services.AddScoped<IExamParticipantRepository, ExamParticipantRepository>();
         services.AddScoped<ExamRosterBuilder>();
+        services.AddScoped<IAttemptRepository, AttemptRepository>();
+        services.AddScoped<IAnswerRepository, AnswerRepository>();
+        services.AddScoped<AttemptPaperSurfaceBuilder>();
         services.AddScoped<BlueprintPoolBuilder>();
         services.AddSingleton<IQuestionFileParser, QuestionFileParser>();
         services.AddScoped<IUserPermissionService, UserPermissionService>();
