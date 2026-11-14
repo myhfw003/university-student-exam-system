@@ -1907,6 +1907,64 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Exam.Domain.Delivery.ProctorAction", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ActionType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("action_type");
+
+                    b.Property<long>("AttemptId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("attempt_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long>("ExamSessionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("exam_session_id");
+
+                    b.Property<string>("Message")
+                        .HasColumnType("text")
+                        .HasColumnName("message");
+
+                    b.Property<long>("OperatorId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("operator_id");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("text")
+                        .HasColumnName("reason");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_proctor_action");
+
+                    b.HasIndex("ExamSessionId")
+                        .HasDatabaseName("ix_proctor_action_exam_session_id");
+
+                    b.HasIndex("AttemptId", "CreatedAt")
+                        .HasDatabaseName("ix_proctor_action_attempt");
+
+                    b.ToTable("proctor_action", "delivery", t =>
+                        {
+                            t.HasCheckConstraint("ck_proctor_action_type", "action_type IN ('warn','note','force_submit')");
+                        });
+                });
+
             modelBuilder.Entity("Exam.Domain.Identity.Permission", b =>
                 {
                     b.Property<long>("Id")
@@ -2483,6 +2541,23 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_exam_session_papers_paper_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Delivery.ProctorAction", b =>
+                {
+                    b.HasOne("Exam.Domain.Delivery.Attempt", null)
+                        .WithMany()
+                        .HasForeignKey("AttemptId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_proctor_action_attempt_attempt_id");
+
+                    b.HasOne("Exam.Domain.Delivery.ExamSession", null)
+                        .WithMany()
+                        .HasForeignKey("ExamSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_proctor_action_exam_session_exam_session_id");
                 });
 
             modelBuilder.Entity("Exam.Domain.Authoring.Paper", b =>

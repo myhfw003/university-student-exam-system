@@ -59,6 +59,9 @@ builder.Services.AddControllers();
 // 监考状态每两秒聚合推送一批。
 builder.Services.AddHostedService<ProctoringBroadcaster>();
 
+// 考试实时通知走 SignalR。
+builder.Services.AddSingleton<Exam.Application.Common.Interfaces.IExamNotifier, ExamHubNotifier>();
+
 IServiceProvider? rootProvider = null;
 builder.Services
     .AddSignalR()

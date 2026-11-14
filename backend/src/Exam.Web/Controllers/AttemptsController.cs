@@ -107,6 +107,27 @@ public sealed class AttemptsController : ControllerBase
     public async Task<HeartbeatResponse> Heartbeat(long id, CancellationToken cancellationToken) =>
         await _mediator.Send(new HeartbeatAttemptCommand(id), cancellationToken);
 
+    /// <summary>监考处置：警告 / 备注 / 强制交卷。</summary>
+    [HttpPost("{id:long}/proctor-actions")]
+    [Authorize(Policy = PermissionCatalog.ProctorAct)]
+    [ProducesResponseType(typeof(ProctorActionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ProctorActionDto> CreateProctorAction(
+        long id,
+        CreateProctorActionRequest request,
+        CancellationToken cancellationToken) =>
+        await _mediator.Send(
+            new CreateProctorActionCommand(id, request.ActionType, request.Message, request.Reason),
+            cancellationToken);
+
+    /// <summary>监考处置历史。</summary>
+    [HttpGet("{id:long}/proctor-actions")]
+    [Authorize(Policy = PermissionCatalog.ProctorMonitor)]
+    [ProducesResponseType(typeof(ProctorActionListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ProctorActionListResponse> ListProctorActions(long id, CancellationToken cancellationToken) =>
+        await _mediator.Send(new ListProctorActionsQuery(id), cancellationToken);
+
     /// <summary>恢复作答状态。</summary>
     [HttpGet("{id:long}")]
     [Authorize(Policy = PermissionCatalog.AttemptReadOwn)]

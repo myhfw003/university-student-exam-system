@@ -32,3 +32,9 @@ public sealed record FocusEventRequest(
     string Type,
     long? QuestionId = null,
     DateTimeOffset? ClientAt = null);
+
+/// <summary>监考处置。</summary>
+public sealed record CreateProctorActionRequest(
+    string ActionType,
+    string? Message,
+    string? Reason);
