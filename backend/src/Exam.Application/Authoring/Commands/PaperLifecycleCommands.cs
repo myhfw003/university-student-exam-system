@@ -27,6 +27,7 @@ public sealed class PublishPaperHandler : IRequestHandler<PublishPaperCommand, P
 {
     private readonly IPaperRepository _papers;
     private readonly IQuestionRepository _questions;
+    private readonly IPaperSnapshotRepository _snapshots;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAuditRecorder _audit;
     private readonly IClock _clock;
@@ -35,6 +36,7 @@ public sealed class PublishPaperHandler : IRequestHandler<PublishPaperCommand, P
     public PublishPaperHandler(
         IPaperRepository papers,
         IQuestionRepository questions,
+        IPaperSnapshotRepository snapshots,
         IUnitOfWork unitOfWork,
         IAuditRecorder audit,
         IClock clock,
@@ -42,6 +44,7 @@ public sealed class PublishPaperHandler : IRequestHandler<PublishPaperCommand, P
     {
         _papers = papers;
         _questions = questions;
+        _snapshots = snapshots;
         _unitOfWork = unitOfWork;
         _audit = audit;
         _clock = clock;
@@ -85,8 +88,17 @@ public sealed class PublishPaperHandler : IRequestHandler<PublishPaperCommand, P
                 items);
         }
 
+        // 发布即冻结内容：生成一个新的快照版本，之后改题不会影响已发布的卷面。
         var now = _clock.UtcNow;
-        paper.Publish(paper.PublishedSnapshotId, now, _currentUser.UserId);
+        var latest = await _snapshots.GetLatestAsync(paper.Id, cancellationToken);
+        var version = (latest?.SnapshotVersion ?? 0) + 1;
+        var snapshot = PaperSnapshot.Create(paper, questions, version, now, _currentUser.UserId);
+        await _snapshots.AddAsync(snapshot, cancellationToken);
+
+        // 先落库拿到快照主键，试卷才能绑定已发布快照。
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        paper.Publish(snapshot.Id, now, _currentUser.UserId);
         _papers.Update(paper);
 
         await _audit.RecordAsync(
@@ -96,6 +108,9 @@ public sealed class PublishPaperHandler : IRequestHandler<PublishPaperCommand, P
             new Dictionary<string, object?>
             {
                 ["name"] = paper.Name,
+                ["snapshotId"] = snapshot.Id,
+                ["snapshotVersion"] = snapshot.SnapshotVersion,
+                ["contentHash"] = snapshot.ContentHash,
                 ["warningOverrideReason"] = request.WarningOverrideReason,
             },
             cancellationToken);

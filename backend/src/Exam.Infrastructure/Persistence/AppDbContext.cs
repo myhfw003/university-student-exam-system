@@ -69,6 +69,10 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
 
     public DbSet<PaperTag> PaperTags => Set<PaperTag>();
 
+    public DbSet<PaperSnapshot> PaperSnapshots => Set<PaperSnapshot>();
+
+    public DbSet<SnapshotItem> SnapshotItems => Set<SnapshotItem>();
+
     public DbSet<QuestionBankItem> QuestionBankItems => Set<QuestionBankItem>();
 
     /// <summary>工作单元提交。EF Core 的单次 SaveChanges 本身即一个事务。</summary>

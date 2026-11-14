@@ -181,6 +181,29 @@ public sealed class PapersController : ControllerBase
     public async Task<PaperDetailDto> Unpublish(long id, CancellationToken cancellationToken) =>
         await _mediator.Send(new UnpublishPaperCommand(id), cancellationToken);
 
+    /// <summary>列出试卷的全部快照版本（新版本在前）。</summary>
+    [HttpGet("{id:long}/snapshots")]
+    [Authorize(Policy = PermissionCatalog.PaperRead)]
+    [ProducesResponseType(typeof(PaperSnapshotListResponse), StatusCodes.Status200OK)]
+    public async Task<PaperSnapshotListResponse> ListSnapshots(long id, CancellationToken cancellationToken) =>
+        await _mediator.Send(new ListPaperSnapshotsQuery(id), cancellationToken);
+
+    /// <summary>取回最新快照版本。</summary>
+    [HttpGet("{id:long}/snapshots/latest")]
+    [Authorize(Policy = PermissionCatalog.PaperRead)]
+    [ProducesResponseType(typeof(PaperSnapshotDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<PaperSnapshotDetailDto> GetLatestSnapshot(long id, CancellationToken cancellationToken) =>
+        await _mediator.Send(new GetPaperSnapshotQuery(id, null), cancellationToken);
+
+    /// <summary>取回指定版本的快照。</summary>
+    [HttpGet("{id:long}/snapshots/{version:int}")]
+    [Authorize(Policy = PermissionCatalog.PaperRead)]
+    [ProducesResponseType(typeof(PaperSnapshotDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<PaperSnapshotDetailDto> GetSnapshot(long id, int version, CancellationToken cancellationToken) =>
+        await _mediator.Send(new GetPaperSnapshotQuery(id, version), cancellationToken);
+
     /// <summary>归档 / 下架。</summary>
     [HttpPost("{id:long}/archive")]
     [Authorize(Policy = PermissionCatalog.PaperPublish)]

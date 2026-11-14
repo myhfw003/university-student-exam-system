@@ -326,6 +326,65 @@ namespace Exam.Infrastructure.Persistence.Migrations
                     b.ToTable("paper_section", "authoring");
                 });
 
+            modelBuilder.Entity("Exam.Domain.Authoring.PaperSnapshot", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("content_hash");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<long>("PaperId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("paper_id");
+
+                    b.Property<int>("SnapshotVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long?>("UpdatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_paper_snapshot");
+
+                    b.HasIndex("PaperId", "SnapshotVersion")
+                        .IsUnique()
+                        .HasDatabaseName("uq_snapshot_paper_version");
+
+                    b.ToTable("paper_snapshot", "authoring");
+                });
+
             modelBuilder.Entity("Exam.Domain.Authoring.PaperTag", b =>
                 {
                     b.Property<long>("Id")
@@ -358,6 +417,103 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("uq_paper_tag");
 
                     b.ToTable("paper_tag", "authoring");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Authoring.SnapshotItem", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Analysis")
+                        .HasColumnType("text")
+                        .HasColumnName("analysis");
+
+                    b.Property<string>("Attachments")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("attachments");
+
+                    b.PrimitiveCollection<string[]>("CorrectKeys")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("correct_keys");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Keypoints")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("keypoints");
+
+                    b.Property<string>("Options")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("options");
+
+                    b.Property<string>("QuestionCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("question_code");
+
+                    b.Property<long>("QuestionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("question_id");
+
+                    b.Property<string>("QuestionType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("question_type");
+
+                    b.Property<string>("ReferenceAnswer")
+                        .HasColumnType("text")
+                        .HasColumnName("reference_answer");
+
+                    b.Property<decimal>("Score")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("score");
+
+                    b.Property<string>("SectionTitle")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("section_title");
+
+                    b.Property<long>("SnapshotId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("snapshot_id");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<string>("Stem")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("stem");
+
+                    b.Property<string>("Steps")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("steps");
+
+                    b.HasKey("Id")
+                        .HasName("pk_snapshot_item");
+
+                    b.HasIndex("SnapshotId", "SortOrder")
+                        .HasDatabaseName("ix_snapshot_item_snapshot");
+
+                    b.ToTable("snapshot_item", "authoring", t =>
+                        {
+                            t.HasCheckConstraint("ck_snapshot_item_score", "score >= 0 AND score <= 40");
+                        });
                 });
 
             modelBuilder.Entity("Exam.Domain.Catalog.ImportBatch", b =>
@@ -1487,6 +1643,16 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_paper_section_paper_paper_id");
                 });
 
+            modelBuilder.Entity("Exam.Domain.Authoring.PaperSnapshot", b =>
+                {
+                    b.HasOne("Exam.Domain.Authoring.Paper", null)
+                        .WithMany()
+                        .HasForeignKey("PaperId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_paper_snapshot_paper_paper_id");
+                });
+
             modelBuilder.Entity("Exam.Domain.Authoring.PaperTag", b =>
                 {
                     b.HasOne("Exam.Domain.Authoring.Paper", null)
@@ -1495,6 +1661,16 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_paper_tag_paper_paper_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Authoring.SnapshotItem", b =>
+                {
+                    b.HasOne("Exam.Domain.Authoring.PaperSnapshot", null)
+                        .WithMany("Items")
+                        .HasForeignKey("SnapshotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_snapshot_item_paper_snapshot_snapshot_id");
                 });
 
             modelBuilder.Entity("Exam.Domain.Catalog.ImportRow", b =>
@@ -1583,6 +1759,11 @@ namespace Exam.Infrastructure.Persistence.Migrations
                     b.Navigation("Sections");
 
                     b.Navigation("Tags");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Authoring.PaperSnapshot", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("Exam.Domain.Catalog.ImportBatch", b =>

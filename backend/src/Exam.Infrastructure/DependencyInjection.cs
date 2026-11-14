@@ -58,6 +58,7 @@ public static class DependencyInjection
         services.AddScoped<IQuestionBankRepository, QuestionBankRepository>();
         services.AddScoped<IImportBatchRepository, ImportBatchRepository>();
         services.AddScoped<IPaperRepository, PaperRepository>();
+        services.AddScoped<IPaperSnapshotRepository, PaperSnapshotRepository>();
         services.AddSingleton<IQuestionFileParser, QuestionFileParser>();
         services.AddScoped<IUserPermissionService, UserPermissionService>();
         services.AddScoped<Exam.Application.Identity.Services.UserOrganizationResolver, Exam.Application.Identity.Services.UserOrganizationResolver>();
