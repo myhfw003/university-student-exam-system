@@ -1,4 +1,5 @@
 using Exam.Domain.SharedKernel.Entities;
+using Exam.Domain.SharedKernel.Exceptions;
 
 namespace Exam.Domain.Identity;
 
@@ -43,4 +44,42 @@ public sealed class Role : AuditableEntity
         long? actorId = null,
         string? description = null) =>
         new(code, name, description, isSystem: true, now, actorId);
+
+    /// <summary>新建自定义角色。系统内置角色不可通过该入口创建。</summary>
+    public static Role Create(
+        string code,
+        string name,
+        DateTimeOffset now,
+        long? actorId = null,
+        string? description = null)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            throw new BusinessRuleException("角色编码不能为空。");
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new BusinessRuleException("角色名称不能为空。");
+        }
+
+        return new Role(code.Trim(), name.Trim(), description, isSystem: false, now, actorId);
+    }
+
+    public void Rename(string name, DateTimeOffset now, long? actorId = null)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new BusinessRuleException("角色名称不能为空。");
+        }
+
+        Name = name.Trim();
+        Touch(now, actorId);
+    }
+
+    public void ChangeDescription(string? description, DateTimeOffset now, long? actorId = null)
+    {
+        Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+        Touch(now, actorId);
+    }
 }

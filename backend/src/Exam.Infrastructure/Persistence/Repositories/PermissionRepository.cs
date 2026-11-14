@@ -11,8 +11,6 @@ public sealed class PermissionRepository : IPermissionRepository
 
     public PermissionRepository(AppDbContext db) => _db = db;
 
-    public IQueryable<Permission> Query() => _db.Permissions.AsNoTracking();
-
     public Task<Permission?> GetByCodeAsync(string code, CancellationToken cancellationToken = default) =>
         _db.Permissions.FirstOrDefaultAsync(x => x.Code == code, cancellationToken);
 
@@ -31,4 +29,27 @@ public sealed class PermissionRepository : IPermissionRepository
             .Select(p => p.Code)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<Permission>> GetByCodesAsync(
+        IReadOnlyCollection<string> codes,
+        CancellationToken cancellationToken = default)
+    {
+        if (codes.Count == 0)
+        {
+            return [];
+        }
+
+        var codeList = codes.ToList();
+        return await _db.Permissions
+            .AsNoTracking()
+            .Where(p => codeList.Contains(p.Code))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Permission>> ListAsync(CancellationToken cancellationToken = default) =>
+        await _db.Permissions
+            .AsNoTracking()
+            .OrderBy(p => p.Module)
+            .ThenBy(p => p.Code)
+            .ToListAsync(cancellationToken);
 }

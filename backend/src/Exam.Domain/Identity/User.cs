@@ -198,6 +198,19 @@ public sealed class User : AuditableEntity
         Touch(now, actorId);
     }
 
+    /// <summary>一次性更新姓名、邮箱与手机号。</summary>
+    public void ChangeProfile(
+        string displayName,
+        string? email,
+        string? phone,
+        DateTimeOffset now,
+        long? actorId = null)
+    {
+        ChangeDisplayName(displayName, now, actorId);
+        ChangeEmail(email, now, actorId);
+        ChangePhone(phone, now, actorId);
+    }
+
     public void ChangeEmail(string? email, DateTimeOffset now, long? actorId = null)
     {
         Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim();
@@ -207,6 +220,13 @@ public sealed class User : AuditableEntity
     public void ChangePhone(string? phone, DateTimeOffset now, long? actorId = null)
     {
         Phone = string.IsNullOrWhiteSpace(phone) ? null : phone.Trim();
+        Touch(now, actorId);
+    }
+
+    /// <summary>标记为「下次登录必须修改密码」。用于发放随机初始密码的场景。</summary>
+    public void MarkMustChangePassword(DateTimeOffset now, long? actorId = null)
+    {
+        MustChangePassword = true;
         Touch(now, actorId);
     }
 

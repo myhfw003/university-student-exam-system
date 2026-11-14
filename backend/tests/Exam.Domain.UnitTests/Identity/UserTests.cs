@@ -17,6 +17,8 @@ internal sealed class FakePasswordVerifier : IPasswordVerifier
         passwordHash == $"fake:{password}"
             ? PasswordVerificationResult.Success
             : PasswordVerificationResult.Failed;
+    public string GenerateInitialPassword() => "InitPassw0rd";
+
 }
 
 public sealed class UserTests
@@ -157,6 +159,39 @@ public sealed class UserTests
 
         user.Status.ShouldBe(UserStatus.Disabled);
         user.DomainEvents.ShouldContain(e => e is UserDisabled);
+    }
+
+    [Fact]
+    public void MarkMustChangePassword_标记下次登录必须改密()
+    {
+        var user = NewUser();
+
+        user.MarkMustChangePassword(Now);
+
+        user.MustChangePassword.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void ChangeProfile_一次性更新姓名邮箱与手机号()
+    {
+        var user = NewUser();
+
+        user.ChangeProfile("李四", "lisi@example.edu", "13800000000", Now);
+
+        user.DisplayName.ShouldBe("李四");
+        user.Email.ShouldBe("lisi@example.edu");
+        user.Phone.ShouldBe("13800000000");
+    }
+
+    [Fact]
+    public void ChangeProfile_空邮箱存为null()
+    {
+        var user = NewUser();
+
+        user.ChangeProfile("李四", "  ", null, Now);
+
+        user.Email.ShouldBeNull();
+        user.Phone.ShouldBeNull();
     }
 
     [Fact]

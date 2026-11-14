@@ -13,23 +13,37 @@ public sealed class PermissionRequirement : IAuthorizationRequirement
     public string PermissionCode { get; }
 }
 
-/// <summary>按权限点校验当前用户。权限码来自访问令牌的 <c>perm</c> 声明。</summary>
+/// <summary>
+/// 按权限点校验当前用户。
+/// <para>
+/// 权限取自实时权限集而不是令牌里的声明——角色调整后必须在下一次请求即生效。
+/// </para>
+/// </summary>
 public sealed class PermissionAuthorizationHandler : AuthorizationHandler<PermissionRequirement>
 {
     private readonly ICurrentUser _currentUser;
+    private readonly IPermissionProvider _permissions;
 
-    public PermissionAuthorizationHandler(ICurrentUser currentUser) => _currentUser = currentUser;
+    public PermissionAuthorizationHandler(ICurrentUser currentUser, IPermissionProvider permissions)
+    {
+        _currentUser = currentUser;
+        _permissions = permissions;
+    }
 
-    protected override Task HandleRequirementAsync(
+    protected override async Task HandleRequirementAsync(
         AuthorizationHandlerContext context,
         PermissionRequirement requirement)
     {
-        if (_currentUser.HasPermission(requirement.PermissionCode))
+        if (_currentUser.UserId is not { } userId)
+        {
+            return;
+        }
+
+        var granted = await _permissions.GetPermissionsAsync(userId);
+        if (granted.Contains(requirement.PermissionCode))
         {
             context.Succeed(requirement);
         }
-
-        return Task.CompletedTask;
     }
 }
 

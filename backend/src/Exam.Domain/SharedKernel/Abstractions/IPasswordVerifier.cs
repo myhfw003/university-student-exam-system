@@ -6,6 +6,9 @@ public interface IPasswordVerifier
     string Hash(string password);
 
     PasswordVerificationResult Verify(string password, string passwordHash);
+
+    /// <summary>生成满足强度要求的随机初始密码。管理员发放给用户时使用。</summary>
+    string GenerateInitialPassword();
 }
 
 public enum PasswordVerificationResult

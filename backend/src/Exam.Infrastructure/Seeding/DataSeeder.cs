@@ -157,7 +157,7 @@ public sealed class DataSeeder
         {
             if (string.IsNullOrWhiteSpace(effectivePassword))
             {
-                effectivePassword = Pbkdf2PasswordVerifier.GenerateInitialPassword() + "aA1";
+                effectivePassword = Pbkdf2PasswordVerifier.GenerateRandomPassword() + "aA1";
             }
 
             admin = User.Register(adminUsername, "系统管理员", _passwordVerifier.Hash(effectivePassword), now);

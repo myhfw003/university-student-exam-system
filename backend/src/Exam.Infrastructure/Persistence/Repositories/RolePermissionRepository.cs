@@ -11,8 +11,6 @@ public sealed class RolePermissionRepository : IRolePermissionRepository
 
     public RolePermissionRepository(AppDbContext db) => _db = db;
 
-    public IQueryable<RolePermission> Query() => _db.RolePermissions.AsNoTracking();
-
     public async Task AddAsync(RolePermission rolePermission, CancellationToken cancellationToken = default) =>
         await _db.RolePermissions.AddAsync(rolePermission, cancellationToken);
 
@@ -33,4 +31,11 @@ public sealed class RolePermissionRepository : IRolePermissionRepository
             .Select(x => x.PermissionId)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<RolePermission>> GetByRoleAsync(
+        long roleId,
+        CancellationToken cancellationToken = default) =>
+        await _db.RolePermissions
+            .Where(x => x.RoleId == roleId)
+            .ToListAsync(cancellationToken);
 }

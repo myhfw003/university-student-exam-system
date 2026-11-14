@@ -1,3 +1,5 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Exam.Application;
 using Exam.Application.Common.Interfaces;
@@ -88,6 +90,22 @@ builder.Services
                 if (await blacklist.IsRevokedAsync(jti, context.HttpContext.RequestAborted))
                 {
                     context.Fail("访问令牌已被吊销。");
+                    return;
+                }
+
+                // 账号被禁用时，其已签发的访问令牌立即失效，不必等令牌自然过期。
+                var subject = context.Principal?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+                    ?? context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var issuedAt = context.Principal?.FindFirst(JwtRegisteredClaimNames.Iat)?.Value;
+
+                if (long.TryParse(subject, out var userId)
+                    && long.TryParse(issuedAt, out var issuedAtUnixSeconds))
+                {
+                    var issuedAtUtc = DateTimeOffset.FromUnixTimeSeconds(issuedAtUnixSeconds);
+                    if (await blacklist.IsUserRevokedAsync(userId, issuedAtUtc, context.HttpContext.RequestAborted))
+                    {
+                        context.Fail("账号已被禁用。");
+                    }
                 }
             },
         };

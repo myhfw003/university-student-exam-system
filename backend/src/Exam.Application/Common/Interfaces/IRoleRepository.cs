@@ -7,6 +7,13 @@ public interface IRoleRepository : IReadRepository<Role>
     Task<Role?> GetByIdAsync(long id, CancellationToken cancellationToken = default);
 
     Task<Role?> GetByCodeAsync(string code, CancellationToken cancellationToken = default);
+
+    Task AddAsync(Role role, CancellationToken cancellationToken = default);
+
+    void Update(Role role);
+
+    /// <summary>列出全部角色，按编码排序。</summary>
+    Task<IReadOnlyList<Role>> ListAsync(CancellationToken cancellationToken = default);
 }
 
 public interface IPermissionRepository : IReadRepository<Permission>
@@ -17,26 +24,12 @@ public interface IPermissionRepository : IReadRepository<Permission>
     Task<IReadOnlyList<string>> GetCodesAsync(
         IReadOnlyCollection<long> permissionIds,
         CancellationToken cancellationToken = default);
-}
 
-public interface IUserRoleRepository : IReadRepository<UserRole>
-{
-    Task AddAsync(UserRole userRole, CancellationToken cancellationToken = default);
+    /// <summary>列出全部权限点，按模块与编码排序。</summary>
+    Task<IReadOnlyList<Permission>> ListAsync(CancellationToken cancellationToken = default);
 
-    void Remove(UserRole userRole);
-
-    /// <summary>取回用户拥有的角色 ID 集合。</summary>
-    Task<IReadOnlyList<long>> GetRoleIdsAsync(long userId, CancellationToken cancellationToken = default);
-}
-
-public interface IRolePermissionRepository : IReadRepository<RolePermission>
-{
-    Task AddAsync(RolePermission rolePermission, CancellationToken cancellationToken = default);
-
-    void Remove(RolePermission rolePermission);
-
-    /// <summary>取回一组角色对应的权限 ID 集合。</summary>
-    Task<IReadOnlyList<long>> GetPermissionIdsAsync(
-        IReadOnlyCollection<long> roleIds,
+    /// <summary>按权限码集合取回权限点。</summary>
+    Task<IReadOnlyList<Permission>> GetByCodesAsync(
+        IReadOnlyCollection<string> codes,
         CancellationToken cancellationToken = default);
 }

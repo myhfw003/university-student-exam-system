@@ -57,7 +57,9 @@ public static class DependencyInjection
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IPasswordVerifier, Pbkdf2PasswordVerifier>();
         services.AddSingleton<ITokenService, JwtTokenService>();
+        services.AddSingleton<RedisCacheNamespace>();
         services.AddSingleton<ITokenBlacklist, HybridTokenBlacklist>();
+        services.AddSingleton<IPermissionProvider, CachedPermissionProvider>();
 
         services.AddSingleton(sp =>
         {

@@ -79,7 +79,10 @@ public sealed class Pbkdf2PasswordVerifier : IPasswordVerifier
     }
 
     /// <summary>生成一次性随机初始密码，用于批量导入用户。</summary>
-    public static string GenerateInitialPassword()
+    public string GenerateInitialPassword() => GenerateRandomPassword();
+
+    /// <summary>生成随机初始密码。长度 16 位，字符集去掉了易混淆字符。</summary>
+    public static string GenerateRandomPassword()
     {
         const string alphabet = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
         var bytes = RandomNumberGenerator.GetBytes(16);
