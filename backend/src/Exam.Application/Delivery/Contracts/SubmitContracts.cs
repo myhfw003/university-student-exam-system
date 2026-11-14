@@ -8,9 +8,9 @@ public sealed record SubmitAttemptResponse(
     DateTimeOffset? SubmittedAt,
     string SubmitReason,
     string SubmitReasonLabel,
-    decimal? ObjectiveScore,
-    decimal? ObjectiveMax,
+    decimal ObjectiveScore,
+    decimal ObjectiveMax,
     bool SubjectivePending,
-    decimal? TotalScore,
-    decimal? TotalMax,
+    decimal TotalScore,
+    decimal TotalMax,
     string GradeVisibility);

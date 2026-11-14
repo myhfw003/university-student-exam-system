@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using Exam.Domain.Authoring;
 using Exam.Domain.Delivery;
+using Exam.Domain.Grading;
 using Exam.Domain.Catalog;
 using Exam.Domain.Identity;
 using Exam.Domain.SharedKernel.Abstractions;
@@ -28,6 +29,9 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
 
     /// <summary>追加式流水所在 Schema。应用账号只有 SELECT / INSERT 权限。</summary>
     public const string AppSchema = "app";
+
+    /// <summary>评分与阅卷上下文所在 Schema。</summary>
+    public const string GradingSchema = "grading";
 
     public AppDbContext(DbContextOptions<AppDbContext> options)
         : base(options) { }
@@ -93,6 +97,8 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
     public DbSet<FocusEvent> FocusEvents => Set<FocusEvent>();
 
     public DbSet<ProctorAction> ProctorActions => Set<ProctorAction>();
+
+    public DbSet<ScoreResult> ScoreResults => Set<ScoreResult>();
 
     public DbSet<QuestionBankItem> QuestionBankItems => Set<QuestionBankItem>();
 

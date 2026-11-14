@@ -128,6 +128,14 @@ public sealed class AttemptsController : ControllerBase
     public async Task<ProctorActionListResponse> ListProctorActions(long id, CancellationToken cancellationToken) =>
         await _mediator.Send(new ListProctorActionsQuery(id), cancellationToken);
 
+    /// <summary>取回一次作答的成绩（含逐题明细）。</summary>
+    [HttpGet("{id:long}/scores")]
+    [Authorize(Policy = PermissionCatalog.AttemptReadOwn)]
+    [ProducesResponseType(typeof(AttemptScoreSummaryDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<AttemptScoreSummaryDto> GetScores(long id, CancellationToken cancellationToken) =>
+        await _mediator.Send(new GetAttemptScoresQuery(id), cancellationToken);
+
     /// <summary>恢复作答状态。</summary>
     [HttpGet("{id:long}")]
     [Authorize(Policy = PermissionCatalog.AttemptReadOwn)]

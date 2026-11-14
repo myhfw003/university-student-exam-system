@@ -1965,6 +1965,108 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Exam.Domain.Grading.ScoreResult", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("AttemptId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("attempt_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Detail")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("detail");
+
+                    b.Property<decimal>("MaxScore")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("max_score");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("method");
+
+                    b.Property<long?>("PaperItemId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("paper_item_id");
+
+                    b.Property<long>("QuestionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("question_id");
+
+                    b.Property<decimal>("Score")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("score");
+
+                    b.Property<DateTimeOffset?>("ScoredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("scored_at");
+
+                    b.Property<long?>("ScoredBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("scored_by");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long?>("UpdatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_score_result");
+
+                    b.HasIndex("AttemptId")
+                        .HasDatabaseName("ix_score_result_attempt");
+
+                    b.HasIndex("AttemptId", "QuestionId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_score_result_attempt_question");
+
+                    b.ToTable("score_result", "grading", t =>
+                        {
+                            t.HasCheckConstraint("ck_score_result_method", "method IN ('auto_scored','auto_suggested','manual_scored')");
+
+                            t.HasCheckConstraint("ck_score_result_score", "score >= 0 AND max_score >= 0");
+
+                            t.HasCheckConstraint("ck_score_result_status", "status IN ('pending','auto_scored','suggested','final')");
+                        });
+                });
+
             modelBuilder.Entity("Exam.Domain.Identity.Permission", b =>
                 {
                     b.Property<long>("Id")
@@ -2558,6 +2660,16 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_proctor_action_exam_session_exam_session_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Grading.ScoreResult", b =>
+                {
+                    b.HasOne("Exam.Domain.Delivery.Attempt", null)
+                        .WithMany()
+                        .HasForeignKey("AttemptId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_score_result_attempt_attempt_id");
                 });
 
             modelBuilder.Entity("Exam.Domain.Authoring.Paper", b =>

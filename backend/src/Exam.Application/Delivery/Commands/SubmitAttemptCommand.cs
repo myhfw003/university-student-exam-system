@@ -3,6 +3,7 @@ using Exam.Application.Common.Exceptions;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
 using Exam.Application.Delivery.Contracts;
+using Exam.Application.Delivery.Services;
 using Exam.Domain.Delivery;
 using Exam.Domain.Identity;
 using Exam.Domain.SharedKernel.Abstractions;
@@ -23,8 +24,12 @@ public sealed record SubmitAttemptCommand(long AttemptId, string? Reason)
 public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand, SubmitAttemptResponse>
 {
     private readonly IAttemptRepository _attempts;
+    private readonly IAnswerRepository _answers;
+    private readonly IScoreResultRepository _scoreResults;
     private readonly IExamParticipantRepository _participants;
     private readonly IExamSessionRepository _sessions;
+    private readonly IPaperRepository _papers;
+    private readonly AttemptScoringService _scoring;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAuditRecorder _audit;
     private readonly IClock _clock;
@@ -32,16 +37,24 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
 
     public SubmitAttemptHandler(
         IAttemptRepository attempts,
+        IAnswerRepository answers,
+        IScoreResultRepository scoreResults,
         IExamParticipantRepository participants,
         IExamSessionRepository sessions,
+        IPaperRepository papers,
+        AttemptScoringService scoring,
         IUnitOfWork unitOfWork,
         IAuditRecorder audit,
         IClock clock,
         ICurrentUser currentUser)
     {
         _attempts = attempts;
+        _answers = answers;
+        _scoreResults = scoreResults;
         _participants = participants;
         _sessions = sessions;
+        _papers = papers;
+        _scoring = scoring;
         _unitOfWork = unitOfWork;
         _audit = audit;
         _clock = clock;
@@ -69,7 +82,7 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
         // 幂等：已交卷直接返回同一个结果，不再推进状态。
         if (attempt.IsSubmitted)
         {
-            return BuildResponse(attempt);
+            return await BuildResponseAsync(attempt, cancellationToken);
         }
 
         // 交卷原因由服务端判定：超时就是 time_up，客户端说什么不算数。
@@ -77,6 +90,17 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
 
         attempt.Submit(reason, now);
         _attempts.Update(attempt);
+
+        // 交卷事务内完成判分：客观题直接定分，主观题给建议分。
+        var paper = await _papers.GetByIdAsync(session.PaperId, cancellationToken);
+        var scoreResults = await _scoring.ScoreAsync(
+            attempt,
+            session,
+            paper?.Items.ToList(),
+            now,
+            cancellationToken);
+
+        await _scoreResults.AddRangeAsync(scoreResults, cancellationToken);
 
         if (attempt.ExamSessionId is { } sessionId)
         {
@@ -102,20 +126,35 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return BuildResponse(attempt);
+        return BuildResponse(attempt, scoreResults);
     }
 
-    private static SubmitAttemptResponse BuildResponse(Attempt attempt) => new(
-        attempt.Id,
-        attempt.Status.ToStorage(),
-        attempt.Status.Label(),
-        attempt.SubmittedAt,
-        attempt.SubmitReason?.ToStorage() ?? "manual",
-        attempt.SubmitReason?.Label() ?? "主动交卷",
-        null,
-        null,
-        false,
-        null,
-        null,
-        "pending_review");
+    private async Task<SubmitAttemptResponse> BuildResponseAsync(
+        Attempt attempt,
+        CancellationToken cancellationToken)
+    {
+        var results = await _scoreResults.ListByAttemptAsync(attempt.Id, cancellationToken);
+        return BuildResponse(attempt, results);
+    }
+
+    private static SubmitAttemptResponse BuildResponse(
+        Attempt attempt,
+        IReadOnlyList<Domain.Grading.ScoreResult> results)
+    {
+        var summary = AttemptScoreSummaryFactory.Build(results);
+
+        return new SubmitAttemptResponse(
+            attempt.Id,
+            attempt.Status.ToStorage(),
+            attempt.Status.Label(),
+            attempt.SubmittedAt,
+            attempt.SubmitReason?.ToStorage() ?? "manual",
+            attempt.SubmitReason?.Label() ?? "主动交卷",
+            summary.ObjectiveScore,
+            summary.ObjectiveMax,
+            summary.SubjectivePending,
+            summary.TotalScore,
+            summary.TotalMax,
+            summary.GradeVisibility);
+    }
 }
