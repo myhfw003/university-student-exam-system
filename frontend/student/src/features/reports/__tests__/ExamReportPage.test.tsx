@@ -92,6 +92,29 @@ describe("ExamReportPage · 单场成绩报告", () => {
     expect(screen.getByText("逐题明细")).toBeInTheDocument();
   });
 
+  it("副标题带答题者姓名与学号", () => {
+    // 原型 student.js:1390：{批次} · 卷型：{label}（{short}） · {姓名} {学号}
+    const examId = "exam-net-mid";
+    saveAttempt({
+      examId,
+      studentId: STUDENT,
+      submittedAt: "2026-11-09 10:24",
+      responses: perfectResponses(examId, STUDENT),
+      score: 92,
+      total: 100,
+      pendingSubjective: true,
+      variantLabel: "0101 号卷",
+      attemptNo: 1,
+      attempts: 1,
+    });
+
+    renderReport(examId);
+
+    const name =
+      useCatalog.getState().students.find((s) => s.id === STUDENT)?.name ?? STUDENT;
+    expect(screen.getByText(new RegExp(`${name} ${STUDENT}`))).toBeInTheDocument();
+  });
+
   it("无作答记录但有历史成绩时展示试卷回顾", () => {
     // 种子成绩：高等数学期末考试 76 分。
     renderReport("exam-math-final");

@@ -77,6 +77,13 @@ jobs:
         # 不用 vite preview —— 它的 SPA 回退会把 /admin/assets/*.js 也回退成
         # index.html，产物路径根本测不到。
         run: node scripts/smoke-render.mjs --serve-dist --require-browser
+      - name: 端到端测试（Playwright，跑生产产物）
+        # docs/design/06-frontend.md §12 的三条流程：
+        #   ① 登录 → 进入练习 → 作答 → 提交 → 看解析
+        #   ② 组卷 → 阅卷 → 发布成绩 → 学生看到成绩（后端就绪后打开）
+        #   ③ 考试中切屏 → 被强制交卷（后端就绪后打开）
+        # 跑的是 dist 产物，用与 nginx 布局一致的静态服务器托管。
+        run: pnpm e2e
       - name: 依赖漏洞扫描（生产依赖，作为门禁）
         # 只有 production 依赖会进入交付产物，开发工具链（ESLint / Vitest 等）的
         # 传递依赖不进产物，单独列出仅作可见性参考。

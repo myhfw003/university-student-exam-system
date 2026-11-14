@@ -98,7 +98,9 @@ const routes = [
           { path: "/papers/:paperId", element: lazyPage(PaperWizardPage) },
           { path: "/exam-sessions", element: lazyPage(ExamSessionListPage) },
           { path: "/exam-sessions/:id", element: lazyPage(ExamSessionDetailPage) },
-          { path: "/monitoring/:sessionId", element: lazyPage(ProctoringPage) },
+          // 场次 ID 可选：不带场次进「实时监考」时先让管理员挑一个场次
+          // （侧栏「实时监考」指向的就是这个路由）。
+          { path: "/monitoring/:sessionId?", element: lazyPage(ProctoringPage) },
           { path: "/review", element: lazyPage(ReviewCenterPage) },
           { path: "/analytics", element: lazyPage(AnalyticsPage) },
           { path: "/users", element: lazyPage(UsersPage) },

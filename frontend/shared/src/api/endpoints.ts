@@ -12,6 +12,7 @@ export const ENDPOINTS = {
     refresh: `${BASE}/auth/refresh`,
     logout: `${BASE}/auth/logout`,
     me: `${BASE}/auth/me`,
+    changePassword: `${BASE}/auth/change-password`,
   },
   system: {
     time: `${BASE}/system/time`,
@@ -34,6 +35,7 @@ export const ENDPOINTS = {
   },
   admin: {
     users: `${BASE}/admin/users`,
+    resetPassword: (id: string) => `${BASE}/admin/users/${id}/reset-password`,
     roles: `${BASE}/admin/roles`,
     auditLogs: `${BASE}/admin/audit-logs`,
     analytics: `${BASE}/admin/analytics`,

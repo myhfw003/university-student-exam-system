@@ -42,6 +42,26 @@ describe("practiceSessionStore · 练习会话状态机", () => {
     expect(state.result?.total).toBe(5);
   });
 
+  it("归档快照带上判分结果，刷新后能还原结果视图", () => {
+    usePracticeSessionStore.getState().init({
+      practiceId: "prac-x",
+      studentId: "s",
+      qids: ["q-1"],
+    });
+    usePracticeSessionStore.getState().markSubmitted({
+      objective: { score: 5, max: 5 },
+      subjective: { score: 0, max: 0, pending: 0 },
+      total: 5,
+      totalMax: 5,
+      details: [],
+    });
+
+    // 快照是持久化的载体：结果必须在里面，否则刷新后只剩一张空白练习卷。
+    const snapshot = usePracticeSessionStore.getState().sessions["prac-x:s"];
+    expect(snapshot?.submitted).toBe(true);
+    expect(snapshot?.result?.total).toBe(5);
+  });
+
   it("重新练习清空作答但保留已提交次数", () => {
     usePracticeSessionStore.getState().init({
       practiceId: "prac-x",

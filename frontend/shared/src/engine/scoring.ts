@@ -80,7 +80,8 @@ export function normalizeText(text: string | null | undefined): string {
   return String(text ?? "")
     .toLowerCase()
     .replace(/\s+/g, "")
-    .replace(/[，。、；：？！“”‘’（）()【】[\]"'`、.!?;:\-—_/\\|]/g, "");
+    // 字符类与原型 engine.js:290 逐字一致（含 ASCII 逗号）。
+    .replace(/[，。、；：？！“”‘’（）()【】\u005B\u005D"'`,.!?;:\-—_/\\|]/g, "");
 }
 
 /** 要点 / 步骤是否命中作答文本：任一关键词出现即命中。 */
@@ -403,51 +404,71 @@ export function applyTeacherScores(
   attemptNo: number,
 ): GradedWithTeacher {
   const details = graded.details.map((detail) => ({ ...detail }));
-  let subjectiveScore = 0;
-  const pendingQuestions: string[] = [];
 
   for (const detail of details) {
     if (detail.type !== "short" && detail.type !== "comprehensive") continue;
 
     const related = teacherScores.filter(
-      (r) => r.qid === detail.qid && r.attempt === attemptNo && r.status === "reviewed" && r.teacherScore != null,
+      (r) =>
+        r.qid === detail.qid &&
+        r.attempt === attemptNo &&
+        r.status === "reviewed" &&
+        r.teacherScore != null,
     );
 
-    if (detail.type === "short") {
-      const record = related.find((r) => r.stepId === null);
-      if (record) {
-        detail.score = record.teacherScore!;
-        detail.status = detail.score === detail.max ? "correct" : detail.score > 0 ? "partial" : "wrong";
-      } else {
-        detail.status = "pending";
-        pendingQuestions.push(detail.qid);
-      }
-      subjectiveScore += detail.score;
+    // 原型（student.js:1410）：没有阅卷记录时**直接返回**，保留初判状态——
+    // 已作答是「待阅」，未作答是「空白」。空白题不计入待阅。
+    if (related.length === 0) continue;
+
+    const manual = round2(related.reduce((sum, r) => sum + (r.teacherScore ?? 0), 0));
+
+    if (detail.type === "comprehensive" && related.some((r) => r.stepId)) {
+      // 综合题：逐步骤回填；还有步骤未阅卷时整题仍记为待阅。
+      const steps = (detail.steps ?? []).map((step) => {
+        const record = related.find((r) => r.stepId === step.id);
+        if (record) {
+          return { ...step, score: record.teacherScore!, hit: record.teacherScore! > 0 };
+        }
+        return step;
+      });
+      const allReviewed = steps.every((st) => related.some((r) => r.stepId === st.id));
+      const score = round2(steps.reduce((sum, st) => sum + st.score, 0));
+      detail.steps = steps;
+      detail.score = score;
+      detail.status = allReviewed
+        ? score === detail.max
+          ? "correct"
+          : score > 0
+            ? "partial"
+            : "wrong"
+        : "pending";
       continue;
     }
 
-    // 综合题：逐步骤回填。
-    const steps = (detail.steps ?? []).map((step) => {
-      const record = related.find((r) => r.stepId === step.id);
-      if (record) {
-        return { ...step, score: record.teacherScore!, hit: record.teacherScore! > 0 };
-      }
-      return step;
-    });
-    const allReviewed = steps.every((s) =>
-      teacherScores.some((r) => r.qid === detail.qid && r.stepId === s.id && r.attempt === attemptNo && r.status === "reviewed"),
-    );
-    const score = round2(steps.reduce((sum, s) => sum + s.score, 0));
-    detail.steps = steps;
-    detail.score = score;
-    detail.status = allReviewed ? (score === detail.max ? "correct" : score > 0 ? "partial" : "wrong") : "pending";
-    if (!allReviewed) pendingQuestions.push(detail.qid);
-    subjectiveScore += score;
+    // 简答 / 整题给分：按阅卷分定状态。
+    detail.score = manual;
+    detail.status =
+      detail.score >= detail.max ? "correct" : detail.score > 0 ? "partial" : "wrong";
   }
+
+  // 主观分按各题最终分汇总（原型 student.js:1444 同样从 details 汇总）。
+  const subjectiveScore = round2(
+    details.reduce(
+      (sum, d) => (d.type === "short" || d.type === "comprehensive" ? sum + d.score : sum),
+      0,
+    ),
+  );
+
+  // 待阅清单：状态仍为「待阅」的题（原型按状态统计，空白题不算）。
+  const pendingQuestions = details.filter((d) => d.status === "pending").map((d) => d.qid);
 
   return {
     objective: graded.objective,
-    subjective: { score: round2(subjectiveScore), max: graded.subjective.max, pending: pendingQuestions.length },
+    subjective: {
+      score: subjectiveScore,
+      max: graded.subjective.max,
+      pending: pendingQuestions.length,
+    },
     total: round2(graded.objective.score + subjectiveScore),
     totalMax: graded.totalMax,
     details,

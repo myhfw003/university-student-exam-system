@@ -43,12 +43,12 @@ export function ReportListPage() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>项目</th>
-                    <th>日期</th>
-                    <th className="right">得分</th>
-                    <th className="right">得分率</th>
-                    <th>状态</th>
-                    <th className="right">操作</th>
+                    <th scope="col">项目</th>
+                    <th scope="col">日期</th>
+                    <th className="right" scope="col">得分</th>
+                    <th className="right" scope="col">得分率</th>
+                    <th scope="col">状态</th>
+                    <th className="right" scope="col" aria-label="操作" />
                   </tr>
                 </thead>
                 <tbody>
@@ -57,12 +57,9 @@ export function ReportListPage() {
                       record.total > 0 ? (record.score / record.total) * 100 : 0;
                     return (
                       <tr key={`${record.kind}-${record.id}`}>
+                        {/* 原型 student.js:1272：项目列只有名称，没有副行。 */}
                         <td>
                           <div className="strong">{record.name}</div>
-                          <div className="text-xs text-3">
-                            {record.kind === "exam" ? "考试" : "练习"}
-                            {record.variantLabel ? ` · ${record.variantLabel}` : ""}
-                          </div>
                         </td>
                         <td className="text-3">{record.date}</td>
                         <td className="num">

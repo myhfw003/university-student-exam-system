@@ -10,8 +10,10 @@
 
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { AnswerSheet, Button, Empty, RuleList } from "@exam/shared";
+import { AnswerSheet, Button, Empty, RuleList, formatDateTime, toast } from "@exam/shared";
+import { Icon } from "@/app/Icon";
 import { useStudentStore } from "@/stores/studentStore";
+import { useExamSessionStore } from "@/stores/examSessionStore";
 import { ExamBar } from "./ExamBar";
 import { OfflineBadge } from "./OfflineBadge";
 import { QuestionPane } from "./QuestionPane";
@@ -64,7 +66,7 @@ export function ExamSessionPage() {
       <div className="card">
         <Empty
           title="本场考试已交卷"
-          body={`交卷时间 ${new Date().toLocaleString("zh-CN", { hour12: false })}，可前往成绩报告查看详情。${
+          body={`交卷时间 ${formatDateTime(controller.submittedAt)}，可前往成绩报告查看详情。${
             exam?.allowRetake ? "本场考试允许重考，成绩按最高分计入。" : ""
           }`}
           action={
@@ -73,7 +75,21 @@ export function ExamSessionPage() {
                 查看成绩报告
               </Button>
               {exam?.allowRetake ? (
-                <Button onClick={() => navigate(`/exams/${sessionId}`)}>重新作答</Button>
+                <Button
+                  onClick={() => {
+                    // 重考：先清空本次作答与计时，否则重新进入会命中「已交卷」。
+                    useExamSessionStore.getState().resetForRetake({
+                      examId: sessionId,
+                      studentId,
+                      durationMin: exam?.durationMin ?? 0,
+                    });
+                    // 原型 student.js:1836：开启重考后提示「已开启重考，成绩按最高分计入」。
+                    toast.ok("已开启重考，成绩按最高分计入");
+                    navigate(`/exams/${sessionId}`);
+                  }}
+                >
+                  重新作答
+                </Button>
               ) : null}
               <Button onClick={() => navigate("/exams")}>返回考试安排</Button>
             </>
@@ -129,7 +145,6 @@ export function ExamSessionPage() {
   /* ------------------------------------------------------------ 主体 */
 
   const total = paper.items.length;
-  const isMulti = current.question.type === "multi";
   const marked = Boolean(flags[current.qid]);
 
   const cells = paper.items.map((item) => ({
@@ -156,7 +171,7 @@ export function ExamSessionPage() {
           </>
         }
         remainingSec={remainingSec}
-        flagLabel={marked ? "🚩取消标记" : "🚩标记"}
+        flagLabel={marked ? "取消标记" : "标记"}
         onToggleFlag={() => controller.toggleFlag(current.qid)}
         submitLabel="交卷"
         onSubmit={() => setSubmitOpen(true)}
@@ -199,12 +214,11 @@ export function ExamSessionPage() {
                 disabled={controller.current === null || paper.items.indexOf(current) === 0}
                 onClick={() => controller.goto(paper.items.indexOf(current) - 1)}
               >
+                <Icon name="chevronLeft" />
                 上一题
               </button>
               <div className="spacer" />
-              <span className="text-sm text-3">
-                {isMulti ? "按 Ctrl/⌘ 可多选" : "按 选择一项"}
-              </span>
+              <span className="text-sm text-3">答案自动保存</span>
               <button
                 type="button"
                 className="btn"
@@ -212,6 +226,7 @@ export function ExamSessionPage() {
                 onClick={() => controller.goto(paper.items.indexOf(current) + 1)}
               >
                 下一题
+                <Icon name="chevronRight" />
               </button>
             </div>
           </div>

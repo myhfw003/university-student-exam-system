@@ -6,10 +6,12 @@
 
 import type { CSSProperties } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { z } from "zod";
-import { Button, Callout } from "@exam/shared";
+import { Button, Callout, useAuth } from "@exam/shared";
+import { useAdminOps } from "@exam/shared/mock/adminOps";
 
 const loginSchema = z.object({
   account: z.string().min(1, "请输入账号"),
@@ -20,6 +22,11 @@ type LoginValues = z.infer<typeof loginSchema>;
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const signIn = useAuth((state) => state.signIn);
+  const mode = useAuth((state) => state.mode);
+  const users = useAdminOps((state) => state.users);
+  const [formError, setFormError] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -29,10 +36,27 @@ export function LoginPage() {
     defaultValues: { account: "", password: "" },
   });
 
-  const onSubmit = async (_values: LoginValues) => {
-    // 骨架：接入 POST /auth/login 后在此换发令牌并跳转
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    navigate("/overview", { replace: true });
+  const onSubmit = async (values: LoginValues) => {
+    setFormError(null);
+    const account = values.account.trim();
+    const admin = users.find((u) => u.account === account) ?? users.find((u) => u.account === "admin");
+    const demo = admin
+      ? {
+          id: admin.id,
+          account: admin.account,
+          name: admin.name,
+          roles: admin.roles,
+          orgTags: admin.orgTags,
+        }
+      : null;
+
+    const result = await signIn(account, values.password, demo);
+    if (!result.ok) {
+      setFormError(result.message ?? "账号或密码错误");
+      return;
+    }
+    const from = (location.state as { from?: string } | null)?.from;
+    navigate(from ?? "/overview", { replace: true });
   };
 
   return (
@@ -61,9 +85,12 @@ export function LoginPage() {
           </div>
         </div>
         <div className="card-body stack">
-          <Callout tone="info" title="尚未接入后端">
-            当前为前端骨架：表单校验已可用，提交后不会真正登录。
-          </Callout>
+          {mode === "mock" ? (
+            <Callout tone="info" title="演示模式">
+              后端尚未接入：任意账号与密码即可进入演示，登录态与权限守卫照常生效。
+            </Callout>
+          ) : null}
+          {formError ? <Callout tone="danger" title="登录失败">{formError}</Callout> : null}
 
           <form
             className="stack"

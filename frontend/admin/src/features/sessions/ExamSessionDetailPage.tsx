@@ -14,6 +14,7 @@ import {
   PageHead,
   Stat,
   TextInput,
+  downloadCsv,
   toast,
 } from "@exam/shared";
 import {
@@ -34,11 +35,52 @@ export function ExamSessionDetailPage() {
   const navigate = useNavigate();
   const sessions = useAdminOps((state) => state.sessions);
   const students = useCatalog((state) => state.students);
+  const attempts = useCatalog((state) => state.attempts);
+  const records = useCatalog((state) => state.records);
 
   const [maxFocusLoss, setMaxFocusLoss] = useState<number | null>(null);
 
   const session = useMemo(() => sessions.find((s) => s.id === id), [sessions, id]);
   const exam = session ? getExam(session.paperId) : undefined;
+
+  /** 导出单场次成绩 CSV（FR-AUD-03）。 */
+  const handleExportScores = () => {
+    if (!session) return;
+    const rows: Array<Array<string | number>> = [
+      ["学号", "姓名", "名单组", "状态", "得分", "满分", "交卷时间"],
+    ];
+    for (const studentId of session.roster) {
+      const student = students.find((s) => s.id === studentId);
+      const attempt = Object.values(attempts).find(
+        (a) => a.examId === session.paperId && a.studentId === studentId,
+      );
+      const record = records.find(
+        (r) => r.examId === session.paperId && r.studentId === studentId,
+      );
+      const candidate = proctorSnapshot(session.id, 0).find(
+        (c) => c.studentId === studentId,
+      );
+      rows.push([
+        studentId,
+        student?.name ?? studentId,
+        student ? classNameOf(student.classId) : "",
+        candidate?.status === "submitted"
+          ? "已交卷"
+          : candidate?.status === "forced_submitted"
+            ? "已强制交卷"
+            : candidate?.status === "answering"
+              ? "作答中"
+              : candidate?.status === "disconnected"
+                ? "断连中"
+                : "未开始",
+        attempt?.score ?? record?.score ?? "",
+        attempt?.total ?? record?.total ?? "",
+        attempt?.submittedAt ?? record?.date ?? "",
+      ]);
+    }
+    downloadCsv(`场次成绩_${exam?.name ?? session.id}.csv`, rows);
+    toast.ok("场次成绩已导出");
+  };
 
   if (!session) {
     return (
@@ -163,9 +205,11 @@ export function ExamSessionDetailPage() {
               <dd>{session.allowRetake ? "允许重考，成绩取最高分" : "不允许重考"}</dd>
               <dt>名单来源</dt>
               <dd>
-                {session.scope.length === 0
-                  ? "全员开放"
-                  : session.scope.map((cid) => classNameOf(cid)).join("、")}
+                {session.directUserIds && session.directUserIds.length > 0
+                  ? `指定考生（${session.directUserIds.length} 人）`
+                  : session.scope.length === 0
+                    ? "全员开放"
+                    : session.scope.map((cid) => classNameOf(cid)).join("、")}
               </dd>
               <dt>考生须知</dt>
               <dd>{session.note || "—"}</dd>
@@ -279,19 +323,24 @@ export function ExamSessionDetailPage() {
       <section className="card" style={{ marginTop: "var(--sp-4)" }}>
         <div className="card-head">
           <h2 className="card-title">考生名单</h2>
-          <span className="text-sm text-3">{session.roster.length} 人 · 发布时物化</span>
+          <div className="row-tight">
+            <span className="text-sm text-3">{session.roster.length} 人 · 发布时物化</span>
+            <Button size="sm" onClick={handleExportScores}>
+              导出成绩
+            </Button>
+          </div>
         </div>
         <div className="card-body is-flush">
           <div className="table-wrap">
             <table className="table">
               <thead>
                 <tr>
-                  <th>学号</th>
-                  <th>姓名</th>
-                  <th>名单组</th>
-                  <th>状态</th>
-                  <th>切屏</th>
-                  <th>已答题</th>
+                  <th scope="col">学号</th>
+                  <th scope="col">姓名</th>
+                  <th scope="col">名单组</th>
+                  <th scope="col">状态</th>
+                  <th scope="col">切屏</th>
+                  <th scope="col">已答题</th>
                 </tr>
               </thead>
               <tbody>

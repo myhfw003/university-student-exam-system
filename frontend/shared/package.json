@@ -10,7 +10,20 @@
     "./design/primitives.css": "./src/design/primitives.css",
     "./package.json": "./package.json",
     "./domain": "./src/domain/index.ts",
-    "./domain/attempt": "./src/domain/attempt.ts"
+    "./domain/attempt": "./src/domain/attempt.ts",
+    "./domain/types": "./src/domain/types.ts",
+    "./api": "./src/api/index.ts",
+    "./auth": "./src/auth/index.ts",
+    "./engine": "./src/engine/index.ts",
+    "./engine/paper": "./src/engine/paper.ts",
+    "./engine/scoring": "./src/engine/scoring.ts",
+    "./engine/blueprint": "./src/engine/blueprint.ts",
+    "./mock/adminOps": "./src/mock/adminOps.ts",
+    "./mock/catalog": "./src/mock/catalog.ts",
+    "./mock/roster": "./src/mock/roster.ts",
+    "./mock/seed": "./src/mock/seed.ts",
+    "./ui": "./src/ui/index.ts",
+    "./utils": "./src/utils/index.ts"
   },
   "files": [
     "src"

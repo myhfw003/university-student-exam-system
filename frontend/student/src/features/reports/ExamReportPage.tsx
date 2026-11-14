@@ -9,12 +9,15 @@
 
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Badge, Button, Card, Empty, PageHead, Stat, TagChip } from "@exam/shared";
-import { formatPercent, formatScore } from "@exam/shared";
+import { Button, Card, Empty, PageHead, Stat } from "@exam/shared";
+import { formatPercent, formatScore, formatTime } from "@exam/shared";
 import { buildPaper, TYPE_LABEL } from "@exam/shared/engine/paper";
 import { applyTeacherScores, scorePaper } from "@exam/shared/engine/scoring";
-import { difficultyLevels, getQuestion, useCatalog } from "@exam/shared/mock/catalog";
+import { difficultyLevels, getQuestion, itemsOf, useCatalog } from "@exam/shared/mock/catalog";
+import type { Question } from "@exam/shared/domain/types";
 import { useStudentStore } from "@/stores/studentStore";
+import { GradedDetailRow } from "@/features/shared/GradedDetailRow";
+import { TagChips } from "@/features/shared/TagChips";
 
 /** 成绩报告详情。 */
 export function ExamReportPage() {
@@ -23,10 +26,10 @@ export function ExamReportPage() {
   const studentId = useStudentStore((state) => state.studentId);
 
   const exams = useCatalog((state) => state.exams);
+  const students = useCatalog((state) => state.students);
   const attempts = useCatalog((state) => state.attempts);
   const reviews = useCatalog((state) => state.reviews);
   const questions = useCatalog((state) => state.questions);
-  const tags = useCatalog((state) => state.tags);
   const records = useCatalog((state) => state.records);
 
   const exam = useMemo(() => exams.find((e) => e.id === sessionId), [exams, sessionId]);
@@ -73,6 +76,9 @@ export function ExamReportPage() {
     );
   }
 
+  // 原型 student.js:1390：副标题末尾带「姓名 学号」。
+  const studentName = students.find((s) => s.id === studentId)?.name ?? studentId;
+
   const modeLabel =
     exam.plum.mode === "standard" ? "标准卷" : exam.plum.mode === "small" ? "小梅花" : "大梅花";
   const modeShort =
@@ -93,27 +99,32 @@ export function ExamReportPage() {
           <Empty
             title="暂未参加该考试"
             body="本场考试未开放给当前答题者，或尚未生成成绩。"
-            action={
-              <Button variant="primary" onClick={() => navigate("/reports")}>
-                返回列表
-              </Button>
-            }
           />
         </Card>
       );
     }
 
-    const questions_ = exam.questionIds
-      .map((qid) => questions.find((q) => q.id === qid))
-      .filter((q): q is NonNullable<typeof q> => Boolean(q));
+    // 原型 student.js:1374：回顾按**卷面条目**（itemsOf）走，
+    // 分值取条目分值而不是题目默认分值。
+    const items_ = itemsOf(exam);
+    const questions_ = items_
+      .map((item) => ({ item, question: questions.find((q) => q.id === item.qid) }))
+      .filter((x): x is { item: (typeof items_)[number]; question: Question } =>
+        x.question !== undefined,
+      );
 
     return (
       <>
         <PageHead
           title={exam.name}
-          sub={`${exam.batch || "—"} · 卷型：${modeLabel}（${modeShort}）`}
+          sub={`${exam.batch || "—"} · 卷型：${modeLabel}（${modeShort}） · ${studentName} ${studentId}`}
           actions={
-            <Button onClick={() => navigate("/reports")}>返回报告列表</Button>
+            <>
+              <div className="row-tight">
+                <TagChips tags={exam.tags} />
+              </div>
+              <Button onClick={() => navigate("/reports")}>返回报告列表</Button>
+            </>
           }
         />
 
@@ -137,7 +148,7 @@ export function ExamReportPage() {
             <p className="section-note">
               本场为已结束的考试，此处提供题目与解析回顾，不含个人逐题作答记录。
             </p>
-            {questions_.map((question, index) => (
+            {questions_.map(({ item, question }, index) => (
               <div
                 className="list-row"
                 key={question.id}
@@ -147,14 +158,10 @@ export function ExamReportPage() {
                 <div className="list-main">
                   <div className="list-title">{question.stem}</div>
                   <div className="list-sub">
-                    {TYPE_LABEL[question.type] ?? question.type} · {question.score} 分
+                    {TYPE_LABEL[question.type] ?? question.type} · {item.score} 分
                   </div>
                   <div className="row-tight">
-                    {question.tags.map((tagId) => (
-                      <TagChip key={tagId} group="domain">
-                        {tags.find((t) => t.id === tagId)?.name ?? tagId}
-                      </TagChip>
-                    ))}
+                    <TagChips tags={question.tags} />
                   </div>
                   {question.options && question.options.length > 0 ? (
                     <div className="list-sub">
@@ -169,9 +176,18 @@ export function ExamReportPage() {
                     <div className="analysis">
                       答案：{question.answer.join("、") || "—"}
                       <br />
-                      参考答案：{question.reference || "—"}
-                      <br />
-                      解析：{question.analysis || "暂无解析"}
+                      {question.reference ? (
+                        <>
+                          <br />
+                          参考答案：{question.reference}
+                        </>
+                      ) : null}
+                      {question.analysis ? (
+                        <>
+                          <br />
+                          解析：{question.analysis}
+                        </>
+                      ) : null}
                     </div>
                   </details>
                 </div>
@@ -192,21 +208,16 @@ export function ExamReportPage() {
     entry.max += detail.max;
     typeScores.set(detail.type, entry);
   }
-  const maxTypeScore = Math.max(1, ...[...typeScores.values()].map((v) => v.max));
 
   return (
     <>
       <PageHead
         title={exam.name}
-        sub={`${exam.batch || "—"} · 卷型：${modeLabel}（${modeShort}）`}
+        sub={`${exam.batch || "—"} · 卷型：${modeLabel}（${modeShort}） · ${studentName} ${studentId}`}
         actions={
           <>
             <div className="row-tight">
-              {exam.tags.map((tagId) => (
-                <TagChip key={tagId} group="domain">
-                  {tags.find((t) => t.id === tagId)?.name ?? tagId}
-                </TagChip>
-              ))}
+              <TagChips tags={exam.tags} />
             </div>
             <Button onClick={() => navigate("/reports")}>返回报告列表</Button>
           </>
@@ -238,8 +249,8 @@ export function ExamReportPage() {
         />
         <Stat
           label="交卷时间"
-          value={attempt.submittedAt.slice(0, 16).replace("T", " ")}
-          hint={`卷号 ${attempt.variantLabel}`}
+          value={formatTime(attempt.submittedAt)}
+          hint={`卷号 ${attempt.variantLabel || modeLabel}`}
         />
       </div>
 
@@ -256,7 +267,7 @@ export function ExamReportPage() {
                 <span className="bar-track">
                   <span
                     className={`bar-fill${rate >= 80 ? "" : rate >= 60 ? " is-warn" : " is-danger"}`}
-                    style={{ width: `${Math.round((value.score / maxTypeScore) * 100)}%` }}
+                    style={{ width: `${Math.round(rate)}%` }}
                   />
                 </span>
                 <span className="right num text-sm">
@@ -274,63 +285,9 @@ export function ExamReportPage() {
           <span className="text-sm text-3">共 {graded?.details.length ?? 0} 题</span>
         </div>
         <div className="card-body is-flush">
-          {(graded?.details ?? []).map((detail) => {
-            const statusLabel =
-              detail.status === "correct"
-                ? "正确"
-                : detail.status === "partial"
-                  ? "部分正确"
-                  : detail.status === "wrong"
-                    ? "错误"
-                    : detail.status === "pending"
-                      ? "待阅"
-                      : "未作答";
-            const tone =
-              detail.status === "correct"
-                ? "ok"
-                : detail.status === "partial"
-                  ? "warn"
-                  : detail.status === "wrong"
-                    ? "danger"
-                    : "neutral";
-            return (
-              <div
-                className="list-row"
-                key={detail.qid}
-                style={{ gridTemplateColumns: "64px minmax(0,1fr)" }}
-              >
-                <div>
-                  <Badge tone={tone}>{statusLabel}</Badge>
-                  <div className="text-xs text-3 num" style={{ marginTop: 4 }}>
-                    {detail.score}/{detail.max}
-                  </div>
-                </div>
-                <div className="list-main">
-                  <div className="list-title">{detail.question.stem}</div>
-                  <div className="list-sub">
-                    {TYPE_LABEL[detail.type] ?? detail.type}
-                  </div>
-                  {detail.pickedOriginal && detail.pickedOriginal.length > 0 ? (
-                    <div className="list-sub">
-                      你的作答：{detail.pickedDisplay?.join("、") ?? ""} · 正确答案：
-                      {detail.correct?.join("、") ?? ""}
-                    </div>
-                  ) : null}
-                  {detail.answerText ? (
-                    <div className="list-sub">作答：{detail.answerText}</div>
-                  ) : null}
-                  <details>
-                    <summary className="text-sm">查看解析</summary>
-                    <div className="analysis">
-                      {detail.question.analysis ||
-                        detail.question.reference ||
-                        "暂无解析"}
-                    </div>
-                  </details>
-                </div>
-              </div>
-            );
-          })}
+          {(graded?.details ?? []).map((detail) => (
+            <GradedDetailRow key={detail.qid} detail={detail} variant="report" />
+          ))}
         </div>
       </section>
     </>

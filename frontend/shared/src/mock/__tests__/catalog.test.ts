@@ -166,7 +166,16 @@ describe("catalog · 标签", () => {
   });
 
   it("标签挂载上限为 5", () => {
-    const result = validateTags(["a", "b", "c", "d", "e", "f"]);
+    // 原型校验顺序是「重复 → 无效 → 上限」，因此这里必须用**真实存在的**标签，
+    // 否则会先被「存在无效标签」拦下，测不到上限这一条。
+    const result = validateTags([
+      "t-dom-calc",
+      "t-dom-net",
+      "t-dom-ds",
+      "t-dom-eng",
+      "t-dom-marx",
+      "t-pt-limit",
+    ]);
     expect(result.ok).toBe(false);
     expect(result.message).toContain("最多只能选择 5 个标签");
   });
@@ -309,10 +318,12 @@ describe("catalog · 发布前校验", () => {
     const exam = state().exams.find((e) => e.status === "ongoing")!;
     const result = preflight("exam", exam.id);
     const keys = result.checks.map((c) => c.key);
-    for (const key of ["exist", "count", "published", "score", "dup", "mix", "duration", "tags", "roster"]) {
+    for (const key of ["count", "published", "score", "dup", "mix", "duration", "tags", "roster"]) {
       expect(keys, `缺少校验项 ${key}`).toContain(key);
     }
     expect(result.total).toBe(result.checks.length);
+    // 对象存在时不再单列「对象存在」行（原型只在对象缺失时返回该行）。
+    expect(keys).not.toContain("exist");
   });
 
   it("练习卷不校验名单组", () => {
@@ -328,7 +339,8 @@ describe("catalog · 题库统计与阅卷", () => {
     const stats = bankStats("__all__");
     expect(stats.total).toBe(state().questions.length);
     expect(stats.published + stats.draft + stats.disabled).toBe(stats.total);
-    expect(stats.objective + stats.subjective).toBe(stats.published);
+    // 客观 / 主观是分值合计，两者之和等于已发布题的总分
+    expect(stats.objective + stats.subjective).toBe(stats.score);
   });
 
   it("阅卷记录可写入、更新，重复 id 只补齐作答文本", () => {

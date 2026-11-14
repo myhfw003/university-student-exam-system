@@ -6,11 +6,11 @@
 
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, Card, Empty, PageHead, SearchInput, TagChip, TagFilter } from "@exam/shared";
-import { formatPercent } from "@exam/shared";
+import { Button, Card, Empty, PageHead, SearchInput, TagFilter } from "@exam/shared";
 import { TYPE_LABEL } from "@exam/shared/engine/paper";
 import { useCatalog } from "@exam/shared/mock/catalog";
 import { useStudentRecords, useVisiblePractices } from "@/features/shared/studentData";
+import { TagChips } from "@/features/shared/TagChips";
 
 /** 练习中心。 */
 export function PracticeListPage() {
@@ -93,7 +93,6 @@ export function PracticeListPage() {
           groups={groups}
           selected={selected}
           onToggle={toggleTag}
-          onClear={() => setSelected([])}
         />
       </Card>
 
@@ -131,10 +130,9 @@ export function PracticeListPage() {
               .map(([type, count]) => `${TYPE_LABEL[type as keyof typeof TYPE_LABEL] ?? type} ${count}`)
               .join(" · ");
 
-            const progress =
-              result && result.total > 0
-                ? Math.round((result.score / result.total) * 100)
-                : 0;
+            // 原型 student.js:659：完成度条只有「已做 / 没做」两态，
+            // 得分率另有一行文字，不是条形图的宽度。
+            const done = result ? practice.questionIds.length : 0;
 
             return (
               <Card key={practice.id}>
@@ -147,11 +145,7 @@ export function PracticeListPage() {
                     </div>
                     {typeStats ? <div className="list-sub">{typeStats}</div> : null}
                     <div className="row-tight">
-                      {practice.tags.map((tagId) => (
-                        <TagChip key={tagId} group="domain">
-                          {tags.find((t) => t.id === tagId)?.name ?? tagId}
-                        </TagChip>
-                      ))}
+                      <TagChips tags={practice.tags} />
                     </div>
                   </div>
                   <div className="spacer" />
@@ -164,20 +158,27 @@ export function PracticeListPage() {
                 </div>
 
                 <div className="meter" style={{ marginTop: "var(--sp-3)" }}>
-                  <i style={{ width: `${progress}%` }} />
+                  <i style={{ width: result ? "100%" : "0%" }} />
                 </div>
                 <div className="row text-sm text-3" style={{ marginTop: "var(--sp-2)" }}>
                   {result ? (
                     <>
-                      <span>已完成 {result.score}/{result.total} 题</span>
+                      <span>
+                        已完成 {done}/{practice.questionIds.length} 题
+                      </span>
+                      <span>·</span>
                       <span>
                         正确率{" "}
-                        {formatPercent(result.total > 0 ? (result.score / result.total) * 100 : 0)}%
+                        {Math.round(
+                          result.total > 0 ? (result.score / result.total) * 100 : 0,
+                        )}
+                        %
                       </span>
                     </>
                   ) : (
                     <>
                       <span>尚未开始</span>
+                      <span>·</span>
                       <span>预计用时 {practice.durationMin} 分钟</span>
                     </>
                   )}

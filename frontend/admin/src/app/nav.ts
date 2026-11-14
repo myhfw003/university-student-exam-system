@@ -2,6 +2,11 @@
    知行测评 · 管理端导航
    分组与文案对齐原型 docs/ui-design/admin/js/admin-config.js 的 nav 配置，
    并按 docs/design/06-frontend.md §8.2 补充「系统」分组。
+
+   「考试场次」与「实时监考」是 React 独有的路由（原型没有这两个模块），
+   原型侧栏因此只有 8 个入口。这两条若不接进侧栏，这两个功能在界面上
+   没有任何入口、只能手输 URL，所以并进「测评」组末尾——原型那三条的
+   相对顺序不变。
    ========================================================================== */
 
 export interface NavItem {
@@ -30,8 +35,11 @@ export const ADMIN_NAV: NavGroup[] = [
     group: "测评",
     items: [
       { path: "/papers", label: "组卷", icon: "shuffle" },
-      { path: "/review", label: "阅卷中心", icon: "edit", count: 7 },
+      { path: "/review", label: "阅卷中心", icon: "edit" },
       { path: "/analytics", label: "成绩分析", icon: "chart" },
+      // React 独有的两条：接进侧栏，场次与监考才不用手输 URL。
+      { path: "/exam-sessions", label: "考试场次", icon: "clipboard" },
+      { path: "/monitoring", label: "实时监考", icon: "eye" },
     ],
   },
   {
@@ -41,10 +49,4 @@ export const ADMIN_NAV: NavGroup[] = [
       { path: "/audit-logs", label: "审计", icon: "document" },
     ],
   },
-];
-
-/** 不在侧栏直接展示、但属于测评域的路由（考试场次与实时监考）。 */
-export const ADMIN_SECONDARY_NAV: NavItem[] = [
-  { path: "/exam-sessions", label: "考试场次", icon: "clipboard" },
-  { path: "/monitoring", label: "实时监考", icon: "eye" },
 ];

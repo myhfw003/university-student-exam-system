@@ -5,7 +5,10 @@
 > 原型在 `docs/ui-design/`，**中文文案必须逐字照抄原型**。
 >
 > 当前状态：学生端 9 个路由、管理端 13 个路由全部落地，`pnpm -r typecheck` 零错误、
-> `pnpm -r test` 167 个用例全绿。落地清单见 `docs/development/01-task-breakdown.md` 附录 A。
+> `pnpm lint` 零错误、`pnpm -r test` 242 个用例全绿、`pnpm smoke:preview` 23 个路由全绿、
+> `pnpm e2e` 6 例通过（2 例因后端未就绪跳过）。落地清单见
+> `docs/development/01-task-breakdown.md` 附录 A；还原度审查与修复记录见
+> `docs/development/04-frontend-parity-review.md`。
 
 ---
 
@@ -18,7 +21,7 @@ frontend/admin    管理端 SPA
 ```
 
 - 依赖方向单向：`student` / `admin` → `shared`。**不得反向**，`shared` 不引入业务概念。
-- `shared` 已有 27 个 UI 原语、4 张自研 SVG 图表、领域类型、抽题/判分引擎、mock 数据层。**先查有没有现成的，不要重写。**
+- `shared` 已有 30 个 UI 原语（含图标表 `Icon`）、4 张自研 SVG 图表、领域类型、抽题/判分引擎、mock 数据层。**先查有没有现成的，不要重写。**
 
 ### 命令
 
@@ -31,8 +34,13 @@ pnpm --filter @exam/admin test
 pnpm --filter @exam/shared typecheck
 pnpm -r typecheck                         # 全量
 pnpm smoke                                # 渲染冒烟（查 5173 / 5174 的 dev server）
-pnpm smoke:preview                        # 渲染冒烟（查 4173 / 4174 的 vite preview）
+pnpm smoke:preview                        # 渲染冒烟（查生产产物，用与 nginx 一致的静态服务器托管）
+pnpm e2e                                  # 端到端测试（Playwright，跑生产产物）
 ```
+
+**数据源开关**：默认走本地示例数据（mock）。设置 `VITE_DATA_SOURCE=http`
+（或 `VITE_API_BASE_URL`）后，登录态、答案上行、监考快照、内容目录全部改走后端，
+**页面代码不感知这个开关**。
 
 交付前必须：`pnpm -r typecheck` 零错误，`pnpm -r test` 全绿，
 **并且 `pnpm smoke` 全部路由通过**（见 §10）。
@@ -43,16 +51,18 @@ pnpm smoke:preview                        # 渲染冒烟（查 4173 / 4174 的 v
 
 - `api/index.ts`：`AuthInterceptorConfig`、`DEFAULT_BASE_URL`、`DEFAULT_TIMEOUT_MS`、`ENDPOINTS`、`ERROR_MESSAGE_MAP`、`HttpClientConfig`、`HttpError`、`HttpMethod`、`NETWORK_ERROR_MESSAGE`、`NormalizedProblem`、`OnAuthFailureFn`、`ProblemDetails`、`RefreshTokenFn`、`RequestOptions`、`STATUS_MESSAGE_MAP`、`TokenPair`、`clearTokens`、`createHttpClient`、`getAccessToken`、`getTokens`、`httpClient`、`isExpired`、`isRefreshing`、`isUnauthorized`、`messageForErrorCode`、`normalizeProblem`、`parseProblemDetails`、`refreshOnce`、`setTokens`、`subscribeTokens`、`withAuthRetry`
 - `charts/index.ts`：`BarChart`、`BarChartDatum`、`BarChartProps`、`CHART_ACCENT`、`CHART_AXIS`、`CHART_COLORS`、`CHART_FILL`、`CHART_GRID`、`DonutChart`、`DonutChartDatum`、`DonutChartProps`、`HorizontalBarChart`、`HorizontalBarChartDatum`、`HorizontalBarChartProps`、`LineChart`、`LineChartDatum`、`LineChartProps`、`chartColor`、`niceMax`
-- `ui/index.ts`：`Analysis`、`AnalysisProps`、`AnswerSheet`、`AnswerSheetProps`、`Badge`、`BadgeProps`、`BadgeTone`、`BarRow`、`BarRowProps`、`Button`、`ButtonProps`、`ButtonSize`、`ButtonVariant`、`Callout`、`CalloutProps`、`CalloutTone`、`Card`、`CardProps`、`ConfirmDialog`、`ConfirmDialogProps`、`DataTable`、`DataTableColumn`、`DataTableProps`、`Dialog`、`DialogProps`、`Empty`、`EmptyProps`、`Field`、`FieldProps`、`IconButton`、`IconButtonProps`、`KeypointItem`、`KeypointList`、`KeypointListProps`、`Meter`、`MeterProps`、`MeterTone`、`OptionList`、`OptionListProps`、`Pagination`、`PaginationProps`、`QuestionHead`、`QuestionHeadProps`、`RuleList`、`RuleListProps`、`SearchInput`、`SearchInputProps`、`Segmented`、`SegmentedOption`、`SegmentedProps`、`SelectInput`、`SelectInputProps`、`SheetCell`、`Skeleton`、`SkeletonProps`、`SortDirection`、`Stat`、`StatProps`、`TYPE_BADGE_TONE`、`TabItem`、`Tabs`、`TabsProps`、`TagChip`、`TagChipGroup`、`TagChipProps`、`TagFilter`、`TagFilterProps`、`TextArea`、`TextAreaProps`、`TextInput`、`TextInputProps`、`Toast`、`ToastHost`、`ToastHostProps`、`ToastProps`、`ToastTone`、`keypointItems`、`stepItems`
-- `utils/index.ts`：`NUM_CLASS`、`formatClock`、`formatDate`、`formatDateTime`、`formatInteger`、`formatMinutes`、`formatPercent`、`formatPercentWithSign`、`formatScore`、`formatTime`
+- `ui/index.ts`：`Icon`、`IconProps`、`Analysis`、`AnalysisProps`、`AnswerSheet`、`AnswerSheetProps`、`Badge`、`BadgeProps`、`BadgeTone`、`BarRow`、`BarRowProps`、`Button`、`ButtonProps`、`ButtonSize`、`ButtonVariant`、`Callout`、`CalloutProps`、`CalloutTone`、`Card`、`CardProps`、`ConfirmDialog`、`ConfirmDialogProps`、`DataTable`、`DataTableColumn`、`DataTableProps`、`Dialog`、`DialogProps`、`Empty`、`EmptyProps`、`Field`、`FieldProps`、`IconButton`、`IconButtonProps`、`KeypointItem`、`KeypointList`、`KeypointListProps`、`Meter`、`MeterProps`、`MeterTone`、`OptionList`、`OptionListProps`、`Pagination`、`PaginationProps`、`QuestionHead`、`QuestionHeadProps`、`RuleList`、`RuleListProps`、`SearchInput`、`SearchInputProps`、`Segmented`、`SegmentedOption`、`SegmentedProps`、`SelectInput`、`SelectInputProps`、`SheetCell`、`Skeleton`、`SkeletonProps`、`SortDirection`、`Stat`、`StatProps`、`TYPE_BADGE_TONE`、`TabItem`、`Tabs`、`TabsProps`、`TagChip`、`TagChipGroup`、`TagChipProps`、`TagFilter`、`TagFilterProps`、`TextArea`、`TextAreaProps`、`TextInput`、`TextInputProps`、`Toast`、`ToastHost`、`ToastHostProps`、`ToastProps`、`ToastTone`、`keypointItems`、`stepItems`
+- `utils/index.ts`：`NUM_CLASS`、`formatClock`、`formatDate`、`formatDateTime`、`formatInteger`、`formatMinutes`、`formatPercent`、`formatPercentWithSign`、`formatScore`、`formatTime`、`downloadCsv`、`downloadText`、`toCsv`、`ATTACHMENT_MAX_BYTES`、`ATTACHMENT_MIME_TYPES`、`formatFileSize`、`readFileAsDataUrl`、`validateAttachment`、`parseCsv`、`decodeCsvBuffer`
+- `auth/index.ts`：`useAuth`（登录态）、`useCan`、`hasPermission`、`permissionsFor`、`ROLE_PERMISSIONS`、`PermissionPoint`、`AuthUser`、`AuthMode`、`authMode`
 
 ### 领域类型（`@exam/shared/domain`）
 
 - 内容域：`Question` `Bank` `ExamPaper` `Practice` `Tag` `Student` `ClassGroup` `ReviewItem`
   `ImportBatch` `GenerationBatch` `PaperTemplate` `ScoreRecord` `Mistake` `PaperItem`
+  （也可用 `@exam/shared/domain/types` 直接取；`@exam/shared/domain/attempt` 只放作答域类型）
 - 交付域（设计文档 §2.4）：`ExamSession` `ExamSessionStatus` `AntiCheatPolicy`
   `OnExceededPolicy` `ProctorCandidate` `CandidateStatus` `ProctorAction` `ProctorActionKind`
-- 治理域（§2.1 §2.7）：`AppUser` `UserRole` `UserStatus` `AuditLog` `AuditAction`
+- 治理域（§2.1 §2.7）：`AppUser`（含 `mustChangePassword`）`UserRole` `UserStatus` `AuditLog` `AuditAction`
 - 枚举：`QuestionType`（single/multi/judge/short/comprehensive）、`QuestionStatus`
   （draft/published/disabled）、`QuestionSource`（manual/import/ai）、`TagGroup`
   （domain/knowledge_point/ability/difficulty）、`PaperMode`（standard/small/large）、
@@ -90,6 +100,11 @@ import { useAdminOps, getSession, createSession, publishSession, cancelSession,
 ```
 
 - **组织归属用组织维度标签表达**（`ORG_TAGS`，学院 → 专业 → 班级三级树），**不存独立字段**。
+  组织标签已进 store（`useAdminOps((s) => s.orgTags)`），名单导入时可**按层级自动创建**；
+  `ensureOrgTag(name, parentId)` 取或建，`parseUserRole(text)` 解析角色码 / 中文名。
+- **人员名单批量导入**（FR-IAM-05）在 `shared/src/mock/roster.ts`：
+  `parseRosterCsv` → `validateRosterRows`（逐行校验，错误行标红跳过）→ `importRoster`
+  （写用户目录 + 组织标签 + 学生档案 + 审计日志，返回成功 / 失败明细与一次性初始密码）。
 - `proctorSnapshot(sessionId, tick)` 是确定性模拟（同一场次 + 同一 tick 必然同结果）；
   接 SignalR 后只需替换 `admin/src/features/monitoring/useProctorFeed.ts` 内部的轮询。
 
@@ -100,6 +115,12 @@ import { useAdminOps, getSession, createSession, publishSession, cancelSession,
 - `selectQuestions(rules, pool, seed, difficultyMap)` → 蓝图抽题；池量不足抛 `InsufficientQuestionPoolError`（带 `shortfalls[]`）
 - `allocate(total, count, order)` → 分值分配（各项之和精确等于 total）
 - `gradeObjective` `gradeShort` `gradeComprehensive` `stepScores` `normalizeText`
+
+### CSV 解析（`@exam/shared/utils`）
+
+- `parseCsv(text)`：分隔符自动识别（逗号 / 制表符 / 分号）、引号包裹、字段内换行、双引号转义、去 BOM、跳空行
+- `decodeCsvBuffer(buffer)`：UTF-8 优先，解出替换字符时按 GBK 重解
+- 试题导入（FR-CAT-07）与人员名单导入（FR-IAM-05）**共用**这一套实现
 
 ### UI 原语（`@exam/shared`）
 
@@ -148,8 +169,10 @@ import { useAdminOps, getSession, createSession, publishSession, cancelSession,
 | 内容（题目/题库/试卷/练习/标签/阅卷） | `useCatalog`（Zustand） | 管理端写、学生端读，同一份 |
 | 服务端数据 | TanStack Query | 后端接口就绪后接入 |
 | 作答会话 | `student/src/stores/examSessionStore.ts` / `practiceSessionStore.ts` | 考试用绝对 `deadlineAt` 计时 |
-| 本地偏好（当前答题者、主题） | `student/src/stores/studentStore.ts` | Zustand persist |
+| 本地偏好（当前答题者） | `student/src/stores/studentStore.ts` | Zustand persist |
+| 主题偏好 | `student/src/app/themeStore.ts` | 独立 store + 裸 localStorage（键 `exam.theme`）：`index.html` 的内联脚本要在 React 起来之前同步读一次，合并进 persist 会导致首屏闪白 |
 | 作答持久化与上行 | `student/src/stores/draftQueue.ts` + `student/src/lib/syncEngine.ts` | 四层保障，见设计文档 §4 |
+| 成绩归档 | `student/src/stores/resultArchive.ts` | Zustand persist（键 `zhixing.student.results.v1`）：作答记录、练习成绩、错题本落盘，启动时回灌进 mock catalog——mock catalog 是纯内存的，不归档的话刷新后成绩列表会清空 |
 
 **选择器细粒度订阅**：`useCatalog((s) => s.questions)`，不要 `useCatalog()` 整体订阅。
 
@@ -161,11 +184,12 @@ import { useAdminOps, getSession, createSession, publishSession, cancelSession,
 - 表单错误用 `aria-invalid` + `aria-describedby`（`TextInput` / `SelectInput` / `TextArea` 已内置）。
 - 模态框用 `Dialog` / `ConfirmDialog`（已实现焦点陷阱、焦点归还、滚动锁定）。
 - 动态提示用 `aria-live`（`Toast` 已内置）。
-- 表格表头用 `scope="col"`（`DataTable` 已内置）。
+- 表格表头用 `scope="col"`（`DataTable` 已内置；两端页面里手写的 `<th>` 也必须逐个写上）。
 - 键盘可达：Tab 组用 `Tabs`，互斥选择用 `Segmented`。
 - **`Field` 必须传 `htmlFor`，且与控件的 `id` 一致** —— 否则 label 与控件没有程序化关联，
   屏幕阅读器读不出控件名，点击标签也不会聚焦控件。
   自造控件（如 `TagPicker`）用 `role="group"` + `aria-label` 提供名称。
+- `Field` 传 `required` 时，星号只是视觉标记，**必填态由 `aria-required` 传给控件**（`Field` 自动注入）。
 
 ---
 
@@ -194,12 +218,13 @@ import { useAdminOps, getSession, createSession, publishSession, cancelSession,
 | 缺口 | 设计依据 | 做法 |
 |---|---|---|
 | 组卷规则引擎 / 一键出卷 | `docs/design/03-domain-model.md` §4.2 | 用 `selectQuestions` + `BlueprintRules`；池量不足必须报错，不静默降级 |
-| 监考大屏 | `docs/design/06-frontend.md` §7 | 按 §7.2 的界面与操作实现；实时推送后端未就绪时用轮询模拟 |
+| 监考大屏 | `docs/design/06-frontend.md` §7 | 按 §7.2 的界面与操作实现；实时推送后端未就绪时用 2 秒轮询模拟；表格用 `@tanstack/react-virtual` 虚拟滚动 |
 | 用户 / 角色管理 | `docs/design/01-requirements.md` 权限矩阵 | 6 个角色：`system_admin` `content_admin` `author_teacher` `grader_teacher` `student` `general_user`（**角色码以 `03-domain-model.md` §2.2 的 `Role.Code` 为准**） |
 | 审计日志 | 同上 | 列表 + 筛选 |
 | 表格分页 / 排序 | `docs/design/05-api.md` | `DataTable` 已内置 `sortBy` / `onSortChange`，接真实接口时传服务端分页参数 |
-| 导入的真实文件解析与可编辑列映射 | 已确认决策 9 | CSV / XLSX 真解析；列映射可编辑 |
+| 导入的真实文件解析与可编辑列映射 | 已确认决策 9 | **已实现**：`admin/src/features/banks/importFile.ts` 零依赖解析 CSV（UTF-8 / GBK）与 XLSX（浏览器内置解压），列映射可编辑，逐行校验、错误行标红 |
 | 标签第 5 组「组织」 | 已确认决策 2 | **组织维度只挂用户**，题目只挂前四维 |
+| 人员名单批量导入 | FR-IAM-05 | **已实现**：`shared/src/mock/roster.ts` 逐行校验（文件内重复 / 必填缺失 / 角色无法识别 / 密码过弱均标红跳过），已存在账号走更新不重置密码，院系 / 专业 / 班级缺失时自动创建组织标签并按层级挂接，角色留空按「是否有班级」推断，写审计日志；用户页「批量导入」弹窗可预览、查看失败明细与一次性初始密码 |
 | 作答四层保障 / 切屏检测 / 服务端时钟 | `docs/design/06-frontend.md` §4 §5 §6 | 已有 `syncEngine` / `FocusGuard` / `useServerTime` / `Watermark` |
 
 ---
@@ -237,3 +262,16 @@ typecheck、lint、单元测试**全都发现不了** —— 它们不碰真实�
 
 **规矩：改完前端必须跑一次并确认全绿**，把输出贴进交付说明。
 新增页面时，同步在脚本的路由表里加一条（路径 + 关键文案 + 正文最小字数）。
+
+### 端到端测试（Playwright）
+
+```bash
+cd frontend
+pnpm build     # e2e 跑的是生产产物
+pnpm e2e
+```
+
+- 覆盖 §12 的三条流程：① 练习闭环、② 组卷 / 阅卷 / 发分、③ 切屏强制交卷；
+  其中依赖后端的两段用 `test.skip` 标注了原因，后端就绪后打开。
+- 跑的是 `dist` 产物，由 `scripts/serve-dist.mjs`（与 nginx 布局一致）托管。
+- 新增关键流程时，在 `frontend/e2e/` 加一条用例。

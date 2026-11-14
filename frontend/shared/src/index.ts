@@ -6,6 +6,7 @@
    因此两个 SPA 可以直接消费 TS 源码，无需预构建产物。
    ========================================================================== */
 
+export * from "./auth/index";
 export * from "./ui/index";
 export * from "./utils/index";
 export * from "./api/index";

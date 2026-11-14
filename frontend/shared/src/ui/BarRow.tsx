@@ -19,18 +19,17 @@ export interface BarRowProps {
   trailing?: string;
   /** 色调。 */
   tone?: "default" | "warn" | "danger";
-  /** 名称截断宽度。 */
-  truncate?: boolean;
 }
 
 /** 横向条。 */
-export function BarRow({ label, hint, value, max, trailing, tone = "default", truncate }: BarRowProps) {
+export function BarRow({ label, hint, value, max, trailing, tone = "default" }: BarRowProps) {
   const percent = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   const fillClass = tone === "default" ? "" : ` is-${tone}`;
 
   return (
     <div className="bar-row">
-      <span className={truncate ? "od-truncate" : undefined}>
+      {/* 原型的条形行恒对名称做单行截断。 */}
+      <span className="od-truncate">
         {label}
         {hint ? <span className="text-3 text-xs"> · {hint}</span> : null}
       </span>

@@ -15,9 +15,10 @@ export function Empty({ title, body, action, className }: EmptyProps) {
   const classes = ["empty", className].filter(Boolean).join(" ");
   return (
     <div className={classes}>
-      <div className="empty-title">{title}</div>
-      {body ? <div className="empty-body">{body}</div> : null}
-      {action ? <div>{action}</div> : null}
+      {/* 原型 .empty 是 grid，子元素一律用 span。 */}
+      <span className="empty-title">{title}</span>
+      {body ? <span className="empty-body">{body}</span> : null}
+      {action ? <span>{action}</span> : null}
     </div>
   );
 }

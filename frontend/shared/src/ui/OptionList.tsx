@@ -9,6 +9,8 @@
    - `toOriginal` 记录「显示字母 → 原题键」，判分时用它还原。
    ========================================================================== */
 
+import { useId } from "react";
+
 import type { QuestionOption } from "../domain/types";
 
 /** 选项列表属性。 */
@@ -29,6 +31,14 @@ export interface OptionListProps {
   readOnly?: boolean;
   /** 正确答案（原题键），提供时高亮。 */
   correct?: readonly string[];
+  /**
+   * 单选组的分组键（一般是题目 ID）。
+   *
+   * 原型 student.js 用 name="opt-" + 题目 id：同一题的选项互斥，
+   * 不同题互不影响。缺省时按**组件实例**分组，保证同屏多题时
+   * radio 组不会互相取消选择。
+   */
+  groupKey?: string;
 }
 
 /** 显示字母表。 */
@@ -44,7 +54,13 @@ export function OptionList({
   multiple = false,
   readOnly = false,
   correct,
+  groupKey,
 }: OptionListProps) {
+  // 单选组名：显式传 groupKey 时用它；否则用组件实例 id，
+  // 避免同屏多题的 radio 按选项键（A/B/C）串联成同一组。
+  const instanceId = useId();
+  const groupName = `opt-${groupKey ?? instanceId}`;
+
   // 显示顺序：置换后按 displayKeys 排列原题选项，否则原序。
   const ordered = displayKeys
     ? displayKeys
@@ -88,7 +104,7 @@ export function OptionList({
           <label key={originalKey} className={classes}>
             <input
               type={multiple ? "checkbox" : "radio"}
-              name={`opt-${originalKey}`}
+              name={groupName}
               checked={isSelected}
               disabled={readOnly}
               onChange={() => toggle(displayLetter)}

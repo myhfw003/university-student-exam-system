@@ -19,10 +19,12 @@ import {
   Segmented,
   SelectInput,
   Stat,
+  TextInput,
+  decodeCsvBuffer,
   toast,
+  useAuth,
 } from "@exam/shared";
 import {
-  ORG_TAGS,
   USER_ROLE_LABEL,
   USER_STATUS_LABEL,
   setUserRoles,
@@ -30,6 +32,13 @@ import {
   useAdminOps,
   writeAudit,
 } from "@exam/shared/mock/adminOps";
+import {
+  importRoster,
+  parseRosterCsv,
+  validateRosterRows,
+  type RosterImportResult,
+  type RosterPreviewRow,
+} from "@exam/shared/mock/roster";
 import type { AppUser, UserRole } from "@exam/shared/domain/types";
 import { Icon } from "@/app/Icon";
 
@@ -51,12 +60,32 @@ const ROLE_TONE: Record<UserRole, "primary" | "info" | "ok" | "warn" | "neutral"
   general_user: "neutral",
 };
 
+/** 角色文本（角色码或中文名）→ 中文名；无法识别时原样返回。 */
+function roleLabelOf(text: string): string {
+  const hit = ALL_ROLES.find((role) => role === text || USER_ROLE_LABEL[role] === text);
+  return hit ? USER_ROLE_LABEL[hit] : text;
+}
+
 /** 用户管理页。 */
 export function UsersPage() {
   const users = useAdminOps((state) => state.users);
+  // 组织维度标签已进 store（名单导入会按层级自动创建），这里要读最新的。
+  const orgTags = useAdminOps((state) => state.orgTags);
   const [keyword, setKeyword] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | UserRole>("all");
   const [editing, setEditing] = useState<AppUser | null>(null);
+  // 重置密码（FR-IAM-03）：管理员重置任意用户密码并强制其下次登录修改。
+  const [resetTarget, setResetTarget] = useState<AppUser | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
+  const [forceChange, setForceChange] = useState(true);
+  const [resetError, setResetError] = useState<string | null>(null);
+  // 名单批量导入（FR-IAM-05）。
+  const [importOpen, setImportOpen] = useState(false);
+  const [rosterRows, setRosterRows] = useState<RosterPreviewRow[]>([]);
+  const [rosterError, setRosterError] = useState<string | null>(null);
+  const [rosterResult, setRosterResult] = useState<RosterImportResult | null>(null);
+  const [rosterFileName, setRosterFileName] = useState("");
+  const doResetPassword = useAuth((state) => state.resetPassword);
 
   const filtered = useMemo(() => {
     return users.filter((u) => {
@@ -96,6 +125,69 @@ export function UsersPage() {
     toast.ok("角色已更新，变更即时生效");
   };
 
+  const handleResetPassword = async () => {
+    if (!resetTarget) return;
+    setResetError(null);
+    const result = await doResetPassword(resetTarget.id, resetPassword, forceChange);
+    if (!result.ok) {
+      setResetError(result.message ?? "重置失败，请重试");
+      return;
+    }
+    writeAudit({
+      operator: "陈砚之",
+      action: "user.password_reset",
+      targetType: "user",
+      targetId: resetTarget.id,
+      summary: `重置「${resetTarget.name}」的密码${forceChange ? "，强制下次登录修改" : ""}`,
+      ip: "10.12.0.21",
+      userAgent: "Chrome 131 / Windows",
+    });
+    toast.ok("密码已重置");
+    setResetTarget(null);
+    setResetPassword("");
+    setForceChange(true);
+  };
+
+  /** 选择名单 CSV → 解析并逐行校验（不阻断整批）。 */
+  const handleRosterFile = async (file: File | null): Promise<void> => {
+    if (!file) return;
+    setRosterError(null);
+    setRosterResult(null);
+    try {
+      const text = decodeCsvBuffer(await file.arrayBuffer());
+      const parsed = parseRosterCsv(text);
+      const checked = validateRosterRows(parsed);
+      setRosterRows(checked);
+      setRosterFileName(file.name);
+      const bad = checked.filter((row) => row.error).length;
+      toast.ok(
+        bad > 0
+          ? `已解析 ${checked.length} 行，其中 ${bad} 行有问题，将跳过这些行`
+          : `已解析 ${checked.length} 行，可导入`,
+      );
+    } catch (error) {
+      setRosterRows([]);
+      setRosterError(error instanceof Error ? error.message : "文件解析失败");
+    }
+  };
+
+  /** 执行导入：逐行写入，失败行跳过并给出明细。 */
+  const handleRosterImport = (): void => {
+    if (rosterRows.length === 0) {
+      toast.error("请先选择名单文件");
+      return;
+    }
+    const result = importRoster(rosterRows);
+    setRosterResult(result);
+    if (result.failed > 0) {
+      toast.error(`导入完成：成功 ${result.succeeded} 行，失败 ${result.failed} 行`);
+    } else {
+      toast.ok(`导入完成：成功 ${result.succeeded} 行`);
+    }
+    setRosterRows([]);
+    setRosterFileName("");
+  };
+
   const toggleStatus = (user: AppUser) => {
     const next = user.status === "active" ? "disabled" : "active";
     const result = updateUser(user.id, { status: next });
@@ -121,7 +213,7 @@ export function UsersPage() {
         title="用户"
         sub="账号与密码登录（不限学号），角色权限取并集；组织归属用组织维度标签表达，不单独存字段。"
         actions={
-          <Button onClick={() => toast.info("批量导入需上传 CSV，当前为示例数据模式")}>
+          <Button onClick={() => setImportOpen(true)}>
             <Icon name="document" />
             批量导入
           </Button>
@@ -168,13 +260,13 @@ export function UsersPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>账号</th>
-                  <th>姓名</th>
-                  <th>角色</th>
-                  <th>组织标签</th>
-                  <th>状态</th>
-                  <th>最后登录</th>
-                  <th></th>
+                  <th scope="col">账号</th>
+                  <th scope="col">姓名</th>
+                  <th scope="col">角色</th>
+                  <th scope="col">组织标签</th>
+                  <th scope="col">状态</th>
+                  <th scope="col">最后登录</th>
+                  <th scope="col"></th>
                 </tr>
               </thead>
               <tbody>
@@ -212,21 +304,37 @@ export function UsersPage() {
                           <div className="row-tight">
                             {u.orgTags.map((tagId) => (
                               <span className="tag-chip is-organization" key={tagId}>
-                                {ORG_TAGS.find((t) => t.id === tagId)?.name ?? tagId}
+                                {orgTags.find((t) => t.id === tagId)?.name ?? tagId}
                               </span>
                             ))}
                           </div>
                         )}
                       </td>
                       <td>
-                        <Badge tone={u.status === "active" ? "ok" : "neutral"}>
-                          {USER_STATUS_LABEL[u.status]}
-                        </Badge>
+                        <div className="row-tight">
+                          <Badge tone={u.status === "active" ? "ok" : "neutral"}>
+                            {USER_STATUS_LABEL[u.status]}
+                          </Badge>
+                          {u.mustChangePassword ? (
+                            <Badge tone="warn">待改密码</Badge>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="text-xs text-3">{u.lastLoginAt ?? "从未登录"}</td>
                       <td className="col-actions">
                         <Button size="sm" onClick={() => setEditing(u)}>
                           角色
+                        </Button>{" "}
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setResetError(null);
+                            setResetPassword("");
+                            setForceChange(true);
+                            setResetTarget(u);
+                          }}
+                        >
+                          重置密码
                         </Button>{" "}
                         <Button size="sm" variant="danger" onClick={() => toggleStatus(u)}>
                           {u.status === "active" ? "停用" : "启用"}
@@ -240,6 +348,210 @@ export function UsersPage() {
           </div>
         </div>
       </section>
+
+      <Dialog
+        open={resetTarget !== null}
+        onClose={() => setResetTarget(null)}
+        title={resetTarget ? `重置密码 · ${resetTarget.name}` : "重置密码"}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setResetTarget(null)}>
+              取消
+            </Button>
+            <Button variant="primary" onClick={() => void handleResetPassword()}>
+              确认重置
+            </Button>
+          </>
+        }
+      >
+        <div className="stack">
+          {resetError ? (
+            <Callout tone="danger" title="重置失败">
+              {resetError}
+            </Callout>
+          ) : null}
+          <Field label="新密码" required htmlFor="reset-password">
+            <TextInput
+              id="reset-password"
+              type="text"
+              value={resetPassword}
+              placeholder="至少 8 位"
+              onChange={(e) => setResetPassword(e.target.value)}
+            />
+          </Field>
+          <label className="checkline">
+            <input
+              type="checkbox"
+              checked={forceChange}
+              onChange={(e) => setForceChange(e.target.checked)}
+            />
+            <span className="checkline-text">
+              <span>强制下次登录修改</span>
+              <span className="checkline-hint">
+                管理员重置的密码仅作首次登录凭据，用户登录后需立即修改。
+              </span>
+            </span>
+          </label>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={importOpen}
+        onClose={() => {
+          setImportOpen(false);
+          setRosterRows([]);
+          setRosterError(null);
+          setRosterResult(null);
+          setRosterFileName("");
+        }}
+        title="批量导入人员名单"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setImportOpen(false);
+                setRosterRows([]);
+                setRosterError(null);
+                setRosterResult(null);
+                setRosterFileName("");
+              }}
+            >
+              关闭
+            </Button>
+            <Button
+              variant="primary"
+              disabled={rosterRows.length === 0 || rosterResult !== null}
+              onClick={handleRosterImport}
+            >
+              确认导入
+            </Button>
+          </>
+        }
+      >
+        <div className="stack">
+          <Callout tone="info" title="名单 CSV 列定义">
+            账号、姓名为必填；院系 / 专业 / 班级可空（为空即视为社会人士）；
+            邮箱、角色、初始密码可空。角色留空时按「是否有班级」推断。
+            导入按行校验，出错的行标红跳过，不阻断整批。
+          </Callout>
+
+          <Field
+            htmlFor="roster-file"
+            label="名单文件"
+            hint="支持 .csv（UTF-8 / GBK）。列按表头名自动匹配。"
+          >
+            <input
+              id="roster-file"
+              className="input"
+              type="file"
+              accept=".csv,.txt"
+              onChange={(event) => void handleRosterFile(event.target.files?.[0] ?? null)}
+            />
+          </Field>
+
+          {rosterError ? (
+            <Callout tone="danger" title="文件解析失败">
+              {rosterError}
+            </Callout>
+          ) : null}
+
+          {rosterResult ? (
+            <>
+              <Callout
+                tone={rosterResult.failed > 0 ? "warn" : "ok"}
+                title={`导入完成：成功 ${rosterResult.succeeded} 行，失败 ${rosterResult.failed} 行`}
+              >
+                新建 {rosterResult.created} 个账号，更新 {rosterResult.updated} 个账号。
+                {rosterResult.failures.length > 0 ? (
+                  <ul className="rule-list" style={{ marginTop: "var(--sp-3)" }}>
+                    {rosterResult.failures.map((failure) => (
+                      <li key={`${failure.rowNo}-${failure.account}`}>
+                        第 {failure.rowNo} 行 · {failure.account || "（无账号）"} · {failure.reason}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </Callout>
+              {rosterResult.initialPasswords.length > 0 ? (
+                <Callout tone="warn" title="初始密码（仅显示一次）">
+                  <div className="table-wrap">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th scope="col">账号</th>
+                          <th scope="col">初始密码</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rosterResult.initialPasswords.map((item) => (
+                          <tr key={item.account}>
+                            <td>{item.account}</td>
+                            <td className="mono">{item.password}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  用户首次登录后需修改密码。
+                </Callout>
+              ) : null}
+            </>
+          ) : null}
+
+          {rosterRows.length > 0 ? (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th scope="col">行</th>
+                    <th scope="col">账号</th>
+                    <th scope="col">姓名</th>
+                    <th scope="col">班级</th>
+                    <th scope="col">角色</th>
+                    <th scope="col">结果</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rosterRows.map((row) => (
+                    <tr key={row.rowNo}>
+                      <td className="num">{row.rowNo}</td>
+                      <td className="mono">{row.account || "—"}</td>
+                      <td>{row.name || "—"}</td>
+                      <td>{row.className || "—"}</td>
+                      <td>
+                        {row.roleExplicit
+                          ? roleLabelOf(row.role)
+                          : row.className
+                            ? "学生（按班级推断）"
+                            : "社会人士（按无班级推断）"}
+                      </td>
+                      <td>
+                        {row.error ? (
+                          <>
+                            <Badge tone="danger">跳过</Badge>
+                            <div className="text-xs" style={{ color: "var(--c-danger)" }}>
+                              {row.error}
+                            </div>
+                          </>
+                        ) : row.exists ? (
+                          <Badge tone="info">更新</Badge>
+                        ) : (
+                          <Badge tone="ok">新建</Badge>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+
+          {rosterFileName && rosterRows.length === 0 && rosterResult === null ? (
+            <p className="section-note">已读取 {rosterFileName}，暂无数据行。</p>
+          ) : null}
+        </div>
+      </Dialog>
 
       <Dialog
         open={editing !== null}
@@ -301,7 +613,7 @@ export function UsersPage() {
                   }}
                 >
                   <option value="">不挂组织标签（社会人士）</option>
-                  {ORG_TAGS.map((tag) => (
+                  {orgTags.map((tag) => (
                     <option key={tag.id} value={tag.id}>
                       {tag.name}
                     </option>

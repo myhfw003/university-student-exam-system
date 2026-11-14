@@ -97,12 +97,12 @@ export function AuditLogPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>时间</th>
-                  <th>操作者</th>
-                  <th>动作</th>
-                  <th>对象</th>
-                  <th>摘要</th>
-                  <th>来源</th>
+                  <th scope="col">时间</th>
+                  <th scope="col">操作者</th>
+                  <th scope="col">动作</th>
+                  <th scope="col">对象</th>
+                  <th scope="col">摘要</th>
+                  <th scope="col">来源</th>
                 </tr>
               </thead>
               <tbody>

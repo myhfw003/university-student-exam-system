@@ -15,6 +15,7 @@ import {
   Button,
   Callout,
   ConfirmDialog,
+  Dialog,
   Field,
   PageHead,
   SearchInput,
@@ -54,18 +55,72 @@ import {
 import type { ExamPaper, PaperItem, Practice } from "@exam/shared/domain/types";
 import { Icon } from "@/app/Icon";
 import { DifficultyChip, TypeBadge } from "../shared/bits";
+import { EntityTagsDialog } from "../shared/EntityTagsDialog";
 import { scopeLabel, sumScore } from "../shared/scope";
 import { PaperPreviewTable } from "../shared/PaperPreviewTable";
+import { MultiSelect } from "../shared/MultiSelect";
 
 /** 向导步骤。 */
 type Step = "basic" | "select" | "plum" | "publish";
 
-const STEPS: Array<{ key: Step; label: string; hint: string }> = [
-  { key: "basic", label: "基本信息", hint: "名称、时长与分值" },
-  { key: "select", label: "选题与配分", hint: "选题并设定每题分值" },
-  { key: "plum", label: "卷型与梅花卷", hint: "标准 / 小梅花 / 大梅花" },
-  { key: "publish", label: "名单与发布", hint: "考试名单与发布校验" },
+/** 向导步骤定义。考试与练习各一套（原型 admin-workbench.js:55-68 WIZ_STEPS）。 */
+const STEPS: Record<"exam" | "practice", Array<{ key: Step; label: string; hint: string }>> = {
+  exam: [
+    { key: "basic", label: "基本信息", hint: "名称、时长与分值" },
+    { key: "select", label: "选题与配分", hint: "选题并设定每题分值" },
+    { key: "plum", label: "卷型与梅花卷", hint: "标准 / 小梅花 / 大梅花" },
+    { key: "publish", label: "名单与发布", hint: "考试名单与发布校验" },
+  ],
+  practice: [
+    { key: "basic", label: "基本信息", hint: "开放范围与练习规则" },
+    { key: "select", label: "选题与配分", hint: "选题并设定每题分值" },
+    { key: "plum", label: "卷型与规则", hint: "固定顺序组卷" },
+    { key: "publish", label: "开放与上架", hint: "上架校验" },
+  ],
+};
+
+/**
+ * 题序规则定义。原型 shared/js/catalog.js:922-933 ORDER_RULES
+ * （shared 层未导出该表，admin 层按原型逐字落地）。
+ */
+const ORDER_RULES = [
+  {
+    id: "type" as const,
+    label: "按题型分块",
+    desc: "单选 → 多选 → 判断 → 简答 → 综合操作；同一题型内按难度从基础到较难排列。",
+  },
+  {
+    id: "manual" as const,
+    label: "按选题顺序",
+    desc: "保持组卷时的勾选顺序，不再自动重排题序。",
+  },
 ];
+
+/** 卷型卡说明（原型 admin-workbench.js:1048-1050，非 engine 的长文案）。 */
+const MODE_CARDS: Array<{ id: "standard" | "small" | "large"; label: string; desc: string }> = [
+  {
+    id: "standard",
+    label: "标准卷",
+    desc: "全体答题者同一份卷面：题序按题型分块、组内由易到难，选项顺序固定。",
+  },
+  {
+    id: "small",
+    label: "小梅花",
+    desc: "题目顺序全体统一保留，仅每位答题者的选项顺序独立打乱。",
+  },
+  {
+    id: "large",
+    label: "大梅花",
+    desc: "保留题型分块的先后顺序（单选→多选→判断→简答→综合），每个题型内部的题目顺序按答题者独立打乱，选项顺序同样独立打乱。",
+  },
+];
+
+/** 卷面粒度说明（原型 admin.js:424-429 grainText）。 */
+const GRAIN_TEXT: Record<"standard" | "small" | "large", string> = {
+  standard: "标准卷：全体答题者同一份卷面（题序与选项顺序均固定）",
+  small: "小梅花：题序统一保留，仅每位答题者的选项顺序打乱",
+  large: "大梅花：题型分块顺序保留（单选→多选→判断→简答→综合），每个题型内的题目顺序与选项顺序逐人打乱",
+};
 
 const QUESTION_TYPE_OPTIONS = [
   { value: "single", label: "单选题" },
@@ -87,6 +142,7 @@ export function PaperWizardPage() {
   const exams = useCatalog((state) => state.exams);
   const practices = useCatalog((state) => state.practices);
   const questions = useCatalog((state) => state.questions);
+  const banks = useCatalog((state) => state.banks);
   const classes = useCatalog((state) => state.classes);
   const templates = useCatalog((state) => state.paperTemplates);
 
@@ -94,19 +150,23 @@ export function PaperWizardPage() {
   useEffect(() => {
     if (paperId !== "new") return;
     if (kind === "exam") {
-      const result = createExam({ name: "新建试卷", scope: [], orderRule: "type" });
+      // 原型 admin-workbench.js:1492：对象名用「未命名试卷」，
+      // 创建后提示「已创建试卷，请完善基本信息」。
+      const result = createExam({ name: "未命名试卷", scope: [], orderRule: "type" });
       if (!result.ok || !result.exam) {
         toast.error(result.message ?? "创建失败");
         return;
       }
+      toast.ok("已创建试卷，请完善基本信息");
       navigate(`/papers/${result.exam.id}?kind=exam&step=basic`, { replace: true });
       return;
     }
-    const result = createPractice({ name: "新建练习", scope: [], orderRule: "type" });
+    const result = createPractice({ name: "未命名练习", scope: [], orderRule: "type" });
     if (!result.ok || !result.practice) {
       toast.error(result.message ?? "创建失败");
       return;
     }
+    toast.ok("已创建练习，请完善基本信息");
     navigate(`/papers/${result.practice.id}?kind=practice&step=basic`, { replace: true });
   }, [paperId, kind, navigate]);
 
@@ -175,13 +235,37 @@ export function PaperWizardPage() {
   const [bpTotal, setBpTotal] = useState(100);
   const [bpAllocation, setBpAllocation] = useState<"even" | "by_difficulty">("even");
   const [bpShortfall, setBpShortfall] = useState<string[]>([]);
+  // 重新生成前的差异（FR-AUT-03：须二次确认并给出差异提示）。
+  const [bpDiff, setBpDiff] = useState<{
+    added: string[];
+    removed: string[];
+    changed: Array<{ qid: string; from: number; to: number }>;
+    next: PaperItem[];
+  } | null>(null);
+  // 发布提醒项的覆盖理由（FR-AUT-06：可覆盖并填写理由）。
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [overrideReasons, setOverrideReasons] = useState<Record<string, string>>({});
 
   /* ------------------------------------------------------- 卷面预览状态 */
 
   const [previewStudent, setPreviewStudent] = useState("");
 
+  /* ------------------------------------------------------- 实体标签弹窗 */
+
+  // 向导页头的「标签」按钮（原型 admin-workbench.js:806）。
+  const [tagTarget, setTagTarget] = useState<{
+    kind: "exam" | "practice";
+    id: string;
+    name: string;
+    tags: string[];
+  } | null>(null);
+
   const items = useMemo(() => (item ? itemsOf(item) : []), [item]);
   const total = sumScore(items);
+
+  /** 当前题序规则的说明文案（原型 ORDER_RULES desc）。 */
+  const orderRuleMeta =
+    ORDER_RULES.find((r) => r.id === orderRule) ?? ORDER_RULES[0]!;
 
   const available = useMemo(
     () => publishedQuestionIds(questions.map((q) => q.id)).map((id) => getQuestion(id)).filter((q): q is NonNullable<typeof q> => Boolean(q)),
@@ -207,6 +291,33 @@ export function PaperWizardPage() {
     });
   }, [available, items, bankFilter, typeFilter, tagFilter, keyword]);
 
+  // 多选筛选项：题库带已发布题数，题型带可选题数（原型 admin-workbench.js:940-946）。
+  const bankFilterItems = useMemo(() => {
+    const publishedByBank = new Map<string, number>();
+    for (const q of questions) {
+      if (q.status !== "published") continue;
+      for (const b of banks) {
+        if (!b.questionIds.includes(q.id)) continue;
+        publishedByBank.set(b.id, (publishedByBank.get(b.id) ?? 0) + 1);
+      }
+    }
+    return banks.map((b) => ({
+      value: b.id,
+      label: b.name,
+      meta: `${publishedByBank.get(b.id) ?? 0} 题`,
+    }));
+  }, [banks, questions]);
+
+  const typeFilterItems = useMemo(
+    () =>
+      QUESTION_TYPE_OPTIONS.map((t) => ({
+        value: t.value,
+        label: t.label,
+        meta: `${available.filter((q) => q.type === t.value).length} 题`,
+      })),
+    [available],
+  );
+
   const pickedList = useMemo(() => {
     if (!item) return [];
     const byQid = new Map(items.map((i) => [i.qid, i]));
@@ -220,6 +331,10 @@ export function PaperWizardPage() {
   /* ------------------------------------------------------------ 动作 */
 
   const goStep = (next: Step) => {
+    // 离开第 4 步时回写考试设置（原型 admin-workbench.js:1534-1537）。
+    if (step === "publish" && next !== "publish") {
+      savePublishSettings();
+    }
     const nextParams = new URLSearchParams(params);
     nextParams.set("kind", kind);
     nextParams.set("step", next);
@@ -288,14 +403,19 @@ export function PaperWizardPage() {
     if (!result.ok) toast.error(result.message ?? "保存失败");
   };
 
-  /** 按题量均分。 */
+  /** 按题量均分：余数逐个补齐，总和精确等于目标（原型 admin-workbench.js:1215-1222）。 */
   const evenScores = () => {
-    if (!item || items.length === 0) return;
-    const base = Math.floor((totalScore || total) / items.length);
+    if (!item || items.length === 0) {
+      toast.error("请先选择题目");
+      return;
+    }
+    const target = totalScore || total;
+    const base = Math.floor(target / items.length);
+    const rem = target - base * items.length;
     const result = setPaperItems(
       kind,
       item.id,
-      items.map((it) => ({ qid: it.qid, score: base })),
+      items.map((it, index) => ({ qid: it.qid, score: base + (index < rem ? 1 : 0) })),
     );
     if (result.ok) toast.ok(`已按 ${items.length} 题均分为 ${base} 分`);
   };
@@ -344,14 +464,28 @@ export function PaperWizardPage() {
 
     try {
       const result = selectQuestions(rules, pool, autoSeed(item.id), difficultyLevels());
-      const saved = setPaperItems(kind, item.id, result.items);
-      if (!saved.ok) {
-        toast.error(saved.message ?? "保存失败");
-        return;
-      }
+      // 与当前卷面比对：新增 / 移除 / 分值变化。
+      const current = itemsOf(item);
+      const currentMap = new Map(current.map((i) => [i.qid, i.score]));
+      const nextMap = new Map(result.items.map((i) => [i.qid, i.score]));
+      const diff = {
+        added: result.items.filter((i) => !currentMap.has(i.qid)).map((i) => i.qid),
+        removed: current.filter((i) => !nextMap.has(i.qid)).map((i) => i.qid),
+        changed: result.items
+          .filter((i) => currentMap.has(i.qid) && currentMap.get(i.qid) !== i.score)
+          .map((i) => ({ qid: i.qid, from: currentMap.get(i.qid) ?? 0, to: i.score })),
+        next: result.items,
+      };
+
       setBpShortfall([]);
       setBlueprintOpen(false);
-      toast.ok(`已生成 ${result.itemCount} 题，合计 ${result.totalScore} 分`);
+
+      // 有差异就二次确认，避免覆盖掉教师的手工微调。
+      if (diff.added.length || diff.removed.length || diff.changed.length) {
+        setBpDiff(diff);
+        return;
+      }
+      applyBlueprint(result.items, result.totalScore);
     } catch (error) {
       if (error instanceof InsufficientQuestionPoolError) {
         setBpShortfall(
@@ -365,21 +499,57 @@ export function PaperWizardPage() {
     }
   };
 
-  /** 套用卷型模板。 */
+  /** 应用抽题结果。 */
+  const applyBlueprint = (next: PaperItem[], totalScore?: number) => {
+    if (!item) return;
+    const saved = setPaperItems(kind, item.id, next);
+    if (!saved.ok) {
+      toast.error(saved.message ?? "保存失败");
+      return;
+    }
+    setBpDiff(null);
+    toast.ok(
+      totalScore === undefined
+        ? `已生成 ${next.length} 题`
+        : `已生成 ${next.length} 题，合计 ${totalScore} 分`,
+    );
+  };
+
+  /** 套用卷型模板（FR-AUT-07：跳过已停用题目并提示）。 */
   const applyTemplate = (templateId: string) => {
     if (!item) return;
     const template = templates.find((t) => t.id === templateId);
     if (!template) return;
-    const result = setPaperItems(kind, item.id, template.items);
+    // 已停用 / 非已发布的题目不进入卷面，但要明确告知跳过了哪些。
+    const usable = template.items.filter((i) => getQuestion(i.qid)?.status === "published");
+    const skipped = template.items.filter((i) => getQuestion(i.qid)?.status !== "published");
+    if (usable.length === 0) {
+      toast.error("模板中的题目均未发布，无法套用");
+      return;
+    }
+    const result = setPaperItems(kind, item.id, usable);
     if (!result.ok) {
       toast.error(result.message ?? "套用失败");
       return;
     }
-    toast.ok(`已套用模板「${template.name}」`);
+    // 套用模板时同步卷型（原型 admin-workbench.js:1763-1765）。
+    if (kind === "exam" && template.mode !== "fixed") {
+      setPlumCfg(item.id, { mode: template.mode });
+    }
+    toast.ok(
+      skipped.length > 0
+        ? `已套用模板「${template.name}」，跳过 ${skipped.length} 道未发布题目`
+        : `已套用模板「${template.name}」`,
+    );
   };
 
   const saveAsTemplate = (templateName: string) => {
     if (!item) return;
+    // 原型 admin-workbench.js:1777 —— 空题库时先给出原型文案，不落到 shared 的通用报错。
+    if (items.length === 0) {
+      toast.error("请先选择题目再保存模板");
+      return;
+    }
     const result = savePaperTemplate({
       name: templateName,
       kind,
@@ -392,7 +562,7 @@ export function PaperWizardPage() {
       toast.error(result.message ?? "保存失败");
       return;
     }
-    toast.ok("已保存为卷型模板");
+    toast.ok(`已保存卷型模板「${templateName}」`);
   };
 
   const setMode = (mode: "standard" | "small" | "large") => {
@@ -405,18 +575,54 @@ export function PaperWizardPage() {
     if (!item) return;
     const check = preflight(kind, item.id);
     if (!check.ok) {
-      toast.error(`发布校验未通过，${check.failed} 项待修正`);
+      toast.error(`仍有 ${check.failed} 项校验未通过，无法发布`);
+      return;
+    }
+    // 有提醒项且没写覆盖理由时，先要理由再发布（FR-AUT-06）。
+    if (check.warnings > 0 && kind === "exam") {
+      const existing = (item as ExamPaper).overrideReasons ?? {};
+      const missing = check.checks.filter(
+        (c) => !c.ok && c.level === "warning" && !existing[c.key],
+      );
+      if (missing.length > 0) {
+        setOverrideReasons({ ...existing });
+        setOverrideOpen(true);
+        return;
+      }
+    }
+    doPublish();
+  };
+
+  /** 回写第 4 步的考试设置（答案公布时机 / 补考策略）。 */
+  const savePublishSettings = (): boolean => {
+    if (!item || kind !== "exam") return true;
+    return setExamMeta(item.id, {
+      publishAnswer: publishAnswer as ExamPaper["publishAnswer"],
+      allowRetake,
+    }).ok;
+  };
+
+  const doPublish = (reasons?: Record<string, string>) => {
+    if (!item) return;
+    // 发布时回写第 4 步改动，避免丢失（原型 admin-workbench.js:1580-1583）。
+    if (!savePublishSettings()) {
+      toast.error("保存失败");
       return;
     }
     const ok =
       kind === "exam"
-        ? setExamMeta(item.id, { status: "ongoing", published: true }).ok
+        ? setExamMeta(item.id, {
+            status: "ongoing",
+            published: true,
+            ...(reasons ? { overrideReasons: reasons } : {}),
+          }).ok
         : setPracticeMeta(item.id, { status: "published", published: true }).ok;
     if (!ok) {
       toast.error("发布失败");
       return;
     }
-    toast.ok(kind === "exam" ? "考试已发布" : "练习已上架");
+    setOverrideOpen(false);
+    toast.ok(kind === "exam" ? "试卷已发布，答题端可见" : "练习已上架，答题端可见");
   };
 
   const unpublish = () => {
@@ -429,7 +635,7 @@ export function PaperWizardPage() {
       toast.error("撤回失败");
       return;
     }
-    toast.ok(kind === "exam" ? "已撤回发布" : "已下架");
+    toast.ok(kind === "exam" ? "试卷已撤回发布" : "练习已下架");
   };
 
   /* ------------------------------------------------------------ 渲染 */
@@ -448,7 +654,8 @@ export function PaperWizardPage() {
     );
   }
 
-  const currentIndex = STEPS.findIndex((s) => s.key === step);
+  const steps = STEPS[kind];
+  const currentIndex = steps.findIndex((s) => s.key === step);
   const published = kind === "exam"
     ? (item as ExamPaper).status !== "draft" && (item as ExamPaper).published
     : (item as Practice).status === "published";
@@ -461,16 +668,28 @@ export function PaperWizardPage() {
     <>
       <PageHead
         title={item.name}
-        sub={`${kind === "exam" ? "考试卷" : "练习"} · ${(item as ExamPaper).batch || item.note || "尚未填写说明"} · 第 ${currentIndex + 1} / ${STEPS.length} 步`}
+        sub={`${kind === "exam" ? "考试卷" : "练习"} · ${(item as ExamPaper).batch || item.note || "尚未填写说明"} · 第 ${currentIndex + 1} / ${steps.length} 步`}
         actions={
           <>
             <Button onClick={() => navigate(`/papers?kind=${kind}`)}>返回列表</Button>
+            <Button
+              onClick={() =>
+                setTagTarget({
+                  kind,
+                  id: item.id,
+                  name: item.name,
+                  tags: item.tags,
+                })
+              }
+            >
+              标签
+            </Button>
           </>
         }
       />
 
       <ol className="steps">
-        {STEPS.map((s, index) => {
+        {steps.map((s, index) => {
           const cls = s.key === step ? "is-current" : index < currentIndex ? "is-done" : "";
           return (
             <li className={`step ${cls}`} key={s.key}>
@@ -688,30 +907,22 @@ export function PaperWizardPage() {
             </div>
             <div className="card-body">
               <div className="row" style={{ marginBottom: "var(--sp-3)" }}>
-                <SelectInput
-                  aria-label="题库筛选"
-                  value={bankFilter[0] ?? ""}
-                  onChange={(e) => setBankFilter(e.target.value ? [e.target.value] : [])}
-                >
-                  <option value="">全部题库</option>
-                  {useCatalog.getState().banks.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </SelectInput>
-                <SelectInput
-                  aria-label="题型筛选"
-                  value={typeFilter[0] ?? ""}
-                  onChange={(e) => setTypeFilter(e.target.value ? [e.target.value] : [])}
-                >
-                  <option value="">全部题型</option>
-                  {QUESTION_TYPE_OPTIONS.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </SelectInput>
+                <MultiSelect
+                  title="题库"
+                  allLabel="全部题库"
+                  minWidth={170}
+                  items={bankFilterItems}
+                  selected={bankFilter}
+                  onChange={setBankFilter}
+                />
+                <MultiSelect
+                  title="题型"
+                  allLabel="全部题型"
+                  minWidth={150}
+                  items={typeFilterItems}
+                  selected={typeFilter}
+                  onChange={setTypeFilter}
+                />
                 <SearchInput
                   label="搜索题号或题干"
                   value={keyword}
@@ -720,6 +931,9 @@ export function PaperWizardPage() {
                   onChange={setKeyword}
                 />
               </div>
+              <p className="section-note" style={{ margin: "-4px 0 var(--sp-3)" }}>
+                题库与题型均可多选；未选择时表示不限制，命中任一所选项即列出。
+              </p>
               <div className="filter-block">
                 <div className="filter-group-label">标签筛选</div>
                 <div className="row-tight">
@@ -784,11 +998,7 @@ export function PaperWizardPage() {
               <Field
                 htmlFor="wiz-order-rule"
                 label="题序规则"
-                hint={
-                  orderRule === "type"
-                    ? "按题型分块、组内由易到难。下列序号是出卷的基础题序。"
-                    : "按选题顺序出卷，完全人工指定。"
-                }
+                hint={`${orderRuleMeta.desc} 下列序号是出卷的基础题序：标准卷与小梅花按此顺序出卷，大梅花保留题型分块顺序、仅在每个题型内部打乱题目。`}
               >
                 <SelectInput
                   id="wiz-order-rule"
@@ -798,10 +1008,18 @@ export function PaperWizardPage() {
                     setOrderRule(next);
                     if (kind === "exam") setExamMeta(item.id, { orderRule: next });
                     else setPracticeMeta(item.id, { orderRule: next });
+                    toast.ok(
+                      next === "type"
+                        ? "题序已按题型分块、组内由易到难排布"
+                        : "题序已改为按选题顺序",
+                    );
                   }}
                 >
-                  <option value="type">按题型分块</option>
-                  <option value="manual">人工指定</option>
+                  {ORDER_RULES.map((rule) => (
+                    <option key={rule.id} value={rule.id}>
+                      {rule.label}
+                    </option>
+                  ))}
                 </SelectInput>
               </Field>
 
@@ -923,14 +1141,14 @@ export function PaperWizardPage() {
                 <h2 className="card-title">卷型与规则</h2>
               </div>
               <div className="card-body">
-                <Callout tone="info" title="练习卷按固定顺序组卷">
+                <Callout icon={<Icon name="info" />} title="练习卷按固定顺序组卷">
                   练习卷面向单个答题者的巩固训练，题序按第 2 步选定的题序规则排布，选项顺序固定，不生成梅花卷变体；需要变式训练时可在题库中维护多套练习。
                 </Callout>
                 <dl className="kv" style={{ marginTop: "var(--sp-5)" }}>
                   <dt>题量</dt>
                   <dd>{items.length} 道</dd>
                   <dt>题序规则</dt>
-                  <dd>{orderRule === "type" ? "按题型分块" : "人工指定"}</dd>
+                  <dd>{orderRuleMeta.label}</dd>
                   <dt>总分</dt>
                   <dd>{total} 分</dd>
                   <dt>时长</dt>
@@ -954,18 +1172,18 @@ export function PaperWizardPage() {
                 </div>
                 <div className="card-body">
                   <div className="grid-3">
-                    {(["standard", "small", "large"] as const).map((mode) => {
-                      const on = plumCfgOf(item.id).mode === mode;
+                    {MODE_CARDS.map((mode) => {
+                      const on = plumCfgOf(item.id).mode === mode.id;
                       return (
                         <button
-                          key={mode}
+                          key={mode.id}
                           type="button"
                           className={`mode-card${on ? " is-on" : ""}`}
                           aria-pressed={on}
-                          onClick={() => setMode(mode)}
+                          onClick={() => setMode(mode.id)}
                         >
-                          <span className="mode-name">{PAPER_MODES[mode].label}</span>
-                          <span className="mode-desc">{PAPER_MODES[mode].desc}</span>
+                          <span className="mode-name">{mode.label}</span>
+                          <span className="mode-desc">{mode.desc}</span>
                         </button>
                       );
                     })}
@@ -975,7 +1193,7 @@ export function PaperWizardPage() {
                     <div className="field">
                       <span className="field-label">题序规则</span>
                       <div className="text-sm text-3">
-                        {orderRule === "type" ? "按题型分块" : "人工指定"}（第 2 步设定）
+                        {orderRuleMeta.label}（第 2 步设定）
                       </div>
                     </div>
                     <div className="field">
@@ -990,12 +1208,20 @@ export function PaperWizardPage() {
                     </div>
                   </div>
 
-                  <Callout tone="info" title="置换口径">
+                  <Callout icon={<Icon name="info" />} title="置换口径">
                     {plumCfgOf(item.id).mode === "standard"
                       ? "标准卷不生成变体，全体答题者共用同一份卷面。"
-                      : `当前名单 ${scopeStudents.length} 名答题者 → 共 ${scopeStudents.length} 种不同卷面。`}{" "}
+                      : plumCfgOf(item.id).mode === "small"
+                        ? `当前名单 ${scopeStudents.length} 名答题者 → 共 ${scopeStudents.length} 种不同卷面（题序统一，仅选项顺序逐人打乱）。`
+                        : `当前名单 ${scopeStudents.length} 名答题者 → 共 ${scopeStudents.length} 种不同卷面（题型分块顺序不变，组内题序与选项顺序逐人打乱）。`}{" "}
+                    小梅花保留统一题序、仅逐人打乱选项；大梅花保留题型分块顺序（单选→多选→判断→简答→综合），仅在每个题型内部打乱题目顺序，选项也逐人打乱。{" "}
                     置换种子由系统按试卷自动生成，无需手工设置；同一试卷重复出卷结果一致，可随时复核。判断题固定不参与选项置换。
                   </Callout>
+                  <div className="row" style={{ marginTop: "var(--sp-5)" }}>
+                    <span className="text-sm text-3">
+                      卷型选择即时生效并自动保存，可切换到「答题者卷面」预览逐人对照：标准卷完全一致，小梅花仅选项顺序不同，大梅花题型分块不变、组内题序与选项顺序均不同。
+                    </span>
+                  </div>
                 </div>
               </section>
 
@@ -1037,6 +1263,7 @@ export function PaperWizardPage() {
                             <span className="text-sm text-3">
                               卷型 {PAPER_MODES[paper.mode].label} · 置换号 {paper.seedLabel}（系统自动生成）
                             </span>
+                            <span className="text-sm text-3">· {GRAIN_TEXT[paper.mode]}</span>
                           </div>
                           <PaperPreviewTable
                             paper={paper}
@@ -1172,15 +1399,20 @@ export function PaperWizardPage() {
             <div style={{ marginTop: "var(--sp-3)" }}>
               <ul className="checklist">
                 {check.checks.map((c) => (
-                  <li className={`check-item ${c.ok ? "is-ok" : "is-bad"}`} key={c.key}>
+                  <li
+                    className={`check-item ${c.ok ? "is-ok" : c.level === "warning" ? "" : "is-bad"}`}
+                    key={c.key}
+                  >
                     <span className="check-mark" aria-hidden="true">
-                      <Icon name={c.ok ? "check" : "close"} />
+                      <Icon name={c.ok ? "check" : c.level === "warning" ? "alert" : "close"} />
                     </span>
                     <span className="check-text">
                       <span className="check-label">{c.label}</span>
                       <span className="check-detail">{c.detail}</span>
                     </span>
-                    <span className="check-state">{c.ok ? "通过" : "未通过"}</span>
+                    <span className="check-state">
+                      {c.ok ? "通过" : c.level === "warning" ? "警告" : "未通过"}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -1188,12 +1420,14 @@ export function PaperWizardPage() {
                 共 {check.total} 项检查，
                 {check.failed
                   ? `其中 ${check.failed} 项未通过，需修正后才能发布。`
-                  : "全部通过，可以发布。"}
+                  : check.warnings > 0
+                    ? `其中 ${check.warnings} 项为提醒，发布时需填写覆盖理由。`
+                    : "全部通过，可以发布。"}
               </p>
             </div>
 
             {!check.ok ? (
-              <Callout tone="warn" title="存在未通过的校验项">
+              <Callout tone="warn" icon={<Icon name="alert" />} title="存在未通过的校验项">
                 请先修正上述问题，发布按钮在全部校验通过后才会启用。
               </Callout>
             ) : null}
@@ -1337,6 +1571,120 @@ export function PaperWizardPage() {
           setBpShortfall([]);
         }}
         onConfirm={runBlueprint}
+      />
+
+      {/* 重新生成的二次确认与差异清单（FR-AUT-03）。 */}
+      <Dialog
+        open={bpDiff !== null}
+        onClose={() => setBpDiff(null)}
+        title="重新生成会覆盖当前卷面"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setBpDiff(null)}>
+              取消
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                if (!bpDiff) return;
+                applyBlueprint(bpDiff.next);
+              }}
+            >
+              确认替换
+            </Button>
+          </>
+        }
+      >
+        <div className="stack">
+          <p className="section-note">
+            抽题结果与当前卷面有差异，替换后手工微调会丢失。请确认下列差异后再替换。
+          </p>
+          {bpDiff && bpDiff.added.length > 0 ? (
+            <div>
+              <div className="field-label">新增（{bpDiff.added.length}）</div>
+              <ul className="rule-list">
+                {bpDiff.added.map((qid) => (
+                  <li key={qid}>
+                    <span className="rule-dot">+</span>
+                    <span>
+                      {qid} · {getQuestion(qid)?.stem ?? ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {bpDiff && bpDiff.removed.length > 0 ? (
+            <div>
+              <div className="field-label">移除（{bpDiff.removed.length}）</div>
+              <ul className="rule-list">
+                {bpDiff.removed.map((qid) => (
+                  <li key={qid}>
+                    <span className="rule-dot">−</span>
+                    <span>
+                      {qid} · {getQuestion(qid)?.stem ?? ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {bpDiff && bpDiff.changed.length > 0 ? (
+            <div>
+              <div className="field-label">分值变化（{bpDiff.changed.length}）</div>
+              <ul className="rule-list">
+                {bpDiff.changed.map((item) => (
+                  <li key={item.qid}>
+                    <span className="rule-dot">≈</span>
+                    <span>
+                      {item.qid} · {getQuestion(item.qid)?.stem ?? ""} · {item.from} → {item.to} 分
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      </Dialog>
+
+      {/* 提醒项的覆盖理由（FR-AUT-06）。 */}
+      <Dialog
+        open={overrideOpen}
+        onClose={() => setOverrideOpen(false)}
+        title="填写提醒项的覆盖理由"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setOverrideOpen(false)}>
+              取消
+            </Button>
+            <Button variant="primary" onClick={() => doPublish(overrideReasons)}>
+              确认发布
+            </Button>
+          </>
+        }
+      >
+        <div className="stack">
+          {check.checks
+            .filter((c) => !c.ok && c.level === "warning")
+            .map((c) => (
+              <Field key={c.key} label={c.label} hint={c.detail} htmlFor={`override-${c.key}`}>
+                <TextArea
+                  id={`override-${c.key}`}
+                  value={overrideReasons[c.key] ?? ""}
+                  placeholder="填写覆盖理由，例如：本次侧重主观题作答能力"
+                  onChange={(event) =>
+                    setOverrideReasons((prev) => ({ ...prev, [c.key]: event.target.value }))
+                  }
+                />
+              </Field>
+            ))}
+        </div>
+      </Dialog>
+
+      {/* 实体标签弹窗（原型 admin.entity.tags）。 */}
+      <EntityTagsDialog
+        target={tagTarget}
+        onClose={() => setTagTarget(null)}
       />
     </>
   );

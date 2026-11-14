@@ -6,6 +6,7 @@
 
 import type { ReactNode } from "react";
 import { formatClock } from "@exam/shared";
+import { Icon } from "@/app/Icon";
 
 /** 顶栏属性。 */
 export interface ExamBarProps {
@@ -58,6 +59,7 @@ export function ExamBar({
         </div>
       ) : null}
       <button type="button" className="btn" onClick={onToggleFlag}>
+        <Icon name="flag" />
         {flagLabel}
       </button>
       <button type="button" className="btn btn-primary" onClick={onSubmit}>

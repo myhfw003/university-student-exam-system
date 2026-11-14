@@ -601,6 +601,16 @@
     font-weight: 600;
   }
 
+  .chip:disabled {
+    opacity: 0.42;
+    cursor: not-allowed;
+  }
+  .chip:disabled:hover {
+    border-color: var(--c-border);
+    color: var(--c-text-2);
+    background: var(--c-surface);
+  }
+
   /* ==========================================================================
      徽标
      ========================================================================== */
@@ -1436,107 +1446,12 @@
 
   .matrix tbody tr:hover .m-student { background: var(--c-surface-2); }
 
+  /* 原型 app.css:825 的 .m-no（等宽数字样式）保留；.mcell 系列是原型的死 CSS
+     （原型 JS 从未渲染矩阵视图），实现不移植。 */
+
   .m-no { font-family: var(--font-mono); color: var(--c-text-3); }
 
-  .mcell.is-qdiff .m-no { color: var(--c-primary-ink); font-weight: 600; }
-
   .matrix-legend { display: flex; flex-wrap: wrap; gap: var(--sp-4); font-size: var(--fs-xs); color: var(--c-text-3); }
-
-  /* ==========================================================================
-     响应式：PC 优先，窄窗口降级
-     ========================================================================== */
-  @media (max-width: 1279px) {
-    .app-body {
-      grid-template-columns: var(--rail-w) minmax(0, 1fr);
-    }
-    .sidebar {
-      padding: var(--sp-4) var(--sp-2);
-    }
-    .nav-group-title {
-      display: none;
-    }
-    .nav-item {
-      justify-content: center;
-      padding: 10px 0;
-    }
-    .nav-label,
-    .nav-count {
-      display: none;
-    }
-    .view-inner {
-      padding: var(--sp-5) var(--sp-5) var(--sp-10);
-    }
-    .split {
-      grid-template-columns: minmax(0, 1fr) 280px;
-    }
-    .split-side {
-      grid-template-columns: 272px minmax(0, 1fr);
-    }
-  }
-
-  @media (max-width: 1023px) {
-    .app-body {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    .sidebar {
-      position: fixed;
-      top: var(--topbar-h);
-      bottom: 0;
-      left: 0;
-      width: 264px;
-      z-index: var(--z-drawer);
-      transform: translateX(-100%);
-      transition: transform var(--dur-3) var(--ease-out);
-      box-shadow: var(--sh-3);
-    }
-    .sidebar.is-open {
-      transform: none;
-    }
-    .sidebar .nav-group-title {
-      display: block;
-    }
-    .sidebar .nav-item {
-      justify-content: flex-start;
-      padding: 9px var(--sp-3);
-    }
-    .sidebar .nav-label {
-      display: inline;
-    }
-    .nav-toggle {
-      display: inline-grid !important;
-    }
-    .split,
-    .split-side {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    .grid-4 {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-
-  @media (max-width: 767px) {
-    .view-inner {
-      padding: var(--sp-4) var(--sp-4) var(--sp-10);
-    }
-    .grid-2,
-    .grid-3,
-    .grid-4 {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    .page-title {
-      font-size: var(--fs-xl);
-    }
-    .brand-sub {
-      display: none;
-    }
-    .topbar {
-      padding: 0 var(--sp-3);
-      gap: var(--sp-2);
-    }
-    .stat-value {
-      font-size: var(--fs-2xl);
-    }
-  }
 
   .nav-toggle {
     display: none;
@@ -1682,6 +1597,8 @@
 
   .sheet-legend {
     display: flex; flex-wrap: wrap; gap: var(--sp-3); font-size: var(--fs-xs); color: var(--c-text-3);
+    /* 原型在图例节点上写 margin-top:var(--sp-3)，这里落到类上，避免内联样式。 */
+    margin-top: var(--sp-3);
   }
 
   .legend-dot {
@@ -1788,10 +1705,6 @@
     background: var(--c-primary-soft); border-color: var(--c-primary-line); color: var(--c-primary-ink); font-weight: 600;
   }
 
-  .mcell.is-diff .m-map {
-    color: var(--c-warn); font-weight: 600;
-  }
-
   .step.is-current .step-btn {
     border-color: var(--c-primary); background: var(--c-primary-soft);
   }
@@ -1864,21 +1777,31 @@
     display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-2); list-style: none; margin: 0 0 var(--sp-5); padding: 0;
   }
 
-  .steps {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .step { display: grid; min-width: 0; }
+
+  .step-btn {
+    display: flex; align-items: center; gap: var(--sp-3); width: 100%; padding: var(--sp-3); border: 1px solid var(--c-border); border-radius: var(--r-md); background: var(--c-surface); color: var(--c-text-2); text-align: left; cursor: pointer;
   }
 
-  .steps {
-    grid-template-columns: minmax(0, 1fr);
+  .step-btn:hover { border-color: var(--c-border-strong); background: var(--c-surface-2); }
+
+  .step-btn:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+
+  .step-index {
+    display: grid; place-items: center; width: 26px; height: 26px; flex: none; border: 1px solid var(--c-border-strong); border-radius: var(--r-pill); font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--c-text-3);
   }
 
   .step-text {
     display: grid; gap: 1px; min-width: 0;
   }
 
+  .step-label { font-size: var(--fs-sm); font-weight: 600; color: var(--c-text); }
+
   .step-hint {
     font-size: var(--fs-xs); color: var(--c-text-3);
   }
+
+  .step.is-done .step-index { border-color: var(--c-success-line); background: var(--c-success-soft); color: var(--c-success); }
 
   .mode-card {
     display: grid; gap: 4px; padding: var(--sp-4); border: 1px solid var(--c-border); border-radius: var(--r-md); background: var(--c-surface); text-align: left; cursor: pointer;
@@ -2012,10 +1935,6 @@
     height: 28px; padding: 0 8px; font-size: var(--fs-sm);
   }
 
-  .wiz-picked-row {
-    grid-template-columns: 20px minmax(0, 1fr) 72px 30px;
-  }
-
   .checklist {
     list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2);
   }
@@ -2118,14 +2037,6 @@
 
   .grid-main {
     display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: var(--sp-5); align-items: start;
-  }
-
-  .grid-main {
-    grid-template-columns: minmax(0, 1fr) 320px;
-  }
-
-  .grid-main {
-    grid-template-columns: minmax(0, 1fr);
   }
 
 }
@@ -2264,5 +2175,126 @@
   .top-link:focus-visible {
     outline: 2px solid var(--c-focus);
     outline-offset: 2px;
+  }
+}
+
+
+/* ==========================================================================
+   响应式覆盖
+   --------------------------------------------------------------------------
+   放在所有基础规则之后：@layer components 的多个块会合并成同一层，
+   同层内按源码顺序决定优先级——响应式规则若排在基础规则之前，
+   会被后面的基础规则覆盖（窄屏降级失效）。
+   ========================================================================== */
+@layer components {
+  /* ==========================================================================
+     响应式：PC 优先，窄窗口降级
+     ========================================================================== */
+  @media (max-width: 1279px) {
+    .app-body {
+      grid-template-columns: var(--rail-w) minmax(0, 1fr);
+    }
+    .sidebar {
+      padding: var(--sp-4) var(--sp-2);
+    }
+    .nav-group-title {
+      display: none;
+    }
+    .nav-item {
+      justify-content: center;
+      padding: 10px 0;
+    }
+    .nav-label,
+    .nav-count {
+      display: none;
+    }
+    .view-inner {
+      padding: var(--sp-5) var(--sp-5) var(--sp-10);
+    }
+    .split {
+      grid-template-columns: minmax(0, 1fr) 280px;
+    }
+    .split-side {
+      grid-template-columns: 272px minmax(0, 1fr);
+    }
+    .grid-main {
+      grid-template-columns: minmax(0, 1fr) 320px;
+    }
+  }
+
+  @media (max-width: 1023px) {
+    .app-body {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .sidebar {
+      position: fixed;
+      top: var(--topbar-h);
+      bottom: 0;
+      left: 0;
+      width: 264px;
+      z-index: var(--z-drawer);
+      transform: translateX(-100%);
+      transition: transform var(--dur-3) var(--ease-out);
+      box-shadow: var(--sh-3);
+    }
+    .sidebar.is-open {
+      transform: none;
+    }
+    .sidebar .nav-group-title {
+      display: block;
+    }
+    .sidebar .nav-item {
+      justify-content: flex-start;
+      padding: 9px var(--sp-3);
+    }
+    .sidebar .nav-label {
+      display: inline;
+    }
+    .nav-toggle {
+      display: inline-grid !important;
+    }
+    .split,
+    .split-side {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .grid-4 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .grid-main {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .steps {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 767px) {
+    .view-inner {
+      padding: var(--sp-4) var(--sp-4) var(--sp-10);
+    }
+    .grid-2,
+    .grid-3,
+    .grid-4 {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .page-title {
+      font-size: var(--fs-xl);
+    }
+    .brand-sub {
+      display: none;
+    }
+    .topbar {
+      padding: 0 var(--sp-3);
+      gap: var(--sp-2);
+    }
+    .stat-value {
+      font-size: var(--fs-2xl);
+    }
+    .steps {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .wiz-picked-row {
+      grid-template-columns: 20px minmax(0, 1fr) 72px 30px;
+    }
   }
 }

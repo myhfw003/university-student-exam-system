@@ -7,7 +7,8 @@
    可发送警告、添加备注、强制交卷。每次处置都写入审计日志。
    ========================================================================== */
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Badge,
@@ -33,6 +34,7 @@ import {
 import { useCatalog } from "@exam/shared/mock/catalog";
 import type { CandidateStatus, ProctorActionKind } from "@exam/shared/domain/types";
 import { Icon } from "@/app/Icon";
+import { SessionStatusBadge } from "../shared/bits";
 import { useProctorFeed } from "./useProctorFeed";
 
 const STATUS_TONE: Record<CandidateStatus, "ok" | "warn" | "danger" | "neutral"> = {
@@ -65,6 +67,22 @@ export function ProctoringPage() {
   const filtered = candidates.filter(
     (c) => statusFilter === "all" || c.status === statusFilter,
   );
+
+  // 虚拟滚动：只渲染可视区的行（§7.3 的 1000 考生场景）。
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 64,
+    overscan: 12,
+  });
+  const measured = virtualizer.getVirtualItems();
+  // 未测得容器高度时（首帧、或无布局环境如 jsdom）退回整表渲染，
+  // 避免出现「表格空着」的中间态。
+  const virtualRows =
+    measured.length > 0
+      ? measured
+      : filtered.map((_, index) => ({ index, key: index, start: 0, end: 0, size: 0 }));
 
   const answering = candidates.filter((c) => c.status === "answering").length;
   const submittedCount = candidates.filter(
@@ -118,6 +136,88 @@ export function ProctoringPage() {
     setDialog(null);
     setReason("");
   };
+
+  // 没带场次时先让管理员挑一个：侧栏「实时监考」指向的就是这个路由，
+  // 没有这一屏的话点侧栏会落到 404。
+  if (!sessionId) {
+    return (
+      <>
+        <PageHead
+          title="实时监考"
+          sub="选择一个考试场次，进入考生状态大屏。"
+          actions={
+            <Button onClick={() => navigate("/exam-sessions")}>返回场次列表</Button>
+          }
+        />
+
+        <section className="card">
+          <div className="card-head">
+            <h2 className="card-title">可监考场次</h2>
+            <span className="text-sm text-3">共 {sessions.length} 场</span>
+          </div>
+          <div className="card-body is-flush">
+            {sessions.length === 0 ? (
+              <Empty
+                title="暂无可监考场次"
+                body="先在「考试场次」里发布一场考试，再回到这里监考。"
+                action={
+                  <Button variant="primary" onClick={() => navigate("/exam-sessions")}>
+                    去考试场次
+                  </Button>
+                }
+              />
+            ) : (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th scope="col">场次</th>
+                      <th scope="col">状态</th>
+                      <th scope="col">开考时间</th>
+                      <th scope="col">结束时间</th>
+                      <th scope="col">考生</th>
+                      <th className="right" scope="col" aria-label="操作" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sessions.map((s) => (
+                      <tr key={s.id}>
+                        <td>
+                          <div className="strong" style={{ fontWeight: 500 }}>
+                            {s.name}
+                          </div>
+                          <div className="text-xs text-3 mono">{s.id}</div>
+                        </td>
+                        <td>
+                          <SessionStatusBadge status={s.status} />
+                        </td>
+                        <td className="text-xs">{s.openAt}</td>
+                        <td className="text-xs">{s.closeAt}</td>
+                        <td className="num">{s.roster.length} 人</td>
+                        <td className="col-actions">
+                          {s.status === "in_progress" ? (
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              onClick={() => navigate(`/monitoring/${s.id}`)}
+                            >
+                              进入监考
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-3">仅进行中的场次可监考</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </section>
+      </>
+    );
+  }
 
   if (!session) {
     return (
@@ -184,18 +284,24 @@ export function ProctoringPage() {
           />
         </div>
         <div className="card-body is-flush">
-          <div className="table-wrap">
+          {/* 1000 考生时整表渲染会拖垮监考视图：这里用虚拟滚动只渲染可视行
+              （docs/design/06-frontend.md §7.3）。 */}
+          <div
+            className="table-wrap"
+            ref={scrollRef}
+            style={{ maxHeight: "58vh", overflowY: "auto" }}
+          >
             <table className="table">
               <thead>
                 <tr>
-                  <th>考生</th>
-                  <th>状态</th>
-                  <th>切屏</th>
-                  <th>断连</th>
-                  <th>最后心跳</th>
-                  <th>已答题</th>
-                  <th>交卷时间</th>
-                  <th></th>
+                  <th scope="col">考生</th>
+                  <th scope="col">状态</th>
+                  <th scope="col">切屏</th>
+                  <th scope="col">断连</th>
+                  <th scope="col">最后心跳</th>
+                  <th scope="col">已答题</th>
+                  <th scope="col">交卷时间</th>
+                  <th scope="col"></th>
                 </tr>
               </thead>
               <tbody>
@@ -209,10 +315,21 @@ export function ProctoringPage() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((c) => {
+                  <>
+                    {/* 顶部占位：撑出虚拟滚动需要的空白高度。 */}
+                    <tr aria-hidden="true" style={{ height: virtualRows[0]?.start ?? 0, border: 0 }}>
+                      <td colSpan={8} style={{ padding: 0, border: 0 }} />
+                    </tr>
+                    {virtualRows.map((virtualRow) => {
+                    const c = filtered[virtualRow.index];
+                    if (!c) return null;
                     const student = students.find((s) => s.id === c.studentId);
                     return (
-                      <tr key={c.studentId}>
+                      <tr
+                        key={c.studentId}
+                        data-index={virtualRow.index}
+                        ref={virtualizer.measureElement}
+                      >
                         <td>
                           <div className="strong" style={{ fontWeight: 500 }}>
                             {student?.name ?? c.studentId}
@@ -276,7 +393,21 @@ export function ProctoringPage() {
                         </td>
                       </tr>
                     );
-                  })
+                    })}
+                    {/* 底部占位。 */}
+                    <tr
+                      aria-hidden="true"
+                      style={{
+                        height: Math.max(
+                          0,
+                          virtualizer.getTotalSize() - (virtualRows.at(-1)?.end ?? 0),
+                        ),
+                        border: 0,
+                      }}
+                    >
+                      <td colSpan={8} style={{ padding: 0, border: 0 }} />
+                    </tr>
+                  </>
                 )}
               </tbody>
             </table>

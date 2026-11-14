@@ -11,13 +11,16 @@
 import { useState } from "react";
 import {
   Button,
+  Callout,
   Card,
   ConfirmDialog,
   Field,
   RuleList,
   Segmented,
   SelectInput,
+  TextInput,
   toast,
+  useAuth,
 } from "@exam/shared";
 import { MULTI_POLICY } from "@exam/shared/engine/scoring";
 import { className, resetCatalog, useCatalog } from "@exam/shared/mock/catalog";
@@ -36,6 +39,10 @@ export function ProfilePage() {
   const setTheme = useThemeStore((state) => state.setTheme);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
+  // 修改密码（FR-IAM-03）：需校验原密码。
+  const changePassword = useAuth((state) => state.changePassword);
+  const [passwords, setPasswords] = useState({ current: "", next: "", confirm: "" });
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const current = students.find((s) => s.id === studentId);
 
@@ -47,12 +54,27 @@ export function ProfilePage() {
       useExamSessionStore.getState().resetAll();
       usePracticeSessionStore.getState().resetAll();
       setConfirmOpen(false);
-      toast.ok("本地数据已清除，已恢复为初始示例数据");
+      toast.ok("本地数据已清除");
     } catch {
       toast.error("清除失败，请重试");
     } finally {
       setClearing(false);
     }
+  };
+
+  const handleChangePassword = async (): Promise<void> => {
+    setPasswordError(null);
+    if (passwords.next !== passwords.confirm) {
+      setPasswordError("两次输入的新密码不一致");
+      return;
+    }
+    const result = await changePassword(passwords.current, passwords.next);
+    if (!result.ok) {
+      setPasswordError(result.message ?? "修改失败，请重试");
+      return;
+    }
+    toast.ok("密码已修改");
+    setPasswords({ current: "", next: "", confirm: "" });
   };
 
   return (
@@ -79,6 +101,54 @@ export function ProfilePage() {
             </dl>
           </Card>
 
+          <Card title="修改密码">
+            <div className="stack">
+              {passwordError ? (
+                <Callout tone="danger" title="修改失败">
+                  {passwordError}
+                </Callout>
+              ) : null}
+              <Field label="原密码" required htmlFor="pwd-current">
+                <TextInput
+                  id="pwd-current"
+                  type="password"
+                  autoComplete="current-password"
+                  value={passwords.current}
+                  onChange={(e) =>
+                    setPasswords((prev) => ({ ...prev, current: e.target.value }))
+                  }
+                />
+              </Field>
+              <Field label="新密码" required htmlFor="pwd-next">
+                <TextInput
+                  id="pwd-next"
+                  type="password"
+                  autoComplete="new-password"
+                  value={passwords.next}
+                  onChange={(e) =>
+                    setPasswords((prev) => ({ ...prev, next: e.target.value }))
+                  }
+                />
+              </Field>
+              <Field label="确认新密码" required htmlFor="pwd-confirm">
+                <TextInput
+                  id="pwd-confirm"
+                  type="password"
+                  autoComplete="new-password"
+                  value={passwords.confirm}
+                  onChange={(e) =>
+                    setPasswords((prev) => ({ ...prev, confirm: e.target.value }))
+                  }
+                />
+              </Field>
+              <div>
+                <Button variant="primary" onClick={() => void handleChangePassword()}>
+                  修改密码
+                </Button>
+              </div>
+            </div>
+          </Card>
+
           <Card title="演示：切换答题者">
             <Field
               htmlFor="stu-switch"
@@ -88,7 +158,13 @@ export function ProfilePage() {
               <SelectInput
                 id="stu-switch"
                 value={studentId}
-                onChange={(event) => setStudentId(event.target.value)}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setStudentId(next);
+                  // 原型 student.js:1923：切换答题者后提示「已切换为 <姓名>」。
+                  const name = students.find((s) => s.id === next)?.name;
+                  if (name) toast.ok(`已切换为 ${name}`);
+                }}
               >
                 {students.map((student) => (
                   <option key={student.id} value={student.id}>
@@ -142,7 +218,7 @@ export function ProfilePage() {
       <ConfirmDialog
         open={confirmOpen}
         title="清除本地数据"
-        message="将删除本机保存的作答记录、练习结果与阅卷进度，并恢复为初始示例数据。此操作不可撤销。"
+        message="将清除本机保存的全部作答记录、练习结果与阅卷进度，并恢复为初始示例数据。此操作不可撤销。"
         confirmText={clearing ? "清除中…" : "确认清除"}
         confirmVariant="danger"
         onCancel={() => setConfirmOpen(false)}

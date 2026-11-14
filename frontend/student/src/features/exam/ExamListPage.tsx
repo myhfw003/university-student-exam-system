@@ -14,11 +14,14 @@ import {
   PageHead,
   RuleList,
   SearchInput,
-  TagChip,
   TagFilter,
+  toast,
 } from "@exam/shared";
 import { useCatalog } from "@exam/shared/mock/catalog";
+import { MULTI_POLICY } from "@exam/shared/engine/scoring";
 import { useStudentStore } from "@/stores/studentStore";
+import { TagChips } from "@/features/shared/TagChips";
+import { useExamSessionStore } from "@/stores/examSessionStore";
 import { useVisibleExams } from "@/features/shared/studentData";
 
 /** 考试安排。 */
@@ -110,7 +113,6 @@ export function ExamListPage() {
           groups={groups}
           selected={selected}
           onToggle={toggleTag}
-          onClear={() => setSelected([])}
         />
       </Card>
 
@@ -123,14 +125,14 @@ export function ExamListPage() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>试卷</th>
-                    <th>标签</th>
-                    <th className="right">时长</th>
-                    <th className="right">总分</th>
-                    <th>卷型</th>
-                    <th>开放时间</th>
-                    <th>状态</th>
-                    <th className="right">操作</th>
+                    <th scope="col">试卷</th>
+                    <th scope="col">标签</th>
+                    <th className="right" scope="col">时长</th>
+                    <th className="right" scope="col">总分</th>
+                    <th scope="col">卷型</th>
+                    <th scope="col">开放时间</th>
+                    <th scope="col">状态</th>
+                    <th className="right" scope="col" aria-label="操作" />
                   </tr>
                 </thead>
                 <tbody>
@@ -166,13 +168,7 @@ export function ExamListPage() {
                           <div className="text-xs text-3">{exam.batch || "—"}</div>
                         </td>
                         <td>
-                          <div className="tag-chips">
-                            {exam.tags.map((tagId) => (
-                              <TagChip key={tagId} group="domain">
-                                {tags.find((t) => t.id === tagId)?.name ?? tagId}
-                              </TagChip>
-                            ))}
-                          </div>
+                          <TagChips tags={exam.tags} />
                         </td>
                         <td className="num">{exam.durationMin} 分钟</td>
                         <td className="num">{exam.totalScore} 分</td>
@@ -200,7 +196,20 @@ export function ExamListPage() {
                               </Button>
                             ) : null}
                             {submitted && exam.allowRetake ? (
-                              <Button size="sm" onClick={() => navigate(`/exams/${exam.id}`)}>
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  // 重考：清空本次作答与计时，再进入答题页。
+                                  useExamSessionStore.getState().resetForRetake({
+                                    examId: exam.id,
+                                    studentId,
+                                    durationMin: exam.durationMin,
+                                  });
+                                  // 原型 student.js:1836：开启重考后提示。
+                                  toast.ok("已开启重考，成绩按最高分计入");
+                                  navigate(`/exams/${exam.id}`);
+                                }}
+                              >
                                 再考一次
                               </Button>
                             ) : null}
@@ -213,7 +222,7 @@ export function ExamListPage() {
                                 进入考试
                               </Button>
                             ) : null}
-                            {!submitted && ended ? (
+                            {!submitted && ended && exam.allowRetake ? (
                               <Button
                                 size="sm"
                                 variant="primary"
@@ -252,7 +261,7 @@ export function ExamListPage() {
               "考试开始后计时，中途离开计时不中断；倒计时归零后系统自动交卷。",
               "客观题（单选、多选、判断）交卷后自动判分；主观题（简答、综合操作题）由管理端复核后计入成绩。",
               "可随时标记题目，交卷前可在答题卡中快速跳转检查。",
-              "多选题计分策略：错选不得分；漏选按答对项占比折半计分（例：正确项 ABD，漏选 A 得该题分值的 1/4）。",
+              MULTI_POLICY,
             ]}
           />
         </div>

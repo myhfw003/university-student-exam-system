@@ -1,27 +1,51 @@
 /* ==========================================================================
    知行测评 · 学生端路由守卫
-   骨架阶段：尚未接入 /auth/me，默认放行并标记为「未登录检查跳过」。
-   接入后端后在此处按登录态与角色跳转。
+   --------------------------------------------------------------------------
+   判定依据是**真实登录态**（`@exam/shared` 的 useAuth）：
+   - 状态未知：显示加载中，等 bootstrap 回来
+   - 未登录：跳 /login，并携带原路由
+   - 角色不符：跳 /403
+
+   mock 模式下 providers 会用演示身份自动登录，守卫照常跑通；
+   http 模式由 /auth/me 决定。
    ========================================================================== */
 
 import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { useAuth } from "@exam/shared";
+import type { UserRole } from "@exam/shared/domain/types";
 
 export interface RequireAuthProps {
   /** 允许的角色，缺省仅要求已登录。 */
-  roles?: string[];
+  roles?: readonly UserRole[];
 }
 
-/** 登录守卫：未登录时跳转 /login 并携带原路由。 */
+/** 加载中的占位（与外壳的 view-inner 一致，避免闪白）。 */
+function Loading() {
+  return (
+    <div className="view-inner">
+      <p className="text-3 text-sm">加载中…</p>
+    </div>
+  );
+}
+
+/** 登录守卫。 */
 export function RequireAuth({ roles }: RequireAuthProps) {
   const location = useLocation();
-  const authenticated = true; // 骨架：接入 /auth/me 后改为真实登录态
-  const role = "student"; // 骨架：接入后从用户信息读取
+  const status = useAuth((state) => state.status);
+  const user = useAuth((state) => state.user);
 
-  if (!authenticated) {
+  if (status === "unknown") return <Loading />;
+
+  if (status === "anonymous") {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
-  if (roles && roles.length > 0 && !roles.includes(role)) {
-    return <Navigate to="/403" replace />;
+
+  if (roles && roles.length > 0) {
+    const granted = roles.some((role) => user?.roles.includes(role));
+    if (!granted) {
+      return <Navigate to="/403" replace state={{ from: location.pathname }} />;
+    }
   }
+
   return <Outlet />;
 }

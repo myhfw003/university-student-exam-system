@@ -14,6 +14,18 @@ export function scopeLabel(
   return scope.map((id) => classNameOf(id)).join("、");
 }
 
+/**
+ * 卷型模板的卷型名。原型 admin-workbench.js:601 用
+ * `EX.engine.MODES[t.mode] ? EX.engine.MODES[t.mode].label : t.mode`，
+ * 练习卷模板的 mode 为 "fixed"（不在 MODES 里），故原样显示。
+ */
+export function modeLabelOf(
+  mode: "standard" | "small" | "large" | "fixed",
+  modes: Record<"standard" | "small" | "large", { label: string }>,
+): string {
+  return mode === "fixed" ? mode : modes[mode].label;
+}
+
 /** 题目总分。 */
 export function sumScore(items: ReadonlyArray<{ score: number }>): number {
   return items.reduce((sum, item) => sum + (Number(item.score) || 0), 0);

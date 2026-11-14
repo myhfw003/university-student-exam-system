@@ -6,9 +6,8 @@
    ========================================================================== */
 
 import type { BuiltPaper } from "@exam/shared/engine/paper";
-import { LETTERS } from "@exam/shared/engine/paper";
-import { TypeBadge } from "./bits";
-import { TagChips } from "./bits";
+import { LETTERS, TYPE_LABEL } from "@exam/shared/engine/paper";
+import { DifficultyChip, TagChips, TypeBadge } from "./bits";
 
 export interface PaperPreviewTableProps {
   /** 引擎构建的卷面。 */
@@ -24,9 +23,9 @@ export function PaperPreviewTable({ paper, showBase = false }: PaperPreviewTable
       <table className="table">
         <thead>
           <tr>
-            <th>题号</th>
-            {showBase ? <th>标准题号</th> : null}
-            <th>题目内容（答题者所见）</th>
+            <th scope="col">题号</th>
+            {showBase ? <th scope="col">标准题号</th> : null}
+            <th scope="col">题目内容（答题者所见）</th>
           </tr>
         </thead>
         <tbody>
@@ -43,6 +42,7 @@ export function PaperPreviewTable({ paper, showBase = false }: PaperPreviewTable
                   </div>
                   <div className="row-tight" style={{ marginTop: "var(--sp-2)" }}>
                     <TypeBadge type={q.type} />
+                    <DifficultyChip tags={q.tags} />
                     <TagChips tags={q.tags} limit={3} />
                     {item.changed ? <span className="variant-tag is-diff">选项已置换</span> : null}
                   </div>
@@ -64,7 +64,7 @@ export function PaperPreviewTable({ paper, showBase = false }: PaperPreviewTable
                     </div>
                   ) : (
                     <div className="text-sm text-3">
-                      主观题 · {q.type === "short" ? "简答" : "综合操作"} · {item.score} 分
+                      主观题 · {TYPE_LABEL[q.type]} · {item.score} 分
                     </div>
                   )}
                 </td>

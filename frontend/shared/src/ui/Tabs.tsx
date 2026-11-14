@@ -73,6 +73,9 @@ export function Tabs<T extends string = string>({
             role="tab"
             className={variant === "seg" ? undefined : "tab"}
             aria-selected={selected}
+            // 分段控件外观靠 aria-pressed 表达选中态（原型 .seg 的选择器），
+            // 缺了它分段控件就没有选中高亮。
+            aria-pressed={variant === "seg" ? selected : undefined}
             aria-disabled={item.disabled || undefined}
             disabled={item.disabled}
             tabIndex={selected ? 0 : -1}

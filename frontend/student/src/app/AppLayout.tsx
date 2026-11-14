@@ -3,25 +3,40 @@
    顶栏 + 侧栏 + 视图容器。类名沿用原型 .app / .topbar / .sidebar / .view。
    ========================================================================== */
 
-import { useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { IconButton } from "@exam/shared";
+import { useMemo, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { IconButton, useAuth } from "@exam/shared";
+import { useCatalog } from "@exam/shared/mock/catalog";
 import { Icon } from "./Icon";
 import { STUDENT_NAV } from "./nav";
+import { useStudentStore } from "@/stores/studentStore";
 import { useThemeStore } from "./themeStore";
-
-/** 当前学生身份（骨架，接后端后从 /auth/me 获取）。 */
-const CURRENT_USER = {
-  name: "林知远",
-  meta: "2023120101 · 计算机科学 2023 级 1 班",
-  initial: "林",
-};
 
 export function AppLayout() {
   const [navOpen, setNavOpen] = useState(false);
+  const navigate = useNavigate();
+  const signOut = useAuth((state) => state.signOut);
   const theme = useThemeStore((state) => state.theme);
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
   const location = useLocation();
+
+  // 当前身份：接后端后由 /auth/me 覆盖，这里先按「当前答题者 + 其名单组」派生，
+  // 不再写死姓名与班级，避免与工作台、成绩页显示的不一致。
+  const studentId = useStudentStore((state) => state.studentId);
+  const students = useCatalog((state) => state.students);
+  const classes = useCatalog((state) => state.classes);
+  const mistakes = useCatalog((state) => state.mistakes);
+  const student = students.find((s) => s.id === studentId);
+  const className = student
+    ? classes.find((c) => c.id === student.classId)?.name
+    : undefined;
+
+  // 侧栏角标：错题本显示当前答题者的错题数（原型是动态计算的）。
+  const mistakeCount = useMemo(
+    () => mistakes.filter((m) => !m.studentId || m.studentId === studentId).length,
+    [mistakes, studentId],
+  );
+  const navCounts: Record<string, number> = { "/mistakes": mistakeCount };
 
   const isActive = (path: string): boolean => {
     if (path === "/") return location.pathname === "/";
@@ -62,13 +77,24 @@ export function AppLayout() {
           >
             <Icon name={theme === "dark" ? "sun" : "moon"} />
           </IconButton>
+          <IconButton
+            label="退出登录"
+            onClick={() => {
+              signOut();
+              navigate("/login");
+            }}
+          >
+            <Icon name="logout" />
+          </IconButton>
           <div className="user-chip">
             <span className="avatar" aria-hidden="true">
-              {CURRENT_USER.initial}
+              {(student?.name ?? "考").slice(0, 1)}
             </span>
             <span className="user-chip-text">
-              <span className="user-chip-name">{CURRENT_USER.name}</span>
-              <span className="user-chip-meta">{CURRENT_USER.meta}</span>
+              <span className="user-chip-name">{student?.name ?? "考生"}</span>
+              <span className="user-chip-meta">
+                {student ? `${student.id} · ${className ?? ""}` : ""}
+              </span>
             </span>
           </div>
         </header>
@@ -92,7 +118,9 @@ export function AppLayout() {
                   >
                     <Icon name={item.icon} />
                     <span className="nav-label">{item.label}</span>
-                    {item.count ? <span className="nav-count num">{item.count}</span> : null}
+                    {navCounts[item.path] ? (
+                      <span className="nav-count num">{navCounts[item.path]}</span>
+                    ) : null}
                   </NavLink>
                 ))}
               </div>
@@ -106,6 +134,11 @@ export function AppLayout() {
           </main>
         </div>
       </div>
+
+      {/* 移动端侧栏遮罩：点击即收起导航（原型 shared/js/app.js 的 .scrim）。 */}
+      {navOpen ? (
+        <div className="scrim" role="presentation" onClick={() => setNavOpen(false)} />
+      ) : null}
     </>
   );
 }

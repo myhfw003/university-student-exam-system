@@ -3,25 +3,45 @@
    顶栏 + 侧栏 + 视图容器。类名沿用原型 .app / .topbar / .sidebar / .view。
    ========================================================================== */
 
-import { useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { IconButton } from "@exam/shared";
+import { useMemo, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { IconButton, useAuth } from "@exam/shared";
+import { useCatalog } from "@exam/shared/mock/catalog";
+import { USER_ROLE_LABEL } from "@exam/shared/mock/adminOps";
 import { Icon } from "./Icon";
 import { ADMIN_NAV } from "./nav";
 import { useThemeStore } from "./themeStore";
 
-/** 当前管理员身份（骨架，接后端后从 /auth/me 获取）。 */
-const CURRENT_USER = {
-  name: "陈砚之",
-  meta: "内容管理员",
-  initial: "陈",
-};
+/**
+ * 答题端入口地址。
+ *
+ * 生产部署：nginx 把学生端挂在站点根 `/`、管理端挂在 `/admin/`
+ * （frontend/nginx.conf），因此答题端就是站点根 `/`。
+ * 开发模式：管理端 dev server 跑在 5174 的根路径，答题端跑在 5173 端口。
+ */
+const STUDENT_APP_URL = import.meta.env.DEV ? "http://localhost:5173/" : "/";
 
 export function AppLayout() {
   const [navOpen, setNavOpen] = useState(false);
+  const navigate = useNavigate();
+  // 当前管理员身份：来自登录态（mock 模式为演示管理员，http 模式为 /auth/me）。
+  const authUser = useAuth((state) => state.user);
+  const signOut = useAuth((state) => state.signOut);
+  // 顶栏展示**首个角色**的中文名，与原型一致（演示账号同时持有系统管理员权限，
+  // 仅为让「审计」等只对系统管理员开放的页面可达）。
+  const primaryRole = authUser?.roles[0];
+  const roleLabel = primaryRole ? (USER_ROLE_LABEL[primaryRole] ?? primaryRole) : "";
   const theme = useThemeStore((state) => state.theme);
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
   const location = useLocation();
+
+  // 侧栏角标：阅卷中心显示待阅卷份数（原型是动态计算的）。
+  const reviews = useCatalog((state) => state.reviews);
+  const pendingCount = useMemo(
+    () => reviews.filter((r) => r.status === "pending").length,
+    [reviews],
+  );
+  const navCounts: Record<string, number> = { "/review": pendingCount };
 
   const isActive = (path: string): boolean => {
     if (path === "/") return location.pathname === "/";
@@ -52,8 +72,9 @@ export function AppLayout() {
             </span>
           </div>
           <div className="topbar-spacer" />
-          {/* 跨端互链：与答题端互相独立（原型 shared/js/app.js 的 .top-link）。 */}
-          <a className="top-link" href="/">
+          {/* 跨端互链：与答题端互相独立（原型 admin-config.js:25 的 otherApp）。
+              管理端挂在 /admin/ 下，答题端在站点根路径，故指向站点根。 */}
+          <a className="top-link" href={STUDENT_APP_URL}>
             答题端
           </a>
           <IconButton
@@ -62,13 +83,22 @@ export function AppLayout() {
           >
             <Icon name={theme === "dark" ? "sun" : "moon"} />
           </IconButton>
+          <IconButton
+            label="退出登录"
+            onClick={() => {
+              signOut();
+              navigate("/login");
+            }}
+          >
+            <Icon name="logout" />
+          </IconButton>
           <div className="user-chip">
             <span className="avatar" aria-hidden="true">
-              {CURRENT_USER.initial}
+              {(authUser?.name ?? "管").slice(0, 1)}
             </span>
             <span className="user-chip-text">
-              <span className="user-chip-name">{CURRENT_USER.name}</span>
-              <span className="user-chip-meta">{CURRENT_USER.meta}</span>
+              <span className="user-chip-name">{authUser?.name ?? "管理员"}</span>
+              <span className="user-chip-meta">{roleLabel}</span>
             </span>
           </div>
         </header>
@@ -91,7 +121,9 @@ export function AppLayout() {
                   >
                     <Icon name={item.icon} />
                     <span className="nav-label">{item.label}</span>
-                    {item.count ? <span className="nav-count num">{item.count}</span> : null}
+                    {navCounts[item.path] ? (
+                      <span className="nav-count num">{navCounts[item.path]}</span>
+                    ) : null}
                   </NavLink>
                 ))}
               </div>

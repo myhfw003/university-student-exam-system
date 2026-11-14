@@ -33,7 +33,7 @@ export interface AnswerSheetProps {
 /** 答题卡。 */
 export function AnswerSheet({ cells, currentSlot, onSelect, legend }: AnswerSheetProps) {
   return (
-    <div>
+    <>
       <div className="answer-sheet">
         {cells.map((cell) => {
           const classes = [
@@ -44,13 +44,15 @@ export function AnswerSheet({ cells, currentSlot, onSelect, legend }: AnswerShee
             .filter(Boolean)
             .join(" ");
 
+          // 原型 student.js 用全角括号逐项串联状态：
+          // 「第 3 题（已作答）（已标记）」。
           const label = [
             `第 ${cell.slot} 题`,
-            cell.answered ? "已作答" : "未作答",
-            cell.marked ? "已标记" : "",
+            cell.answered ? "（已作答）" : "（未作答）",
+            cell.marked ? "（已标记）" : "",
           ]
             .filter(Boolean)
-            .join("，");
+            .join("");
 
           return (
             <button
@@ -83,6 +85,6 @@ export function AnswerSheet({ cells, currentSlot, onSelect, legend }: AnswerShee
           </span>
         </div>
       )}
-    </div>
+    </>
   );
 }

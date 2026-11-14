@@ -16,6 +16,7 @@ import type { ExamPaper, Practice, Question } from "@exam/shared/domain/types";
 import { buildPaper, type BuiltPaper, type BuiltPaperItem } from "@exam/shared/engine/paper";
 import { scorePaper } from "@exam/shared/engine/scoring";
 import {
+  clearPracticeResult,
   difficultyLevels,
   getQuestion,
   recordMistakes,
@@ -24,13 +25,20 @@ import {
 } from "@exam/shared/mock/catalog";
 import { clearDraft } from "@/stores/draftQueue";
 import { SyncEngine } from "@/lib/syncEngine";
-import { MockAnswerTransport } from "@/lib/transports";
+import { HttpAnswerTransport, MockAnswerTransport } from "@/lib/transports";
+import { apiBaseUrl, getAccessToken, isBackendEnabled } from "@exam/shared/api";
 import { useStudentStore } from "@/stores/studentStore";
 import { usePracticeSessionStore, type PracticeSessionState } from "@/stores/practiceSessionStore";
 import type { ExamResponses } from "@/stores/examSessionStore";
 
 /** 模拟传输层单例——与考试会话共用一份「服务端」状态。 */
 const mockTransport = new MockAnswerTransport();
+/** 数据源切到后端时，答案上行走真实的作答接口。 */
+function createTransport() {
+  return isBackendEnabled()
+    ? new HttpAnswerTransport(apiBaseUrl(), getAccessToken)
+    : mockTransport;
+}
 
 /** 练习会话控制器。 */
 export interface PracticeSessionController {
@@ -56,6 +64,8 @@ export interface PracticeSessionController {
   submitted: boolean;
   /** 已用秒数。 */
   elapsedSec: number;
+  /** 提交时间（ISO）；未提交为 null。 */
+  submittedAt: string | null;
   /** 离线状态。 */
   offline: boolean;
   /** 待同步批次。 */
@@ -118,7 +128,31 @@ export function usePracticeSession(practiceId: string): PracticeSessionControlle
   const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
 
-  const practice = useMemo(() => studentPractice(practiceId, studentId), [practiceId, studentId]);
+  // 错题重做：路由形如 /practice/single-{qid}，只练这一题，答对即出错题本。
+  const redoQid = practiceId.startsWith("single-") ? practiceId.slice("single-".length) : "";
+  const redoQuestion = redoQid ? getQuestion(redoQid) : undefined;
+
+  const practice = useMemo(() => {
+    if (!redoQuestion) return studentPractice(practiceId, studentId);
+    // 伪练习：一道题、无限次、即时反馈、答对出册。
+    return {
+      id: practiceId,
+      name: `错题重做 · ${redoQuestion.stem.slice(0, 18)}`,
+      tags: redoQuestion.tags,
+      questionIds: [redoQuestion.id],
+      items: [{ qid: redoQuestion.id, score: redoQuestion.score }],
+      durationMin: 0,
+      totalScore: redoQuestion.score,
+      status: "published",
+      published: true,
+      scope: [],
+      repeats: 0,
+      feedback: "immediate",
+      mistakeReflow: false,
+      orderRule: "manual",
+      note: "",
+    } as Practice;
+  }, [practiceId, studentId, redoQuestion]);
 
   // 练习卷不生成梅花卷变体——按标准卷构建，只保留题序与配分。
   const paper = useMemo(() => {
@@ -161,7 +195,7 @@ export function usePracticeSession(practiceId: string): PracticeSessionControlle
     if (!paper) return;
     const engine = new SyncEngine({
       attemptId: practiceId,
-      transport: mockTransport,
+      transport: createTransport(),
       onStatusChange: (status) => {
         setOffline(status.offline);
         setPending(status.pending);
@@ -187,6 +221,14 @@ export function usePracticeSession(practiceId: string): PracticeSessionControlle
       engineRef.current = null;
     };
   }, [practiceId, paper]);
+
+  // 结果缺失时按现有作答重算并回填：
+  // 旧版本落盘的会话快照里没有结果字段，刷新后会落到一张空白练习卷。
+  useEffect(() => {
+    if (!paper || !session.submitted || session.result) return;
+    const graded = scorePaper(paper, responses);
+    usePracticeSessionStore.getState().restoreResult(graded);
+  }, [paper, session.submitted, session.result, responses]);
 
   // 练习不计时，但累计用时用于结果页展示。
   useEffect(() => {
@@ -249,18 +291,23 @@ export function usePracticeSession(practiceId: string): PracticeSessionControlle
     });
 
     // 错题回流：答错的记入错题本；单题重做答对则出册。
-    const wrongDetails = graded.details
-      .filter((d) => d.status === "wrong" || d.status === "partial")
-      .map((d) => ({ qid: d.qid, status: d.status, reason: mistakeReason(d.type) }));
-    recordMistakes(wrongDetails, studentId, {
+    // 注意要把**全部**判定结果传进去——答对的题在 removeOnCorrect 时才会出册，
+    // 只传错题就永远不会触发移除。
+    const details = graded.details.map((d) => ({
+      qid: d.qid,
+      status: d.status,
+      reason: mistakeReason(d.type),
+    }));
+    recordMistakes(details, studentId, {
       reflow: practice.mistakeReflow,
-      removeOnCorrect: false,
+      // 错题重做：答对即出册；普通练习按练习配置回流。
+      removeOnCorrect: redoQid !== "",
     });
 
     void clearDraft(practiceId);
     void engineRef.current?.flush();
     return { ok: true };
-  }, [practice, paper, responses, studentId, practiceId]);
+  }, [practice, paper, responses, studentId, practiceId, redoQid]);
 
   const redo = useCallback((): { ok: boolean; message?: string } => {
     if (!practice) return { ok: false };
@@ -269,9 +316,12 @@ export function usePracticeSession(practiceId: string): PracticeSessionControlle
       return { ok: false, message: `「${practice.name}」最多提交 ${practice.repeats} 次，已用完` };
     }
     store.reset();
+    // 原型重置练习时同步 delete store.state.practiceResults[key]，
+    // 否则列表上仍显示旧分与「再练一次」（student.js:1793）。
+    clearPracticeResult(practice.id, studentId);
     void clearDraft(practiceId);
     return { ok: true };
-  }, [practice, practiceId]);
+  }, [practice, practiceId, studentId]);
 
   const answeredCount = Object.keys(responses).filter((qid) => {
     const response = responses[qid];
@@ -302,6 +352,7 @@ export function usePracticeSession(practiceId: string): PracticeSessionControlle
     result: session.result,
     submitted: session.submitted,
     elapsedSec: session.elapsedSec,
+    submittedAt: session.submittedAt,
     offline,
     pending,
     syncing,

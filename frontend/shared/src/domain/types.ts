@@ -67,6 +67,24 @@ export interface QuestionFigure {
   type: string;
 }
 
+/**
+ * 题目附件（FR-CAT-05）。
+ *
+ * 附件存在对象存储里，访问走**短期签名 URL**；题目删除时附件软删除。
+ */
+export interface QuestionAttachment {
+  /** 附件 ID。 */
+  id: string;
+  /** 原始文件名。 */
+  fileName: string;
+  /** MIME 类型。 */
+  mimeType: string;
+  /** 字节数。 */
+  size: number;
+  /** 访问地址（后端为短期签名 URL）。 */
+  url: string;
+}
+
 /** 题目。 */
 export interface Question {
   id: string;
@@ -93,6 +111,8 @@ export interface Question {
   steps?: QuestionStep[];
   /** 题目配图。 */
   figure?: QuestionFigure;
+  /** 题目附件（图片，png / jpg / webp，单个 ≤ 10 MB）。 */
+  attachments?: QuestionAttachment[];
   /** 导入 / 生成批次 ID。 */
   batchId?: string;
 }
@@ -163,6 +183,12 @@ export interface ExamPaper {
   orderRule: OrderRule;
   /** 卷型配置。 */
   plum: { mode: PaperMode };
+  /**
+   * 发布校验的可覆盖项与理由（FR-AUT-06）。
+   *
+   * 键是校验项的 key（`mix` / `duration`），值是填写人给出的覆盖理由。
+   */
+  overrideReasons?: Record<string, string>;
   note: string;
 }
 
@@ -331,6 +357,11 @@ export interface ExamSession {
   durationMin: number;
   /** 名单来源：组织标签 ID 列表；空表示全员开放。 */
   scope: string[];
+  /**
+   * 指定考生（FR-DLV-02 的第二种纳入方式）：逐个勾选的用户 ID。
+   * 非空时以它为准，`scope` 不参与展开。
+   */
+  directUserIds?: string[];
   /** 发布时物化的考生 ID 列表。 */
   roster: string[];
   /** 是否允许重考。 */
@@ -426,6 +457,8 @@ export interface AppUser {
   createdAt: string;
   /** 最后登录时间。 */
   lastLoginAt: string | null;
+  /** 是否要求下次登录修改密码（管理员重置 / 名单导入时下发初始密码）。 */
+  mustChangePassword?: boolean;
 }
 
 /* ==========================================================================
@@ -441,6 +474,7 @@ export type AuditAction =
   | "user.update"
   | "user.role_changed"
   | "user.tag_changed"
+  | "user.password_reset"
   | "question.publish"
   | "question.disable"
   | "question.delete"

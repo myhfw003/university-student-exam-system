@@ -76,7 +76,7 @@ export function TagsPage() {
       setPendingDelete(null);
       return;
     }
-    toast.ok("标签已删除，相关挂载已解除");
+    toast.ok(`已删除标签「${pendingDelete.name}」并解除 ${usageOf(pendingDelete.id).total} 处挂载`);
     setPendingDelete(null);
   };
 
@@ -118,12 +118,12 @@ export function TagsPage() {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>标签</th>
-                      <th>题目</th>
-                      <th>题库</th>
-                      <th>试卷</th>
-                      <th>练习</th>
-                      <th></th>
+                      <th scope="col">标签</th>
+                      <th scope="col">题目</th>
+                      <th scope="col">题库</th>
+                      <th scope="col">试卷</th>
+                      <th scope="col">练习</th>
+                      <th scope="col"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -174,7 +174,7 @@ export function TagsPage() {
         );
       })}
 
-      <Callout tone="info" title="删除标签会级联解除挂载">
+      <Callout icon={<Icon name="info" />} title="删除标签会级联解除挂载">
         删除标签后，题库、题目、试卷与练习上对应的挂载会一并解除，对象本身保留。难度标签的名称与等级对应：基础 / 中等 / 较难。
       </Callout>
 
@@ -188,7 +188,7 @@ export function TagsPage() {
               取消
             </Button>
             <Button variant="primary" onClick={handleSave}>
-              保存
+              保存标签
             </Button>
           </>
         }
@@ -232,7 +232,11 @@ export function TagsPage() {
       <ConfirmDialog
         open={pendingDelete !== null}
         title="删除标签"
-        message={`删除「${pendingDelete?.name ?? ""}」后，相关对象上的挂载会一并解除，对象本身保留。此操作不可撤销。`}
+        message={
+          pendingDelete
+            ? `将删除标签「${pendingDelete.name}」，并解除其在 ${usageOf(pendingDelete.id).total} 处挂载（题目 ${usageOf(pendingDelete.id).questions} / 题库 ${usageOf(pendingDelete.id).banks} / 试卷 ${usageOf(pendingDelete.id).exams} / 练习 ${usageOf(pendingDelete.id).practices}）。对象本身保留，操作不可撤销。`
+            : ""
+        }
         confirmText="确认删除"
         confirmVariant="danger"
         onCancel={() => setPendingDelete(null)}

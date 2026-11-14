@@ -10,9 +10,10 @@
                 （配套 --text-*--line-height 继承 --lh-base / --lh-tight）
      --lh-*   → --leading-*             行高        leading-tight
      --sp-*   → --spacing-*             间距        p-4
+                （--spacing 基准值未被覆盖，gap-* / m-* 走 calc(var(--spacing) * N)）
      --r-*    → --radius-*              圆角        rounded-md
      --sh-*   → --shadow-*              阴影        shadow-1
-     --dur-*  → --transition-duration-* 动效时长    duration-120
+     --dur-*  → --transition-duration-* 动效时长    duration-1
      --ease-* → --ease-*                缓动曲线    ease-out
      --font-* → --font-*                字体族      font-serif
      --z-*    → --z-index-*             层级        z-dialog

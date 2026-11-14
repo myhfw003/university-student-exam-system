@@ -28,6 +28,7 @@
    ========================================================================== */
 
 import { spawn } from "node:child_process";
+import { serveDist } from "./serve-dist.mjs";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -83,6 +84,7 @@ const ADMIN_ROUTES = [
   { path: "/analytics", marker: "逐题正确率", min: 300 },
   { path: "/exam-sessions", marker: "场次清单", min: 300 },
   { path: "/exam-sessions/sess-net-mid", marker: "防作弊策略", min: 300 },
+  { path: "/monitoring", marker: "可监考场次", min: 200 },
   { path: "/monitoring/sess-net-mid", marker: "考生状态", min: 300 },
   { path: "/users", marker: "账号清单", min: 300 },
   { path: "/audit-logs", marker: "审计日志", min: 300 },
@@ -313,94 +315,6 @@ async function checkRoute(page, url, route) {
   return { problems, textLength: trimmed.length, shotPath };
 }
 
-
-/* --------------------------------------------------- 生产产物的静态服务器 */
-
-/**
- * 起一个与 nginx 布局一致的静态服务器：
- *
- *   /            → 学生端 dist
- *   /admin/      → 管理端 dist
- *   其余路径      → 对应 SPA 的 index.html（前端路由回退）
- *
- * **不用 vite preview**：它的 SPA 回退会把 /admin/assets/*.js 也回退成
- * index.html（Content-Type: text/html），产物路径根本测不到。
- * 自己起服务器才能复现真实的部署布局。
- */
-const MIME = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".mjs": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".ico": "image/x-icon",
-  ".woff2": "font/woff2",
-  ".map": "application/json; charset=utf-8",
-};
-
-/** 起静态服务器，返回 { studentBase, adminBase, close }。 */
-async function serveDist() {
-  const { createServer } = await import("node:http");
-  const { statSync, readFileSync } = await import("node:fs");
-  const { dirname, extname, join, normalize } = await import("node:path");
-  const { fileURLToPath } = await import("node:url");
-
-  const wsRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-  const studentDist = join(wsRoot, "student", "dist");
-  const adminDist = join(wsRoot, "admin", "dist");
-
-  for (const [name, dir] of [["学生端", studentDist], ["管理端", adminDist]]) {
-    if (!existsSync(join(dir, "index.html"))) {
-      throw new Error(`${name}产物不存在：${dir}，请先执行 pnpm build`);
-    }
-  }
-
-  const server = createServer((req, res) => {
-    const urlPath = decodeURIComponent((req.url ?? "/").split("?")[0]);
-
-    if (urlPath === "/admin") {
-      res.writeHead(301, { Location: "/admin/" });
-      res.end();
-      return;
-    }
-
-    const isAdmin = urlPath.startsWith("/admin/");
-    const distRoot = isAdmin ? adminDist : studentDist;
-    const relative = isAdmin ? urlPath.slice("/admin".length) : urlPath;
-
-    // 归一化并阻断路径穿越
-    const safe = normalize(relative).replace(/^(\.\.[\/])+/, "");
-    const filePath = join(distRoot, safe);
-
-    let body;
-    let type;
-    if (existsSync(filePath) && statSync(filePath).isFile()) {
-      body = readFileSync(filePath);
-      type = MIME[extname(filePath)] ?? "application/octet-stream";
-    } else {
-      // SPA 回退
-      body = readFileSync(join(distRoot, "index.html"));
-      type = MIME[".html"];
-    }
-
-    res.writeHead(200, { "Content-Type": type });
-    res.end(body);
-  });
-
-  const port = await new Promise((resolve) => {
-    server.listen(0, "127.0.0.1", () => resolve(server.address().port));
-  });
-  const origin = `http://127.0.0.1:${port}`;
-
-  return {
-    studentBase: `${origin}/`,
-    adminBase: `${origin}/admin/`,
-    close: () => server.close(),
-  };
-}
 
 /* ------------------------------------------------------------------ 主流程 */
 

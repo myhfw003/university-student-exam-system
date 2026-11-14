@@ -8,7 +8,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Badge,
   Button,
   ConfirmDialog,
   Dialog,
@@ -34,13 +33,7 @@ import {
 import { getExam, useCatalog } from "@exam/shared/mock/catalog";
 import type { ExamSessionStatus } from "@exam/shared/domain/types";
 import { Icon } from "@/app/Icon";
-
-const STATUS_TONE: Record<ExamSessionStatus, "ok" | "warn" | "neutral" | "danger"> = {
-  scheduled: "warn",
-  in_progress: "ok",
-  closed: "neutral",
-  cancelled: "danger",
-};
+import { SessionStatusBadge } from "../shared/bits";
 
 /** 考试场次列表页。 */
 export function ExamSessionListPage() {
@@ -62,6 +55,9 @@ export function ExamSessionListPage() {
   const [closeAt, setCloseAt] = useState("");
   const [durationMin, setDurationMin] = useState(90);
   const [scope, setScope] = useState<string[]>([]);
+  // 名单纳入方式（FR-DLV-02）：组织标签 / 指定考生 / 全员开放。
+  const [rosterMode, setRosterMode] = useState<"org" | "direct" | "open">("org");
+  const [directUserIds, setDirectUserIds] = useState<string[]>([]);
   const [allowRetake, setAllowRetake] = useState(false);
   const [note, setNote] = useState("");
 
@@ -85,7 +81,8 @@ export function ExamSessionListPage() {
       openAt,
       closeAt,
       durationMin,
-      scope,
+      scope: rosterMode === "org" ? scope : [],
+      directUserIds: rosterMode === "direct" ? directUserIds : [],
       allowRetake,
       note,
     });
@@ -109,8 +106,19 @@ export function ExamSessionListPage() {
   };
 
   const handlePublish = (id: string, sessionName: string) => {
-    // 按组织标签展开并物化名单。
-    const roster = students.filter((s) => scope.length === 0 || scope.includes(s.classId)).map((s) => s.id);
+    // 名单按**该场次自己的**纳入方式物化。
+    // 这里不能用页面上正在填的表单 scope：否则发布 A 场会把表单里 B 场的名单带出来。
+    const target = sessions.find((s) => s.id === id);
+    if (!target) {
+      toast.error("场次不存在");
+      return;
+    }
+    const roster =
+      target.directUserIds && target.directUserIds.length > 0
+        ? [...target.directUserIds]
+        : target.scope.length === 0
+          ? students.map((s) => s.id)
+          : students.filter((s) => target.scope.includes(s.classId)).map((s) => s.id);
     const result = publishSession(id, roster);
     if (!result.ok) {
       toast.error(result.message ?? "发布失败");
@@ -224,13 +232,13 @@ export function ExamSessionListPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>场次</th>
-                  <th>来源试卷</th>
-                  <th>时间窗</th>
-                  <th>时长</th>
-                  <th>名单</th>
-                  <th>状态</th>
-                  <th></th>
+                  <th scope="col">场次</th>
+                  <th scope="col">来源试卷</th>
+                  <th scope="col">时间窗</th>
+                  <th scope="col">时长</th>
+                  <th scope="col">名单</th>
+                  <th scope="col">状态</th>
+                  <th scope="col"></th>
                 </tr>
               </thead>
               <tbody>
@@ -263,9 +271,7 @@ export function ExamSessionListPage() {
                         <td className="num">{s.durationMin}</td>
                         <td className="num">{s.roster.length} 人</td>
                         <td>
-                          <Badge tone={STATUS_TONE[s.status]}>
-                            {SESSION_STATUS_LABEL[s.status]}
-                          </Badge>
+                          <SessionStatusBadge status={s.status} />
                         </td>
                         <td className="col-actions">
                           <Button
@@ -392,30 +398,80 @@ export function ExamSessionListPage() {
         </div>
         <div style={{ marginTop: "var(--sp-4)" }}>
           <span className="field-label">考试名单</span>
-          <div className="row-tight" style={{ marginTop: "var(--sp-2)" }}>
-            {classes.map((c) => {
-              const on = scope.includes(c.id);
-              const count = students.filter((s) => s.classId === c.id).length;
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  className={`chip${on ? " is-on" : ""}`}
-                  aria-pressed={on}
-                  onClick={() =>
-                    setScope((prev) =>
-                      prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id],
-                    )
-                  }
-                >
-                  {c.name} · {count} 人
-                </button>
-              );
-            })}
+          <div style={{ marginTop: "var(--sp-2)" }}>
+            <Segmented
+              label="名单纳入方式"
+              value={rosterMode}
+              onChange={(next) => setRosterMode(next)}
+              options={[
+                { value: "org" as const, label: "按组织标签" },
+                { value: "direct" as const, label: "指定考生" },
+                { value: "open" as const, label: "全员开放" },
+              ]}
+            />
           </div>
-          <div className="field-hint">
-            不选任何名单组即为全员开放。发布时名单会被**物化**为考生列表，之后改组织标签不影响已生成的名单。
-          </div>
+          {rosterMode === "org" ? (
+            <>
+              <div className="row-tight" style={{ marginTop: "var(--sp-2)" }}>
+                {classes.map((c) => {
+                  const on = scope.includes(c.id);
+                  const count = students.filter((s) => s.classId === c.id).length;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className={`chip${on ? " is-on" : ""}`}
+                      aria-pressed={on}
+                      onClick={() =>
+                        setScope((prev) =>
+                          prev.includes(c.id)
+                            ? prev.filter((x) => x !== c.id)
+                            : [...prev, c.id],
+                        )
+                      }
+                    >
+                      {c.name} · {count} 人
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="field-hint">
+                按名单组批量纳入考生。发布时名单会被**物化**为考生列表，之后改组织标签不影响已生成的名单。
+              </div>
+            </>
+          ) : null}
+          {rosterMode === "direct" ? (
+            <>
+              <div className="row-tight" style={{ marginTop: "var(--sp-2)" }}>
+                {students.map((s) => {
+                  const on = directUserIds.includes(s.id);
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      className={`chip${on ? " is-on" : ""}`}
+                      aria-pressed={on}
+                      onClick={() =>
+                        setDirectUserIds((prev) =>
+                          prev.includes(s.id) ? prev.filter((x) => x !== s.id) : [...prev, s.id],
+                        )
+                      }
+                    >
+                      {s.name} · {s.id}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="field-hint">
+                逐个指定考生，可包含社会人士。已选 {directUserIds.length} 人。
+              </div>
+            </>
+          ) : null}
+          {rosterMode === "open" ? (
+            <div className="field-hint" style={{ marginTop: "var(--sp-2)" }}>
+              全员开放：不限定名单，所有已注册用户都能看到该场次并参加。
+            </div>
+          ) : null}
         </div>
         <div style={{ marginTop: "var(--sp-4)" }}>
           <Field label="考生须知" htmlFor="sess-note">

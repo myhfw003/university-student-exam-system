@@ -9,9 +9,11 @@ import { useMemo, useState } from "react";
 import {
   Badge,
   Button,
+  ConfirmDialog,
   Empty,
   PageHead,
   Segmented,
+  TagChip,
   TextArea,
   TextInput,
   toast,
@@ -21,6 +23,7 @@ import {
   className as classNameOf,
   getExam,
   getQuestion,
+  getTag,
   updateReview,
   useCatalog,
 } from "@exam/shared/mock/catalog";
@@ -30,12 +33,29 @@ import {
   stepScores,
   type KeypointGrade,
 } from "@exam/shared/engine/scoring";
-import { itemScoreOf } from "@exam/shared/engine/paper";
-import type { ReviewItem } from "@exam/shared/domain/types";
+import { TYPE_LABEL, itemScoreOf } from "@exam/shared/engine/paper";
+import type { QuestionStep, ReviewItem } from "@exam/shared/domain/types";
 import { DifficultyChip, TagChips, TypeBadge } from "../shared/bits";
 
 /** 阅卷筛选。 */
 type ReviewFilter = "pending" | "reviewed" | "all";
+
+/**
+ * 实体在「知识点」分组中的标签；无知识点时回退到「领域」。
+ * 对应原型 admin.js:97-108 knowledgeTag。
+ */
+function knowledgeTagOf(entity: { tags: readonly string[] }): { name: string } | null {
+  const tags = entity.tags;
+  for (const id of tags) {
+    const tag = getTag(id);
+    if (tag && tag.group === "knowledge_point") return tag;
+  }
+  for (const id of tags) {
+    const tag = getTag(id);
+    if (tag && tag.group === "domain") return tag;
+  }
+  return null;
+}
 
 /** 阅卷中心。 */
 export function ReviewCenterPage() {
@@ -48,6 +68,8 @@ export function ReviewCenterPage() {
   const [score, setScore] = useState(0);
   const [comment, setComment] = useState("");
   const [hydratedFor, setHydratedFor] = useState("");
+  /** 批量采纳初判建议的二次确认。 */
+  const [batchAdoptOpen, setBatchAdoptOpen] = useState(false);
 
   const pendingCount = reviews.filter((r) => r.status === "pending").length;
   const reviewedCount = reviews.filter((r) => r.status === "reviewed").length;
@@ -73,7 +95,16 @@ export function ReviewCenterPage() {
   }, [current, hydratedFor]);
 
   /** 系统初判：按题型走判分引擎，与答题端口径一致。 */
-  function autoScoreOf(review: ReviewItem): { score: number; max: number; points?: KeypointGrade[]; step?: unknown } | null {
+  function autoScoreOf(review: ReviewItem): {
+    score: number;
+    max: number;
+    /** 简答题：各评分要点的命中情况。 */
+    points?: KeypointGrade[];
+    /** 综合操作题：是否命中该步骤（原型 admin.js:483 的 hit）。 */
+    hit?: boolean;
+    /** 综合操作题：命中的步骤本体（原型 admin.js:483 的 step，含 prompt）。 */
+    step?: QuestionStep;
+  } | null {
     const question = getQuestion(review.qid);
     if (!question) return null;
     const exam = getExam(review.examId);
@@ -86,7 +117,7 @@ export function ReviewCenterPage() {
       const index = (question.steps ?? []).indexOf(step);
       const stepMax = scales[index] ?? step.score;
       const result = gradeStep(step, review.answerText, stepMax);
-      return { score: result.score, max: result.max, step: result };
+      return { score: result.score, max: result.max, hit: result.hit, step };
     }
 
     if (question.type === "short") {
@@ -114,10 +145,20 @@ export function ReviewCenterPage() {
       toast.error(result.message ?? "保存失败");
       return;
     }
-    toast.ok("评分已保存");
+    toast.ok(`已保存评分：${formatScore(score)} / ${formatScore(maxScore)} 分`);
   };
 
+  /** 批量采纳：空队列直接提示，否则走二次确认。 */
   const handleBatchAdopt = () => {
+    if (reviews.filter((r) => r.status === "pending").length === 0) {
+      toast.ok("没有待阅卷的作答");
+      return;
+    }
+    setBatchAdoptOpen(true);
+  };
+
+  const confirmBatchAdopt = () => {
+    setBatchAdoptOpen(false);
     const targets = reviews.filter((r) => r.status === "pending");
     let count = 0;
     for (const target of targets) {
@@ -130,13 +171,13 @@ export function ReviewCenterPage() {
       });
       count += 1;
     }
-    toast.ok(`已批量采纳 ${count} 份初判建议`);
+    toast.ok(`已批量采纳 ${count} 份卷宗的初判建议`);
   };
 
   const step = (delta: number) => {
-    if (!current) return;
+    if (!current || list.length === 0) return;
     const index = list.findIndex((r) => r.id === current.id);
-    const next = list[index + delta];
+    const next = list[(index + delta + list.length) % list.length];
     if (next) setCurrentId(next.id);
   };
 
@@ -221,12 +262,16 @@ export function ReviewCenterPage() {
         </section>
 
         <div>
-          {!current || !question ? (
+          {!current ? (
             <section className="card">
               <Empty
                 title="没有需要阅卷的作答"
                 body="答题者在答题端交卷后，主观题作答会自动进入阅卷队列。"
               />
+            </section>
+          ) : !question ? (
+            <section className="card">
+              <Empty title="题目已不存在" />
             </section>
           ) : (
             <>
@@ -247,7 +292,7 @@ export function ReviewCenterPage() {
                     <dd>{exam?.name ?? current.examId}</dd>
                     <dt>题目</dt>
                     <dd>
-                      {question.id} · {question.type === "short" ? "简答题" : "综合操作题"} ·{" "}
+                      {question.id} · {TYPE_LABEL[question.type]} ·{" "}
                       {maxScore} 分
                       {current.stepId ? ` · 步骤 ${current.stepId}` : ""}
                     </dd>
@@ -264,6 +309,14 @@ export function ReviewCenterPage() {
                   <div className="q-stem" style={{ marginBottom: "var(--sp-3)" }}>
                     {question.stem}
                   </div>
+                  {knowledgeTagOf(question) ? (
+                    <div className="row-tight" style={{ marginBottom: "var(--sp-3)" }}>
+                      <span className="text-sm text-3">知识点</span>
+                      <TagChip group="knowledge_point" className="is-知识点" title="知识点">
+                        {knowledgeTagOf(question)?.name}
+                      </TagChip>
+                    </div>
+                  ) : null}
                   <div className="analysis" style={{ whiteSpace: "pre-wrap" }}>
                     {current.answerText || "（未作答）"}
                   </div>
@@ -307,6 +360,28 @@ export function ReviewCenterPage() {
                           </span>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                </section>
+              ) : null}
+
+              {auto?.step ? (
+                <section className="card" style={{ marginBottom: "var(--sp-4)" }}>
+                  <div className="card-head">
+                    <h2 className="card-title">步骤评分</h2>
+                    <span className="text-sm text-3">
+                      系统初判 {formatScore(auto.score)} / {formatScore(auto.max)} 分
+                    </span>
+                  </div>
+                  <div className="card-body">
+                    <div className="kp-list">
+                      <div className={`kp${auto.hit ? " is-hit" : ""}`}>
+                        <span className="kp-mark">{auto.hit ? "✓" : "○"}</span>
+                        <span>{auto.step.prompt}</span>
+                        <span className="text-xs text-3 num">
+                          {formatScore(auto.score)} / {formatScore(auto.max)}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </section>
@@ -377,6 +452,15 @@ export function ReviewCenterPage() {
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={batchAdoptOpen}
+        title="批量采纳初判建议"
+        message={`将对 ${pendingCount} 份待阅卷宗采用系统按关键词给出的初判分数，并标记为已阅卷。仍可在队列中逐份复核修改。`}
+        confirmText="批量采纳"
+        onCancel={() => setBatchAdoptOpen(false)}
+        onConfirm={confirmBatchAdopt}
+      />
     </>
   );
 }

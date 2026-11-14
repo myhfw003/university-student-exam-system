@@ -10,6 +10,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
+  Badge,
   Button,
   Callout,
   ConfirmDialog,
@@ -20,6 +21,7 @@ import {
   SelectInput,
   Stat,
   Tabs,
+  TagFilter,
   TextArea,
   TextInput,
   toast,
@@ -31,8 +33,11 @@ import {
   createGeneration,
   createImportBatch,
   discardQuestion,
+  discardQuestions,
   removeQuestion,
   setQuestionStatus,
+  setQuestionsStatus,
+  updateImportBatch,
   useCatalog,
 } from "@exam/shared/mock/catalog";
 import type { Question } from "@exam/shared/domain/types";
@@ -40,6 +45,14 @@ import { Icon } from "@/app/Icon";
 import { DifficultyChip, SourceBadge, StatusBadge, TagChips, TypeBadge } from "../shared/bits";
 import { QuestionEditor } from "../shared/QuestionEditor";
 import { TagPicker } from "../shared/TagPicker";
+import {
+  IMPORT_FIELDS,
+  buildImportRows,
+  guessMapping,
+  parseImportFile,
+  type ColumnMapping,
+  type ParsedTable,
+} from "./importFile";
 
 /** 工作台标签页。 */
 type WorkbenchTab = "questions" | "candidates" | "produce";
@@ -53,6 +66,7 @@ export function BankWorkbenchPage() {
   const tab = (params.get("tab") as WorkbenchTab) || "questions";
   const banks = useCatalog((state) => state.banks);
   const questions = useCatalog((state) => state.questions);
+  const tags = useCatalog((state) => state.tags);
   const imports = useCatalog((state) => state.imports);
   const generations = useCatalog((state) => state.generations);
 
@@ -66,20 +80,34 @@ export function BankWorkbenchPage() {
   );
   const [typeFilter, setTypeFilter] = useState("全部");
   const [keyword, setKeyword] = useState("");
+  // 标签筛选（原型：领域 + 能力两组 chip，多选为「任一命中」）。
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
 
   // 候选题筛选与选择。
   const [sourceFilter, setSourceFilter] = useState("全部");
   const [picked, setPicked] = useState<string[]>([]);
 
+  // 批量操作结果（逐条列出成功与失败原因，FR-CAT-04）。
+  const [batchResult, setBatchResult] = useState<{
+    action: string;
+    changed: number;
+    failures: Array<{ id: string; reason: string }>;
+  } | null>(null);
+
   // 题目编辑器。
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Question | null>(null);
+  /** 批量丢弃二次确认：待丢弃的候选题数量。 */
+  const [pendingBatchDiscard, setPendingBatchDiscard] = useState<number | null>(null);
 
   // 内容生产。
   const [produceMode, setProduceMode] = useState<"import" | "gen">("import");
+  // 真实导入：文件 → 表格 → 列映射 → 解析结果。
   const [fileName, setFileName] = useState("");
-  const [rowCount, setRowCount] = useState(3);
+  const [parsed, setParsed] = useState<ParsedTable | null>(null);
+  const [mapping, setMapping] = useState<ColumnMapping>({});
+  const [parseError, setParseError] = useState<string | null>(null);
   const [targetBank, setTargetBank] = useState(bankId === "__all__" ? (banks[0]?.id ?? "") : bankId);
   const [genType, setGenType] = useState("single");
   const [genCount, setGenCount] = useState(3);
@@ -112,9 +140,11 @@ export function BankWorkbenchPage() {
         const kw = keyword.toLowerCase();
         if (!`${q.id} ${q.stem}`.toLowerCase().includes(kw)) return false;
       }
+      // 多个标签之间为「任一命中」（与原型一致）。
+      if (tagFilter.length && !tagFilter.some((tagId) => q.tags.includes(tagId))) return false;
       return true;
     });
-  }, [bankId, banks, statusFilter, typeFilter, keyword, questions]);
+  }, [bankId, banks, statusFilter, typeFilter, keyword, tagFilter, questions]);
 
   /* ----------------------------------------------------------- 候选题列表 */
 
@@ -146,14 +176,96 @@ export function BankWorkbenchPage() {
     return generations.find((b) => b.id === batchId) ?? null;
   }, [batchId, produceMode, imports, generations]);
 
+  /** 选文件 → 真实解析（.csv / .xlsx）。 */
+  const handleFilePick = async (file: File | null): Promise<void> => {
+    if (!file) return;
+    setParseError(null);
+    try {
+      const table = await parseImportFile(file);
+      setParsed(table);
+      setFileName(file.name);
+      setMapping(guessMapping(table.headers));
+      toast.ok(`已解析 ${table.rows.length} 行，请确认列映射`);
+    } catch (error) {
+      setParsed(null);
+      setParseError(error instanceof Error ? error.message : "文件解析失败");
+    }
+  };
+
+  /** 解析结果（随列映射实时重算）。 */
+  const previewRows = useMemo(
+    () =>
+      parsed
+        ? buildImportRows(
+            parsed.rows,
+            parsed.headers,
+            mapping,
+            tags.map((t) => t.name),
+          )
+        : [],
+    [parsed, mapping, tags],
+  );
+
+  /** 改列映射：重新解析并同步到批次（若已解析）。 */
+  const handleMappingChange = (field: string, column: string): void => {
+    const next = { ...mapping };
+    if (!column) delete next[field];
+    else next[field] = column;
+    setMapping(next);
+    if (!parsed) return;
+    const rows = buildImportRows(parsed.rows, parsed.headers, next, tags.map((t) => t.name));
+    if (batchId && produceMode === "import") {
+      const result = updateImportBatch(batchId, {
+        mapping: next,
+        rows: rows.map((row) => ({
+          no: row.no,
+          stem: row.stem,
+          type: row.type,
+          score: row.score,
+          options: row.options,
+          answer: row.answer,
+          analysis: row.analysis,
+          tags: row.tags,
+          valid: row.valid,
+        })),
+      });
+      if (!result.ok) toast.error(result.message ?? "列映射更新失败");
+    }
+  };
+
   const handleParse = () => {
-    const result = createImportBatch({ fileName, count: rowCount, operator: "陈砚之" });
+    if (!parsed) {
+      toast.error("请先选择试题文件");
+      return;
+    }
+    const result = createImportBatch({
+      fileName: fileName || "未命名文件",
+      operator: "陈砚之",
+      columns: parsed.headers,
+      mapping,
+      rows: previewRows.map((row) => ({
+        no: row.no,
+        stem: row.stem,
+        type: row.type,
+        score: row.score,
+        options: row.options,
+        answer: row.answer,
+        analysis: row.analysis,
+        tags: row.tags,
+        valid: row.valid,
+      })),
+    });
     if (!result.ok || !result.batch) {
       toast.error(result.message ?? "解析失败");
       return;
     }
     setBatchId(result.batch.id);
-    toast.ok(`已解析 ${result.batch.rowCount} 行，请确认列映射后采纳`);
+    const bad = previewRows.filter((row) => !row.valid).length;
+    toast.ok(
+      bad > 0
+        ? `解析完成，共 ${result.batch.rowCount} 行待确认，其中 ${bad} 行有问题，请修正列映射`
+        : `解析完成，共 ${result.batch.rowCount} 行待确认`,
+    );
   };
 
   const handleGenerate = () => {
@@ -182,7 +294,7 @@ export function BankWorkbenchPage() {
       toast.error(result.message ?? "采纳失败");
       return;
     }
-    toast.ok(`已采纳 ${result.count} 道候选题，进入草稿状态待审核`);
+    toast.ok(`已采纳 ${result.count} 道候选题，请到候选题队列审核`);
     setBatchId("");
   };
 
@@ -192,7 +304,13 @@ export function BankWorkbenchPage() {
       toast.error(result.message ?? "状态更新失败");
       return;
     }
-    toast.ok(status === "published" ? "题目已发布" : status === "disabled" ? "题目已停用" : "题目已恢复");
+    toast.ok(
+      status === "published"
+        ? `题目 ${question.id} 已发布`
+        : status === "disabled"
+          ? `题目 ${question.id} 已停用`
+          : `题目 ${question.id} 已转为草稿`,
+    );
   };
 
   const handleDiscard = (question: Question) => {
@@ -201,7 +319,7 @@ export function BankWorkbenchPage() {
       toast.error(result.message ?? "丢弃失败");
       return;
     }
-    toast.ok("候选题已丢弃");
+    toast.ok(`已丢弃 ${question.id}`);
     setPendingDelete(null);
   };
 
@@ -210,21 +328,46 @@ export function BankWorkbenchPage() {
   };
 
   const batchPublish = () => {
-    let count = 0;
-    for (const id of picked) {
-      const result = setQuestionStatus(id, "published");
-      if (result.ok) count += 1;
+    if (picked.length === 0) {
+      toast.error("请先选择候选题");
+      return;
     }
-    toast.ok(`已发布 ${count} 道候选题`);
+    const result = setQuestionsStatus(picked, "published");
+    setBatchResult({
+      action: "发布",
+      changed: result.changed,
+      failures: result.failures,
+    });
+    if (result.failures.length === 0) {
+      toast.ok(`已发布 ${result.changed} 道候选题`);
+    } else {
+      toast.error(`已发布 ${result.changed} 道，${result.failures.length} 道失败`);
+    }
     setPicked([]);
   };
 
+  /** 批量丢弃：先空选保护，再走二次确认。 */
   const batchDiscard = () => {
-    let count = 0;
-    for (const id of picked) {
-      if (discardQuestion(id).ok) count += 1;
+    if (picked.length === 0) {
+      toast.error("请先选择候选题");
+      return;
     }
-    toast.ok(`已丢弃 ${count} 道候选题`);
+    setPendingBatchDiscard(picked.length);
+  };
+
+  const confirmBatchDiscard = () => {
+    const result = discardQuestions(picked);
+    setPendingBatchDiscard(null);
+    setBatchResult({
+      action: "丢弃",
+      changed: result.changed,
+      failures: result.failures,
+    });
+    if (result.failures.length === 0) {
+      toast.ok(`已丢弃 ${result.changed} 道候选题`);
+    } else {
+      toast.error(`已丢弃 ${result.changed} 道，${result.failures.length} 道失败`);
+    }
     setPicked([]);
   };
 
@@ -266,8 +409,8 @@ export function BankWorkbenchPage() {
         <Stat label="已发布" value={stats.published} unit="道" hint="可被组卷引用" />
         <Stat label="草稿候选题" value={stats.draft} unit="道" hint="待审核发布" />
         <Stat label="已停用" value={stats.disabled} unit="道" hint="可恢复为已发布" />
-        <Stat label="客观题" value={stats.objective} unit="道" hint="单选 / 多选 / 判断" />
-        <Stat label="主观题" value={stats.subjective} unit="道" hint="简答 / 综合操作" />
+        <Stat label="客观题分值" value={stats.objective} unit="分" hint="单选 / 多选 / 判断" />
+        <Stat label="主观题分值" value={stats.subjective} unit="分" hint="简答 / 综合操作" />
       </div>
 
       <Tabs
@@ -318,18 +461,39 @@ export function BankWorkbenchPage() {
                 onChange={setKeyword}
               />
             </div>
+            <TagFilter
+              groups={[
+                {
+                  group: "domain",
+                  label: "领域",
+                  tags: tags.filter((t) => t.group === "domain"),
+                },
+                {
+                  group: "ability",
+                  label: "能力",
+                  tags: tags.filter((t) => t.group === "ability"),
+                },
+              ]}
+              selected={tagFilter}
+              onToggle={(tagId) =>
+                setTagFilter((prev) =>
+                  prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
+                )
+              }
+              groupLabel="标签筛选"
+            />
           </div>
           <div className="card-body is-flush">
             <div className="table-wrap">
               <table className="table">
                 <thead>
                   <tr>
-                    <th>编号</th>
-                    <th>题目</th>
-                    <th>来源</th>
-                    <th>状态</th>
-                    <th>分值</th>
-                    <th></th>
+                    <th scope="col">编号</th>
+                    <th scope="col">题目</th>
+                    <th scope="col">来源</th>
+                    <th scope="col">状态</th>
+                    <th scope="col">分值</th>
+                    <th scope="col"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -445,21 +609,39 @@ export function BankWorkbenchPage() {
                 </Button>
               </div>
             </div>
-            <Callout tone="info" title="候选题需审核后发布">
+            <Callout icon={<Icon name="info" />} title="候选题需审核后发布">
               导入与 AI 生成的内容先进入草稿状态，审核确认无误后发布；仅「已发布」题目可被组卷与练习引用。
             </Callout>
+            {batchResult ? (
+              <Callout
+                tone={batchResult.failures.length > 0 ? "warn" : "ok"}
+                title={`批量${batchResult.action}：成功 ${batchResult.changed} 道，失败 ${batchResult.failures.length} 道`}
+              >
+                {batchResult.failures.length > 0 ? (
+                  <ul className="rule-list" style={{ marginTop: "var(--sp-3)" }}>
+                    {batchResult.failures.map((failure) => (
+                      <li key={failure.id}>
+                        {failure.id} · {failure.reason}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  "全部成功。"
+                )}
+              </Callout>
+            ) : null}
           </div>
           <div className="card-body is-flush">
             <div className="table-wrap">
               <table className="table">
                 <thead>
                   <tr>
-                    <th></th>
-                    <th>编号</th>
-                    <th>题目</th>
-                    <th>来源</th>
-                    <th>批次</th>
-                    <th></th>
+                    <th scope="col"></th>
+                    <th scope="col">编号</th>
+                    <th scope="col">题目</th>
+                    <th scope="col">来源</th>
+                    <th scope="col">批次</th>
+                    <th scope="col"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -557,34 +739,32 @@ export function BankWorkbenchPage() {
 
               <div style={{ marginTop: "var(--sp-4)" }}>
                 {produceMode === "import" ? (
-                  <div className="grid-2">
+                  <div className="stack">
                     <Field
                       htmlFor="imp-file"
                       label="试题文件"
-                      hint="支持 .csv / .xlsx 试题文件；本原型使用示例数据模拟解析结果。"
+                      hint="支持 .csv（UTF-8 / GBK）与 .xlsx（读取首个工作表）。选择文件后自动解析。"
                     >
-                      <TextInput
+                      <input
                         id="imp-file"
-                        value={fileName}
-                        placeholder="例如 2026秋季期中试题汇总.csv"
-                        onChange={(event) => setFileName(event.target.value)}
+                        className="input"
+                        type="file"
+                        accept=".csv,.xlsx"
+                        onChange={(event) => void handleFilePick(event.target.files?.[0] ?? null)}
                       />
                     </Field>
-                    <Field
-                      htmlFor="imp-count"
-                      label="解析行数"
-                      hint="解析前会先校验列映射，解析结果进入草稿候选题。"
-                    >
-                      <SelectInput
-                        id="imp-count"
-                        value={rowCount}
-                        onChange={(event) => setRowCount(Number(event.target.value))}
-                      >
-                        <option value={1}>1 行</option>
-                        <option value={2}>2 行</option>
-                        <option value={3}>3 行</option>
-                      </SelectInput>
-                    </Field>
+                    {parseError ? (
+                      <Callout tone="danger" title="文件解析失败">
+                        {parseError}
+                      </Callout>
+                    ) : null}
+                    {parsed ? (
+                      <Callout tone="info" title="文件已解析">
+                        {parsed.headers.length} 列 · {parsed.rows.length} 行
+                        {fileName ? ` · ${fileName}` : ""}
+                        。请在下方确认列映射，解析结果进入草稿候选题。
+                      </Callout>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="grid-3">
@@ -642,6 +822,7 @@ export function BankWorkbenchPage() {
                         )
                       }
                       groups={["domain", "knowledge_point"]}
+                      label="知识点标签"
                     />
                   </Field>
                   <div style={{ marginTop: "var(--sp-4)" }}>
@@ -687,7 +868,7 @@ export function BankWorkbenchPage() {
                 )}
                 <span className="text-sm text-3">
                   {produceMode === "import"
-                    ? "解析为真实交互流程，产出为示例数据；不接入真实解析器。"
+                    ? "解析为真实文件解析：逐行校验，错误行标红并给出原因，不阻断整批。"
                     : "生成结果为示例数据，不接入真实大模型。"}
                 </span>
               </div>
@@ -705,22 +886,39 @@ export function BankWorkbenchPage() {
                 </span>
               </div>
               <div className="card-body">
-                {"mapping" in activeBatch && activeBatch.mapping ? (
+                {produceMode === "import" && parsed ? (
                   <div className="filter-block">
                     <div className="filter-group-label">列映射</div>
                     <div className="table-wrap">
                       <table className="table">
                         <thead>
                           <tr>
-                            <th>字段</th>
-                            <th>来源列</th>
+                            <th scope="col">字段</th>
+                            <th scope="col">来源列</th>
+                            <th scope="col">必填</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {Object.entries(activeBatch.mapping).map(([key, column]) => (
-                            <tr key={key}>
-                              <td>{key}</td>
-                              <td>{column}</td>
+                          {IMPORT_FIELDS.map((field) => (
+                            <tr key={field.key}>
+                              <td>{field.label}</td>
+                              <td>
+                                <SelectInput
+                                  aria-label={`${field.label}来源列`}
+                                  value={mapping[field.key] ?? ""}
+                                  onChange={(event) =>
+                                    handleMappingChange(field.key, event.target.value)
+                                  }
+                                >
+                                  <option value="">（不映射）</option>
+                                  {parsed.headers.map((header) => (
+                                    <option key={header} value={header}>
+                                      {header}
+                                    </option>
+                                  ))}
+                                </SelectInput>
+                              </td>
+                              <td>{field.required ? "是" : "否"}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -732,12 +930,13 @@ export function BankWorkbenchPage() {
                   <table className="table">
                     <thead>
                       <tr>
-                        <th>#</th>
-                        <th>题干</th>
-                        <th>题型</th>
-                        <th>分值</th>
-                        <th>答案</th>
-                        <th>标签</th>
+                        <th scope="col">#</th>
+                        <th scope="col">题干</th>
+                        <th scope="col">题型</th>
+                        <th scope="col">分值</th>
+                        <th scope="col">答案</th>
+                        <th scope="col">标签</th>
+                        <th scope="col">状态</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -754,7 +953,14 @@ export function BankWorkbenchPage() {
                         activeBatch.rows.map((row) => (
                           <tr key={row.no}>
                             <td className="num">{row.no}</td>
-                            <td>{row.stem}</td>
+                            <td>
+                              <div>{row.stem}</div>
+                              {row.valid ? null : (
+                                <div className="text-xs" style={{ color: "var(--c-danger)" }}>
+                                  {(row as { error?: string }).error ?? "该行有问题"}
+                                </div>
+                              )}
+                            </td>
                             <td>
                               <TypeBadge type={row.type} />
                             </td>
@@ -762,6 +968,13 @@ export function BankWorkbenchPage() {
                             <td>{row.answer.join("")}</td>
                             <td>
                               <TagChips tags={row.tags} limit={3} />
+                            </td>
+                            <td>
+                              {row.valid ? (
+                                <Badge tone="ok">可采纳</Badge>
+                              ) : (
+                                <Badge tone="danger">有问题</Badge>
+                              )}
                             </td>
                           </tr>
                         ))
@@ -793,8 +1006,12 @@ export function BankWorkbenchPage() {
       <ConfirmDialog
         open={pendingDelete !== null}
         title={pendingDelete?.status === "draft" ? "丢弃候选题" : "删除题目"}
-        message={`「${pendingDelete?.id ?? ""}」将从题库、试卷与练习中一并移除，此操作不可撤销。`}
-        confirmText="确认删除"
+        message={
+          pendingDelete?.status === "draft"
+            ? `将丢弃题目 ${pendingDelete.id}：${pendingDelete.stem}。丢弃后不可恢复。`
+            : `将删除题目 ${pendingDelete?.id ?? ""}：${pendingDelete?.stem ?? ""}。题库、试卷与练习中的引用会自动跳过此题，操作不可撤销。`
+        }
+        confirmText={pendingDelete?.status === "draft" ? "确认丢弃" : "确认删除"}
         confirmVariant="danger"
         onCancel={() => setPendingDelete(null)}
         onConfirm={() => {
@@ -807,10 +1024,20 @@ export function BankWorkbenchPage() {
           if (!result.ok) {
             toast.error(result.message ?? "删除失败");
           } else {
-            toast.ok("题目已删除");
+            toast.ok(`已删除题目 ${pendingDelete.id}`);
           }
           setPendingDelete(null);
         }}
+      />
+
+      <ConfirmDialog
+        open={pendingBatchDiscard !== null}
+        title="批量丢弃候选题"
+        message={`将丢弃 ${pendingBatchDiscard ?? 0} 道候选题，丢弃后不可恢复。`}
+        confirmText="确认丢弃"
+        confirmVariant="danger"
+        onCancel={() => setPendingBatchDiscard(null)}
+        onConfirm={confirmBatchDiscard}
       />
     </>
   );

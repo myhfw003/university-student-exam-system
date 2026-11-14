@@ -7,11 +7,12 @@
 
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Badge, Button, Empty, PageHead, Stat } from "@exam/shared";
+import { Badge, Button, Empty, PageHead, Stat, toast } from "@exam/shared";
 import { preflight, useCatalog } from "@exam/shared/mock/catalog";
 import { PAPER_MODES } from "@exam/shared/engine";
 import { useAdminOps } from "@exam/shared/mock/adminOps";
 import { Icon } from "@/app/Icon";
+import { modeLabelOf } from "../shared/scope";
 
 /** 待办卡片。 */
 function TodoCard({
@@ -266,9 +267,7 @@ export function OverviewPage() {
                         <span className="todo-hint">
                           {(t.kind === "practice" ? "练习" : "试卷") +
                             " · " +
-                            (t.mode === "fixed"
-                              ? "固定顺序"
-                              : (PAPER_MODES[t.mode]?.label ?? t.mode)) +
+                            modeLabelOf(t.mode, PAPER_MODES) +
                             " · " +
                             t.items.length +
                             " 题 · " +
@@ -278,7 +277,13 @@ export function OverviewPage() {
                       </div>
                       <Button
                         size="sm"
-                        onClick={() => navigate(`/papers/new?kind=${t.kind}`)}
+                        onClick={() =>
+                          toast.ok(
+                            `${t.name}：${modeLabelOf(t.mode, PAPER_MODES)} · ${
+                              t.items.length
+                            } 题 · ${t.durationMin} 分钟`,
+                          )
+                        }
                       >
                         查看
                       </Button>

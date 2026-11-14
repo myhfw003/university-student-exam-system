@@ -11,8 +11,11 @@
    ========================================================================== */
 
 import {
+  cloneElement,
+  isValidElement,
   useId,
   type InputHTMLAttributes,
+  type ReactElement,
   type ReactNode,
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
@@ -44,17 +47,31 @@ export interface FieldProps {
 /** 表单字段容器：标签 + 必填标记 + 提示 + 错误。 */
 export function Field({ label, required, hint, error, children, className, htmlFor }: FieldProps) {
   const classes = ["field", className].filter(Boolean).join(" ");
+  // 必填态要能被辅助技术读到：星号只是视觉标记，
+  // 因此把 aria-required 注入唯一子控件（原型只画星号，此处是实现的可访问性补齐）。
+  const control =
+    required && isValidElement(children)
+      ? cloneElement(children as ReactElement<Record<string, unknown>>, {
+          "aria-required": true,
+        })
+      : children;
+  // 有 htmlFor 才渲染 <label>；否则退化为 <span>，避免产生无关联控件的孤儿标签
+  // （原型 admin.js 对纯展示型标签用的是 span）。
+  const labelNode = htmlFor ? (
+    <label className="field-label" htmlFor={htmlFor}>
+      {label}
+      {required ? <span className="field-req">*</span> : null}
+    </label>
+  ) : (
+    <span className="field-label">
+      {label}
+      {required ? <span className="field-req">*</span> : null}
+    </span>
+  );
   return (
     <div className={classes}>
-      <label className="field-label" htmlFor={htmlFor}>
-        {label}
-        {required ? (
-          <span className="field-req" aria-hidden="true">
-            *
-          </span>
-        ) : null}
-      </label>
-      {children}
+      {labelNode}
+      {control}
       {hint ? <div className="field-hint">{hint}</div> : null}
       {error ? <div className="field-error">{error}</div> : null}
     </div>
@@ -95,7 +112,7 @@ export function TextInput({
         className={classes}
         aria-invalid={invalid || errorText ? true : undefined}
         aria-describedby={describedBy}
-        aria-required={rest.required || undefined}
+        aria-required={rest.required || rest["aria-required"] || undefined}
       />
       {hint ? (
         <div className="field-hint" id={hintId}>

@@ -21,7 +21,8 @@ export function RuleList({ items, marker = "number", className }: RuleListProps)
     <ul className={`rule-list${className ? ` ${className}` : ""}`}>
       {items.map((item, index) => (
         <li key={index}>
-          <span className="rule-dot" aria-hidden="true">
+          {/* 编号是规则序号，播报；「·」是纯装饰，不播报。 */}
+          <span className="rule-dot" aria-hidden={marker === "dot" ? "true" : undefined}>
             {marker === "dot" ? "·" : index + 1}
           </span>
           <span>{item}</span>

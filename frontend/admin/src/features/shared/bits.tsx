@@ -9,12 +9,18 @@ import type { ReactNode } from "react";
 import { Badge, TagChip, type BadgeTone } from "@exam/shared";
 import { TYPE_LABEL } from "@exam/shared/engine/paper";
 import {
-  QUESTION_SOURCE_LABEL,
   QUESTION_STATUS_LABEL,
   difficultyLabel,
   getTag,
 } from "@exam/shared/mock/catalog";
-import type { ExamPaper, Practice, Question, QuestionStatus } from "@exam/shared/domain/types";
+import { SESSION_STATUS_LABEL } from "@exam/shared/mock/adminOps";
+import type {
+  ExamPaper,
+  ExamSessionStatus,
+  Practice,
+  Question,
+  QuestionStatus,
+} from "@exam/shared/domain/types";
 
 /** 题型徽标。 */
 export function TypeBadge({ type }: { type: string }): ReactNode {
@@ -30,11 +36,22 @@ export function StatusBadge({ status }: { status: QuestionStatus }): ReactNode {
   return <Badge tone={tone}>{QUESTION_STATUS_LABEL[status]}</Badge>;
 }
 
+/**
+ * 管理端题目来源徽标文案（原型 admin-workbench.js:78）。
+ * 与共享层 catalog 的 SOURCE_LABEL 分开：原型的管理端徽标用「导入」，
+ * 而共享层（跨端展示、导入批次来源）用「批量导入」，两处口径本就不同。
+ */
+const ADMIN_SOURCE_LABEL: Record<Question["source"], string> = {
+  manual: "手工录入",
+  import: "导入",
+  ai: "AI 生成",
+};
+
 /** 题目来源徽标。 */
 export function SourceBadge({ source }: { source: Question["source"] }): ReactNode {
   const tone: BadgeTone =
     source === "import" ? "info" : source === "ai" ? "primary" : "neutral";
-  return <Badge tone={tone}>{QUESTION_SOURCE_LABEL[source]}</Badge>;
+  return <Badge tone={tone}>{ADMIN_SOURCE_LABEL[source]}</Badge>;
 }
 
 /** 卷对象状态徽标。 */
@@ -51,6 +68,19 @@ export function PaperBadge({ kind, item }: { kind: "exam" | "practice"; item: Ex
   const label = practice.status === "published" ? "已上架" : "未上架";
   const tone: BadgeTone = practice.status === "published" ? "ok" : "warn";
   return <Badge tone={tone}>{label}</Badge>;
+}
+
+/** 场次状态徽标（场次列表与监考选场共用一套色调）。 */
+export function SessionStatusBadge({ status }: { status: ExamSessionStatus }): ReactNode {
+  const tone: BadgeTone =
+    status === "in_progress"
+      ? "ok"
+      : status === "cancelled"
+        ? "danger"
+        : status === "scheduled"
+          ? "warn"
+          : "neutral";
+  return <Badge tone={tone}>{SESSION_STATUS_LABEL[status]}</Badge>;
 }
 
 /** 实体的标签片（可限量）。 */

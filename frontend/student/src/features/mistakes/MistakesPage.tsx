@@ -5,17 +5,17 @@
    ========================================================================== */
 
 import { useNavigate } from "react-router-dom";
-import { Button, Empty, PageHead, TagChip } from "@exam/shared";
+import { Button, Empty, PageHead } from "@exam/shared";
 import { TYPE_LABEL } from "@exam/shared/engine/paper";
 import { useCatalog } from "@exam/shared/mock/catalog";
 import { useStudentMistakes } from "@/features/shared/studentData";
+import { TagChips } from "@/features/shared/TagChips";
 
 /** 错题本。 */
 export function MistakesPage() {
   const navigate = useNavigate();
   const mistakes = useStudentMistakes();
   const questions = useCatalog((state) => state.questions);
-  const tags = useCatalog((state) => state.tags);
 
   return (
     <>
@@ -52,11 +52,7 @@ export function MistakesPage() {
                       {TYPE_LABEL[question.type] ?? question.type}
                     </div>
                     <div className="row-tight">
-                      {question.tags.map((tagId) => (
-                        <TagChip key={tagId} group="domain">
-                          {tags.find((t) => t.id === tagId)?.name ?? tagId}
-                        </TagChip>
-                      ))}
+                      <TagChips tags={question.tags} />
                     </div>
                     <div className="list-sub">错因：{mistake.reason}</div>
                   </div>

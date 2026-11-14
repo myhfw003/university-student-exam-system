@@ -1025,7 +1025,12 @@ const PRACTICE_SEEDS: PracticeSeed[] =   [
  * 上架标记由状态推导（published ⇔ status === "published"）。
  */
 export const practices: Practice[] = PRACTICE_SEEDS.map((seed) => {
-  const items = (seed.questionIds ?? []).map((qid) => ({ qid, score: 10 }));
+  // 练习配分按**题目自身分值**（与原型一致）：练习没有单独的配分表，
+  // 分值就是题目在题库里的分值；总分 = 各题分值之和。
+  const items = (seed.questionIds ?? []).map((qid) => ({
+    qid,
+    score: questions.find((q) => q.id === qid)?.score ?? 0,
+  }));
   return {
     ...seed,
     items,

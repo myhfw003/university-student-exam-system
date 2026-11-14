@@ -81,6 +81,7 @@ export const AUDIT_ACTION_LABEL: Record<AuditAction, string> = {
   "user.update": "修改用户",
   "user.role_changed": "变更角色",
   "user.tag_changed": "变更用户标签",
+  "user.password_reset": "重置用户密码",
   "question.publish": "发布题目",
   "question.disable": "停用题目",
   "question.delete": "删除题目",
@@ -115,7 +116,7 @@ export interface OrgTag {
   parentId: string | null;
 }
 
-/** 组织维度标签词表。 */
+/** 组织维度标签**种子**（进 store 后可由人员名单导入自动扩充）。 */
 export const ORG_TAGS: OrgTag[] = [
   { id: "org-college", name: "计算机学院", parentId: null },
   { id: "org-major-cs", name: "计算机科学与技术", parentId: "org-college" },
@@ -126,7 +127,7 @@ export const ORG_TAGS: OrgTag[] = [
 ];
 
 /** 组织标签 → 名单组 ID 的映射：名单组是答题端的组织视图，组织标签是管理端的。 */
-const CLASS_TO_ORG: Record<string, string> = {
+export const CLASS_TO_ORG: Record<string, string> = {
   c2301: "org-class-cs-2301",
   c2302: "org-class-cs-2302",
 };
@@ -140,7 +141,10 @@ function buildUsers(): AppUser[] {
     id: "u-admin-01",
     account: "admin",
     name: "陈砚之",
-    roles: ["system_admin"],
+    // 演示账号同时持有内容管理员与系统管理员：
+    // 顶栏按首个角色显示「内容管理员」（与原型一致），
+    // 而「审计」等只对系统管理员开放的页面也能演示到。
+    roles: ["content_admin", "system_admin"],
     orgTags: [],
     status: "active",
     email: "chenyz@example.edu",
@@ -440,6 +444,8 @@ export interface AdminOpsState {
   proctorActions: ProctorAction[];
   /** 监考考生状态表：场次 ID → 学生 ID → 状态。 */
   proctorCandidates: Record<string, Record<string, ProctorCandidate>>;
+  /** 组织维度标签（院系 → 专业 → 班级，按 parentId 成树）。 */
+  orgTags: OrgTag[];
 }
 
 const initialState = (): AdminOpsState => ({
@@ -448,6 +454,7 @@ const initialState = (): AdminOpsState => ({
   auditLogs: buildAuditLogs(),
   proctorActions: [],
   proctorCandidates: {},
+  orgTags: ORG_TAGS.map((tag) => ({ ...tag })),
 });
 
 /** 管理端运维数据 store。 */
@@ -469,12 +476,69 @@ export function getUser(id: string): AppUser | undefined {
 
 /** 取组织标签。 */
 export function getOrgTag(id: string): OrgTag | undefined {
-  return ORG_TAGS.find((t) => t.id === id);
+  return useAdminOps.getState().orgTags.find((t) => t.id === id);
 }
 
 /** 取组织标签名。 */
 export function orgTagName(id: string): string {
-  return ORG_TAGS.find((t) => t.id === id)?.name ?? id;
+  return useAdminOps.getState().orgTags.find((t) => t.id === id)?.name ?? id;
+}
+
+/** 标签名 → 标签 ID。 */
+export function orgTagIdByName(name: string, parentId: string | null): string | undefined {
+  return useAdminOps
+    .getState()
+    .orgTags.find((t) => t.name === name && t.parentId === parentId)?.id;
+}
+
+/** 稳定散列（用于生成标签 ID）。 */
+function shortHash(input: string): string {
+  let h = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    h = (Math.imul(31, h) + input.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h).toString(36);
+}
+
+/**
+ * 取或建组织维度标签（FR-IAM-04 / FR-IAM-05）。
+ *
+ * 同一父标签下的同名标签复用；不存在则按层级自动创建，
+ * **不因标签缺失而让导入失败**。
+ */
+export function ensureOrgTag(
+  name: string,
+  parentId: string | null,
+): { tag: OrgTag; created: boolean } {
+  const trimmed = name.trim();
+  const state = useAdminOps.getState();
+  const hit = state.orgTags.find((t) => t.name === trimmed && t.parentId === parentId);
+  if (hit) return { tag: hit, created: false };
+
+  const tag: OrgTag = {
+    id: `org-${shortHash(`${parentId ?? "root"}/${trimmed}`)}`,
+    name: trimmed,
+    parentId,
+  };
+  // 散列极小概率撞名，撞名时追加后缀。
+  let id = tag.id;
+  let n = 1;
+  while (state.orgTags.some((t) => t.id === id)) {
+    n += 1;
+    id = `${tag.id}-${n}`;
+  }
+  const created: OrgTag = { ...tag, id };
+  useAdminOps.setState({ orgTags: [...state.orgTags, created] });
+  return { tag: created, created: true };
+}
+
+/** 解析角色文本：接受角色码（student）或中文名（学生）。 */
+export function parseUserRole(text: string): UserRole | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  if (trimmed in USER_ROLE_LABEL) return trimmed as UserRole;
+  const hit = Object.entries(USER_ROLE_LABEL).find(([, label]) => label === trimmed);
+  return hit ? (hit[0] as UserRole) : null;
 }
 
 /** 用户是否具备某角色。 */
@@ -499,6 +563,8 @@ export function createSession(input: {
   closeAt: string;
   durationMin: number;
   scope: string[];
+  /** 指定考生（FR-DLV-02）。 */
+  directUserIds?: string[];
   allowRetake: boolean;
   note: string;
   policy?: Partial<AntiCheatPolicy>;
@@ -517,6 +583,9 @@ export function createSession(input: {
     closeAt: input.closeAt,
     durationMin: input.durationMin,
     scope: input.scope,
+    ...(input.directUserIds && input.directUserIds.length > 0
+      ? { directUserIds: [...input.directUserIds] }
+      : {}),
     // 未发布时名单为空；发布时才物化。
     roster: [],
     allowRetake: input.allowRetake,
@@ -600,10 +669,58 @@ export function advanceSession(id: string): { ok: boolean; message?: string; sta
   return { ok: true, status: target };
 }
 
+/** 按账号找用户（不区分大小写，与后端唯一性口径一致）。 */
+export function findUserByAccount(account: string): AppUser | undefined {
+  const key = account.trim().toLowerCase();
+  return useAdminOps.getState().users.find((u) => u.account.toLowerCase() === key);
+}
+
+/**
+ * 新建用户（人员名单导入用）。
+ *
+ * 账号全局唯一（大小写不敏感）；重复时拒绝并说明原因。
+ */
+export function createUser(input: {
+  account: string;
+  name: string;
+  email?: string | undefined;
+  roles: UserRole[];
+  orgTags?: string[] | undefined;
+  mustChangePassword?: boolean | undefined;
+}): { ok: boolean; message?: string; id?: string } {
+  const account = input.account.trim();
+  if (!account) return { ok: false, message: "账号不能为空" };
+  if (!input.name.trim()) return { ok: false, message: "姓名不能为空" };
+  if (input.roles.length === 0) return { ok: false, message: "至少保留一个角色" };
+
+  const state = useAdminOps.getState();
+  if (state.users.some((u) => u.account.toLowerCase() === account.toLowerCase())) {
+    return { ok: false, message: "账号已存在" };
+  }
+
+  const id = `u-${account}`;
+  const user: AppUser = {
+    id,
+    account,
+    name: input.name.trim(),
+    roles: input.roles,
+    orgTags: input.orgTags ?? [],
+    status: "active",
+    email: input.email ?? "",
+    createdAt: new Date().toISOString().slice(0, 16).replace("T", " "),
+    lastLoginAt: null,
+    ...(input.mustChangePassword ? { mustChangePassword: true } : {}),
+  };
+  useAdminOps.setState({ users: [...state.users, user] });
+  return { ok: true, id };
+}
+
 /** 更新用户。 */
 export function updateUser(
   id: string,
-  patch: Partial<Pick<AppUser, "name" | "email" | "status" | "roles" | "orgTags">>,
+  patch: Partial<
+    Pick<AppUser, "name" | "email" | "status" | "roles" | "orgTags" | "mustChangePassword">
+  >,
 ): { ok: boolean; message?: string } {
   const state = useAdminOps.getState();
   if (!state.users.some((u) => u.id === id)) return { ok: false, message: "用户不存在" };

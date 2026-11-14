@@ -75,6 +75,7 @@ export function useStudentRecords(): StudentRecord[] {
   const studentId = useStudentStore((state) => state.studentId);
   const attempts = useCatalog((state) => state.attempts);
   const practiceResults = useCatalog((state) => state.practiceResults);
+  const history = useCatalog((state) => state.records);
   const exams = useCatalog((state) => state.exams);
   const practices = useCatalog((state) => state.practices);
 
@@ -110,10 +111,34 @@ export function useStudentRecords(): StudentRecord[] {
       };
       });
 
-    return [...examRecords, ...practiceRecords].sort((a, b) =>
+    // 历史成绩（seed 的 records）：已经考过的场次与练习。
+    // 同一对象若又产生了实时作答记录，以实时记录为准（它更细：含卷型与待阅标记）。
+    const historyRecords: StudentRecord[] = history
+      .filter((record) => record.studentId === studentId)
+      .map((record) => {
+      const exam = exams.find((e) => e.id === record.examId);
+      return {
+        kind: exam ? ("exam" as const) : ("practice" as const),
+        id: record.examId,
+        name: record.name,
+        date: record.date,
+        score: record.score,
+        total: record.total,
+        pending: record.status === "pending",
+      };
+      });
+
+    const live = [...examRecords, ...practiceRecords];
+    const liveIds = new Set(live.map((record) => record.id));
+    const merged = [
+      ...live,
+      ...historyRecords.filter((record) => !liveIds.has(record.id)),
+    ];
+
+    return merged.sort((a, b) =>
       a.date < b.date ? 1 : a.date > b.date ? -1 : 0,
     );
-  }, [studentId, attempts, practiceResults, exams, practices]);
+  }, [studentId, attempts, practiceResults, history, exams, practices]);
 }
 
 /** 当前答题者的错题。 */

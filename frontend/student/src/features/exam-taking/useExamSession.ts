@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "@exam/shared";
 import type { AnswerPayload } from "@exam/shared/domain/attempt";
 import type { ExamPaper, Question } from "@exam/shared/domain/types";
 import { buildPaper, type BuiltPaper, type BuiltPaperItem } from "@exam/shared/engine/paper";
@@ -23,10 +24,13 @@ import {
   getQuestion,
   saveAttempt,
   studentExam,
+  useCatalog,
 } from "@exam/shared/mock/catalog";
 import { clearDraft } from "@/stores/draftQueue";
 import { SyncEngine } from "@/lib/syncEngine";
-import { MockAnswerTransport } from "@/lib/transports";
+import { HttpAnswerTransport, MockAnswerTransport } from "@/lib/transports";
+import { apiBaseUrl, isBackendEnabled } from "@exam/shared/api";
+import { getAccessToken } from "@exam/shared/api";
 import { createHttpServerTimeSource } from "@/lib/serverTimeSource";
 import { useServerTime } from "@/lib/useServerTime";
 import { useStudentStore } from "@/stores/studentStore";
@@ -35,6 +39,12 @@ import { useFocusGuard } from "./FocusGuard";
 
 /** 模拟传输层单例——跨挂载保留「服务端」已接受的状态。 */
 const mockTransport = new MockAnswerTransport();
+/** 数据源切到后端时，答案上行走真实的作答接口。 */
+function createTransport() {
+  return isBackendEnabled()
+    ? new HttpAnswerTransport(apiBaseUrl(), getAccessToken)
+    : mockTransport;
+}
 
 /** 会话为空时的原因。 */
 export type SessionBlockReason =
@@ -76,6 +86,8 @@ export interface ExamSessionController {
   syncing: boolean;
   /** 是否已交卷。 */
   submitted: boolean;
+  /** 交卷时间（ISO 串）。 */
+  submittedAt: string | null;
   /** 交卷原因。 */
   submitReason: string | null;
   /** 会话被阻断的原因。 */
@@ -90,8 +102,8 @@ export interface ExamSessionController {
   toggleFlag: (qid: string) => void;
   /** 跳转到指定下标。 */
   goto: (index: number) => void;
-  /** 交卷。 */
-  submit: () => void;
+  /** 交卷（auto 为真时按「超时自动交卷」提示）。 */
+  submit: (auto?: boolean) => void;
   /** 强制交卷（切屏超限）。 */
   forceSubmit: (reason: string) => void;
   /** 立即同步。 */
@@ -129,6 +141,17 @@ export function useExamSession(examId: string): ExamSessionController {
   /* ---------------------------------------------------------------- 卷面 */
 
   const exam = useMemo(() => studentExam(examId, studentId), [examId, studentId]);
+
+  // 第几次尝试：已有作答记录的 attempts + 1（原型是 prev.attempts + 1）。
+  // 作答记录按 examId:studentId 唯一，所以不能按「记录条数」算——
+  // 那样第三次重考仍然得 2。重考时 attemptNo 递增，阅卷卷宗按 attempt 归属。
+  const attempts = useCatalog((state) => state.attempts);
+  const attemptNo = useMemo(() => {
+    const existing = Object.values(attempts).find(
+      (a) => a.examId === examId && a.studentId === studentId,
+    );
+    return (existing?.attempts ?? 0) + 1;
+  }, [attempts, examId, studentId]);
 
   const paper = useMemo(
     () =>
@@ -172,7 +195,7 @@ export function useExamSession(examId: string): ExamSessionController {
 
     const engine = new SyncEngine({
       attemptId: examId,
-      transport: mockTransport,
+      transport: createTransport(),
       onStatusChange: (status) => {
         setOffline(status.offline);
         setPending(status.pending);
@@ -238,26 +261,7 @@ export function useExamSession(examId: string): ExamSessionController {
 
   /* ---------------------------------------------------------- 切屏采集 */
 
-  useFocusGuard({
-    enabled: Boolean(exam) && !session.submitted,
-    requireFullscreen: false,
-    onEvent: (event) => {
-      if (!event.countsAsFocusLoss) return;
-      // 客户端只上报，计数以服务端为准；此处先做本地反馈。
-      setFocusLossCount((count) => count + 1);
-    },
-  });
-
   const maxFocusLoss = session.maxFocusLoss;
-
-  useEffect(() => {
-    // 达到切屏上限：按策略强制交卷。
-    if (focusLossCount >= maxFocusLoss && !session.submitted) {
-      setSubmitReason("proctor_force");
-      useExamSessionStore.getState().markForcedSubmit("检测到多次切屏，系统已强制交卷。");
-      void engineRef.current?.flush();
-    }
-  }, [focusLossCount, maxFocusLoss, session.submitted]);
 
   /* ------------------------------------------------------------ 作答 */
 
@@ -309,12 +313,11 @@ export function useExamSession(examId: string): ExamSessionController {
 
   /* ------------------------------------------------------------ 交卷 */
 
-  const submit = useCallback(() => {
+  const submit = useCallback((auto = false, reason?: string) => {
     if (!exam || !paper) return;
 
     const graded = scorePaper(paper, responses);
     const store = useExamSessionStore.getState();
-    const attemptNo = 1;
 
     saveAttempt({
       examId: exam.id,
@@ -363,17 +366,41 @@ export function useExamSession(examId: string): ExamSessionController {
     void clearDraft(examId);
     void engineRef.current?.flush();
 
+    // 提示文案与原型一致：手动交卷 / 超时自动交卷；
+    // 强制交卷用处置原因本身（原型没有防作弊采集这一段）。
+    toast.ok(reason ?? (auto ? "考试时间到，已自动交卷" : "已交卷，正在生成成绩报告"));
+
     navigate(`/exams/${examId}/report`);
-  }, [exam, paper, responses, studentId, examId, navigate]);
+  }, [exam, paper, responses, studentId, examId, attemptNo, navigate]);
 
   const forceSubmit = useCallback(
     (reason: string) => {
       setSubmitReason(reason);
       useExamSessionStore.getState().markForcedSubmit(reason);
-      submit();
+      submit(false, reason);
     },
     [submit],
   );
+
+  /* ---------------------------------------------------------- 切屏采集 */
+
+  // 放在 forceSubmit 之后：达到切屏上限要真的触发强制交卷
+  // （设计文档 FR-ANT-02「超限处置」；原型没有防作弊采集，是 React 依设计文档补的）。
+  useFocusGuard({
+    enabled: Boolean(exam) && !session.submitted,
+    requireFullscreen: false,
+    onEvent: (event) => {
+      if (!event.countsAsFocusLoss) return;
+      // 客户端只上报，计数以服务端为准；此处先做本地反馈。
+      const store = useExamSessionStore.getState();
+      const count = store.focusLossCount + 1;
+      store.setFocusLossCount(count);
+      setFocusLossCount(count);
+      if (maxFocusLoss > 0 && count >= maxFocusLoss) {
+        forceSubmit(`切屏次数已达上限（${maxFocusLoss} 次），已强制交卷`);
+      }
+    },
+  });
 
   /* ------------------------------------------------------------ 汇总 */
 
@@ -386,6 +413,16 @@ export function useExamSession(examId: string): ExamSessionController {
   else if (session.submitted) blocked = "already_submitted";
   else if (session.remainingSec <= 0) blocked = "time_up";
   else if (exam.status === "ended" && !exam.allowRetake) blocked = "ended";
+
+  // 倒计时归零：**自动交卷**（判分、落 attempt、主观题进阅卷队列），再跳成绩报告。
+  // 服务端会按 time_up 裁决，这里只是先把本地的作答落下来，不提交就等于白考。
+  useEffect(() => {
+    if (blocked !== "time_up" || session.submitted) return;
+    // 会话还没初始化时（首帧 remainingSec 仍是 0）不交卷，
+    // 否则刚进页面就会被判超时。
+    if (session.deadlineAt === null) return;
+    submit();
+  }, [blocked, session.submitted, session.deadlineAt, submit]);
 
   return {
     exam,
@@ -403,6 +440,7 @@ export function useExamSession(examId: string): ExamSessionController {
     pending,
     syncing,
     submitted: session.submitted,
+    submittedAt: session.submittedAt,
     submitReason,
     blocked,
     choose,

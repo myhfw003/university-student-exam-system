@@ -7,9 +7,14 @@
 
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Badge, Button, Card, Empty, LineChart, PageHead, Stat, TagChip } from "@exam/shared";
-import { formatPercent, formatScore } from "@exam/shared";
-import { getStudent, useCatalog } from "@exam/shared/mock/catalog";
+import { Badge, Button, Callout, Card, Empty, LineChart, PageHead, Stat } from "@exam/shared";
+import { formatScore } from "@exam/shared";
+import { getStudent, TAG_GROUP_LABEL, useCatalog } from "@exam/shared/mock/catalog";
+import { PAPER_MODES, normalizeConfig, variantLabelOf } from "@exam/shared/engine/paper";
+import type { ExamPaper } from "@exam/shared/domain/types";
+import { Icon } from "@/app/Icon";
+import { TagChips, knowledgeTag } from "@/features/shared/TagChips";
+import { examSessionKey, useExamSessionStore } from "@/stores/examSessionStore";
 import { useStudentStore } from "@/stores/studentStore";
 import {
   greetingFor,
@@ -19,6 +24,11 @@ import {
   useVisiblePractices,
   weekdayOf,
 } from "@/features/shared/studentData";
+
+/** 有效卷型的标签 / 短说明 / 长说明（原型取 plumCfg(exam).mode）。 */
+function modeInfo(exam: ExamPaper) {
+  return PAPER_MODES[normalizeConfig(exam).mode];
+}
 
 /** 工作台。 */
 export function DashboardPage() {
@@ -41,13 +51,24 @@ export function DashboardPage() {
   const mistakes = useStudentMistakes();
   const practices_ = useVisiblePractices();
   const ongoing = useOngoingExam();
+  // 已有会话（开始过这场考试）时，入口显示「继续考试」（原型 student.js:443）。
+  const examSessions = useExamSessionStore((state) => state.sessions);
+  const ongoingStartedAt = ongoing
+    ? examSessions[examSessionKey(ongoing.id, studentId)]?.startedAt
+    : undefined;
+  // 已交过分的练习 ID：用于区分「待完成」与「已完成」。
+  const practiceResultKeys = useMemo(
+    () => new Set(records.filter((r) => r.kind === "practice").map((r) => r.id)),
+    [records],
+  );
 
   const now = new Date();
   const greeting = greetingFor(now.getHours());
 
   /* ---------------------------------------------------------- 统计 */
 
-  const pendingPractices = practices_.filter((p) => p.status === "published").length;
+  // 原型 student.js:366-369：统计的是**未完成**（还没有练习成绩）的练习。
+  const pendingPractices = practices_.filter((p) => !practiceResultKeys.has(p.id)).length;
   const average = useMemo(() => {
     if (records.length === 0) return 0;
     const rates = records.map((r) => (r.total > 0 ? (r.score / r.total) * 100 : 0));
@@ -73,21 +94,32 @@ export function DashboardPage() {
 
   /* ------------------------------------------------------ 错题分布 */
 
+  // 原型 student.js:586：按「知识点」分组，没有知识点就回退到领域，
+  // 都没有则归入「未归类」。
   const mistakeDistribution = useMemo(() => {
-    const counts = new Map<string, number>();
+    const catalog = useCatalog.getState();
+    const groups = new Map<string, { name: string; group: string; count: number }>();
     for (const mistake of mistakes) {
-      const question = useCatalog.getState().questions.find((q) => q.id === mistake.qid);
-      const tagId = question?.tags.find((t) => t.startsWith("t-pt-"));
-      if (!tagId) continue;
-      counts.set(tagId, (counts.get(tagId) ?? 0) + 1);
+      const question = catalog.questions.find((q) => q.id === mistake.qid);
+      if (!question) continue;
+      const tag = knowledgeTag(question.tags, catalog.tags);
+      const key = tag ? tag.id : "unknown";
+      const entry = groups.get(key) ?? {
+        name: tag ? tag.name : "未归类",
+        group: tag ? (TAG_GROUP_LABEL[tag.group] ?? tag.group) : "领域",
+        count: 0,
+      };
+      entry.count += 1;
+      groups.set(key, entry);
     }
-    const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]);
-    const max = entries.length > 0 ? entries[0]![1] : 0;
-    return entries.map(([tagId, count]) => ({
-      tagId,
-      name: useCatalog.getState().tags.find((t) => t.id === tagId)?.name ?? tagId,
-      count,
-      tone: count === max ? ("default" as const) : ("warn" as const),
+    const entries = [...groups.entries()].sort((a, b) => b[1].count - a[1].count);
+    const max = entries.length > 0 ? entries[0]![1].count : 0;
+    return entries.map(([key, entry]) => ({
+      key,
+      name: entry.name,
+      group: entry.group,
+      count: entry.count,
+      tone: entry.count === max ? ("default" as const) : ("warn" as const),
     }));
   }, [mistakes]);
 
@@ -98,8 +130,12 @@ export function DashboardPage() {
         sub={`${className} · 编号 ${studentId} · 今天 ${now.getFullYear()} 年 ${now.getMonth() + 1} 月 ${now.getDate()} 日 ${weekdayOf(now)}`}
         actions={
           <>
-            <Button onClick={() => navigate("/exams")}>考试安排</Button>
+            <Button onClick={() => navigate("/exams")}>
+              <Icon name="clipboard" />
+              考试安排
+            </Button>
             <Button variant="primary" onClick={() => navigate("/practice")}>
+              <Icon name="book" />
               去练习
             </Button>
           </>
@@ -144,33 +180,27 @@ export function DashboardPage() {
                     {ongoing.totalScore} 分 · 开放时间 {ongoing.openAt} — {ongoing.closeAt}
                   </div>
                   <div className="row-tight">
-                    <span className="variant-tag">
-                      {ongoing.plum.mode === "standard"
-                        ? "标准卷"
-                        : ongoing.plum.mode === "small"
-                          ? "小梅花"
-                          : "大梅花"}
-                    </span>
+                    <span className="variant-tag">{modeInfo(ongoing).label}</span>
                     <span className="text-sm text-3">
-                      你的卷号 {studentId.slice(-4)} 号卷
+                      你的卷号 {variantLabelOf(normalizeConfig(ongoing), studentId)}
                     </span>
                   </div>
                   <div className="row-tight">
-                    {ongoing.tags.map((tagId) => (
-                      <TagChip key={tagId} group="domain">
-                        {useCatalog.getState().tags.find((t) => t.id === tagId)?.name ?? tagId}
-                      </TagChip>
-                    ))}
+                    <TagChips tags={ongoing.tags} />
                   </div>
                 </div>
                 <div className="spacer" />
                 <Button variant="primary" onClick={() => navigate(`/exams/${ongoing.id}`)}>
-                  进入考试
+                  {/* 原型 student.js:443：已有会话显示「继续考试」。 */}
+                  {ongoingStartedAt ? "继续考试" : "进入考试"}
                 </Button>
               </div>
-              <div className="callout" style={{ marginTop: "var(--sp-4)" }}>
-                <span className="callout-title">考试须知</span>
-                <span>{ongoing.note}</span>
+              {/* 原型 student.js:449：须知里带整句卷型说明。 */}
+              <div style={{ marginTop: "var(--sp-4)" }}>
+                <Callout title="考试须知" icon={<Icon name="info" />}>
+                  {ongoing.note} 本卷采用{modeInfo(ongoing).label}（
+                  {modeInfo(ongoing).short}）：{modeInfo(ongoing).desc}
+                </Callout>
               </div>
             </Card>
           ) : null}
@@ -193,18 +223,18 @@ export function DashboardPage() {
                   <div className="list-row" key={practice.id}>
                     <div className="list-main">
                       <div className="list-title">{practice.name}</div>
+                      {/* 原型 student.js:461：一行副标题，末尾是上次得分或「尚未开始」。 */}
                       <div className="list-sub">
-                        {practice.questionIds.length} 题 · 约 {practice.durationMin} 分钟 · 总分{" "}
-                        {practice.totalScore} 分
+                        {practice.questionIds.length} 题 · 约 {practice.durationMin} 分钟 ·{" "}
+                        {result
+                          ? `上次得分 ${formatScore(result.score)}/${formatScore(result.total)}（${Math.round(
+                              result.total > 0 ? (result.score / result.total) * 100 : 0,
+                            )}%）`
+                          : "尚未开始"}
                       </div>
-                      {result ? (
-                        <div className="list-sub">
-                          上次得分 {result.score}/{result.total}（
-                          {formatPercent(result.total > 0 ? (result.score / result.total) * 100 : 0)}%）
-                        </div>
-                      ) : (
-                        <div className="list-sub">尚未开始</div>
-                      )}
+                      <div className="row-tight" style={{ marginTop: "var(--sp-2)" }}>
+                        <TagChips tags={practice.tags} />
+                      </div>
                     </div>
                     <div className="spacer" />
                     <Button size="sm" onClick={() => navigate(`/practice/${practice.id}`)}>
@@ -235,10 +265,10 @@ export function DashboardPage() {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>项目</th>
-                      <th>日期</th>
-                      <th className="right">得分</th>
-                      <th>状态</th>
+                      <th scope="col">项目</th>
+                      <th scope="col">日期</th>
+                      <th className="right" scope="col">得分</th>
+                      <th scope="col">状态</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -267,7 +297,10 @@ export function DashboardPage() {
 
         <div className="stack">
           {/* 成绩趋势 */}
-          <Card title="成绩趋势" actions={<span className="text-sm text-3">最近 {trend.length} 次</span>}>
+          <Card
+            title="成绩趋势"
+            actions={<span className="text-sm text-3">最近 {records.length} 次</span>}
+          >
             {trend.length === 0 ? (
               <Empty title="暂无成绩记录" body="完成一次练习或考试后，这里会显示成绩变化曲线。" />
             ) : (
@@ -288,8 +321,11 @@ export function DashboardPage() {
               <Empty title="错题本是空的" body="做错的题目会自动收录到这里，方便反复订正。" />
             ) : (
               mistakeDistribution.map((entry) => (
-                <div className="bar-row" key={entry.tagId}>
-                  <span className="od-truncate">{entry.name}</span>
+                <div className="bar-row" key={entry.key}>
+                  <span className="od-truncate">
+                    {entry.name}
+                    <span className="text-3 text-xs"> · {entry.group}</span>
+                  </span>
                   <span className="bar-track">
                     <span
                       className={`bar-fill${entry.tone === "warn" ? " is-warn" : ""}`}

@@ -1,5 +1,6 @@
 export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from "./Button";
 export { IconButton, type IconButtonProps } from "./IconButton";
+export { Icon, type IconProps } from "./Icon";
 export { Dialog, type DialogProps } from "./Dialog";
 export { ConfirmDialog, type ConfirmDialogProps } from "./ConfirmDialog";
 export { Badge, type BadgeProps, type BadgeTone } from "./Badge";

@@ -17,7 +17,7 @@
      选项：exam.id + "|" + seed + "|" + variantKey + "|" + questionId + "|opt"
    ========================================================================== */
 
-import type { ExamPaper, PaperItem, PaperMode, Question } from "../domain/types";
+import type { DifficultyLevel, ExamPaper, PaperItem, PaperMode, Question } from "../domain/types";
 import { autoSeed, hash32, rng, shuffle } from "./random";
 
 /** 选项字母表：卷面上按位置重新编号。 */
@@ -39,6 +39,18 @@ export const TYPE_LABEL: Record<Question["type"], string> = {
   judge: "判断题",
   short: "简答题",
   comprehensive: "综合操作题",
+};
+
+/**
+ * 难度中文名。
+ *
+ * 与原型 `DIFFICULTY_LABEL` 逐字一致；放在引擎层是为了让 UI 原语
+ * （如题头的难度片）也能取到它，不必反向依赖 mock 数据层。
+ */
+export const DIFFICULTY_LABEL: Record<DifficultyLevel, string> = {
+  1: "基础",
+  2: "中等",
+  3: "较难",
 };
 
 /** 卷型定义。 */
@@ -263,8 +275,21 @@ export function buildPaper(
   const variantKey = variantKeyOf(cfg, studentId);
   const order = questionOrderOf(exam, cfg, variantKey, getQuestion, difficultyLevels);
 
-  const items: BuiltPaperItem[] = order.map((qid, index) => {
+  // 基准题序：originalIndex 用它算位次（大梅花下卷面顺序已打乱，位次不能取卷面序）。
+  const base =
+    exam.orderRule === "manual"
+      ? [...exam.questionIds]
+      : canonicalOrder(exam, getQuestion, difficultyLevels);
+  const baseIndex: Record<string, number> = {};
+  base.forEach((qid, i) => {
+    baseIndex[qid] = i + 1;
+  });
+
+  const items: BuiltPaperItem[] = order
+    .map((qid, index) => {
     const question = getQuestion(qid);
+    // 题目已从题库删除时跳过，不让 undefined 混进卷面（原型同样跳过）。
+    if (!question) return null;
     const originalKeys = (question?.options ?? []).map((o) => o.key);
 
     // 标准卷与判断题都不置换选项。
@@ -289,9 +314,9 @@ export function buildPaper(
     return {
       slot: index + 1,
       qid,
-      question: question as Question,
+      question,
       score: itemScoreOf(exam.items, qid, question),
-      originalIndex: index + 1,
+      originalIndex: baseIndex[qid] ?? exam.questionIds.indexOf(qid) + 1,
       displayKeys,
       toOriginal,
       fromOriginal,
@@ -300,7 +325,8 @@ export function buildPaper(
         displayKeys.length !== originalKeys.length ||
         displayKeys.some((key, i) => key !== originalKeys[i]),
     };
-  });
+  })
+    .filter((item): item is BuiltPaperItem => item !== null);
 
   return {
     examId: exam.id,

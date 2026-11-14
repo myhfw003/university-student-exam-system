@@ -28,7 +28,7 @@ export const STUDENT_NAV: NavGroup[] = [
       { path: "/", label: "工作台", icon: "grid" },
       { path: "/practice", label: "练习中心", icon: "book" },
       { path: "/exams", label: "考试安排", icon: "clipboard" },
-      { path: "/mistakes", label: "错题本", icon: "alert", count: 12 },
+      { path: "/mistakes", label: "错题本", icon: "alert" },
     ],
   },
   {

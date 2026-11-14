@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { useToastStore } from "@exam/shared";
 import { resetCatalog, useCatalog } from "@exam/shared/mock/catalog";
 import { resetAdminOps, useAdminOps } from "@exam/shared/mock/adminOps";
 import { OverviewPage } from "../overview/OverviewPage";
@@ -25,6 +26,7 @@ import { ExamSessionDetailPage } from "../sessions/ExamSessionDetailPage";
 import { ProctoringPage } from "../monitoring/ProctoringPage";
 import { UsersPage } from "../users/UsersPage";
 import { AuditLogPage } from "../audit/AuditLogPage";
+import { QuestionEditor } from "../shared/QuestionEditor";
 
 /** 渲染带路由的页面。 */
 function renderPage(node: ReactNode, path = "/", routePath?: string) {
@@ -44,7 +46,15 @@ function renderPage(node: ReactNode, path = "/", routePath?: string) {
 beforeEach(() => {
   resetCatalog();
   resetAdminOps();
+  // 提示条是全局 store，测试间清空，避免读到上一条用例的文案。
+  useToastStore.setState({ toasts: [] });
 });
+
+/** 最近一条提示条文案（提示条渲染在应用外壳上，单元测试里直接读 store）。 */
+function lastToast(): string | undefined {
+  const toasts = useToastStore.getState().toasts;
+  return toasts[toasts.length - 1]?.message;
+}
 
 describe("管理端概览页", () => {
   it("渲染标题与待办工作台", () => {
@@ -79,7 +89,7 @@ describe("管理端标签页", () => {
     await user.type(nameInput, "测试标签");
 
     const dialog = screen.getByRole("dialog");
-    await user.click(within(dialog).getByRole("button", { name: "保存" }));
+    await user.click(within(dialog).getByRole("button", { name: "保存标签" }));
 
     expect(screen.getAllByText("测试标签").length).toBeGreaterThan(0);
     expect(useCatalog.getState().tags.some((t) => t.name === "测试标签")).toBe(true);
@@ -92,6 +102,86 @@ describe("管理端题库页", () => {
     expect(screen.getByRole("heading", { name: "题库" })).toBeInTheDocument();
     expect(screen.getByText("题库清单")).toBeInTheDocument();
     expect(screen.getByText("全部题库")).toBeInTheDocument();
+  });
+});
+
+describe("管理端题库编辑器", () => {
+  it("?edit= 深链直接打开对应题库的编辑对话框", () => {
+    const banks = useCatalog.getState().banks;
+    const target = banks[0]!;
+    renderPage(<BanksPage />, `/banks?edit=${target.id}`);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByLabelText(/题库名称/)).toHaveValue(target.name);
+  });
+
+  it("题目清单按题型分组勾选并计入已选题数", async () => {
+    const user = userEvent.setup();
+    renderPage(<BanksPage />);
+    await user.click(screen.getByRole("button", { name: /新建题库/ }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("题目清单")).toBeInTheDocument();
+    expect(within(dialog).getByText("已选 0 题")).toBeInTheDocument();
+
+    // 勾选一道题 → 已选计数与归属同步更新。
+    const first = within(dialog).getAllByRole("checkbox")[0]!;
+    await user.click(first);
+    expect(within(dialog).getByText("已选 1 题")).toBeInTheDocument();
+
+    await user.type(within(dialog).getByLabelText(/题库名称/), "测试题库");
+    await user.click(within(dialog).getByRole("button", { name: "保存题库" }));
+
+    const created = useCatalog.getState().banks.find((b) => b.name === "测试题库");
+    expect(created?.questionIds).toHaveLength(1);
+  });
+
+  it("题库清单展示覆盖维度列", () => {
+    renderPage(<BanksPage />);
+    expect(screen.getByRole("columnheader", { name: "覆盖维度" })).toBeInTheDocument();
+  });
+});
+
+describe("管理端题目编辑器", () => {
+  it("切换题型重建下半区：无答案时拒绝保存", async () => {
+    const user = userEvent.setup();
+    renderPage(<QuestionEditor open question={null} onClose={() => {}} />);
+    const dialog = screen.getByRole("dialog");
+
+    await user.type(within(dialog).getByLabelText(/题目编号/), "q-test-01");
+    await user.type(within(dialog).getByLabelText(/题干/), "测试题干");
+
+    // 单选：未勾选正确答案 → 拒绝保存（原型「请至少勾选一个正确答案」）。
+    await user.click(within(dialog).getByRole("button", { name: "保存题目" }));
+    expect(lastToast()).toBe("请至少勾选一个正确答案");
+
+    // 切到判断题：选项重建为「正确 / 错误」两项。
+    await user.selectOptions(within(dialog).getByLabelText(/题型/), "judge");
+    expect(within(dialog).getByDisplayValue("正确")).toBeInTheDocument();
+    expect(within(dialog).getByDisplayValue("错误")).toBeInTheDocument();
+  });
+
+  it("题号重复时拒绝保存", async () => {
+    const user = userEvent.setup();
+    const existing = useCatalog.getState().questions[0]!;
+    renderPage(<QuestionEditor open question={null} onClose={() => {}} />);
+    const dialog = screen.getByRole("dialog");
+
+    await user.type(within(dialog).getByLabelText(/题目编号/), existing.id);
+    await user.type(within(dialog).getByLabelText(/题干/), "重复题号");
+    await user.click(within(dialog).getByRole("button", { name: "保存题目" }));
+
+    expect(lastToast()).toBe(`题号 ${existing.id} 已存在，请更换`);
+  });
+});
+
+describe("管理端组卷向导筛选", () => {
+  it("题库与题型为多选下拉并给出说明", () => {
+    renderPage(<PaperWizardPage />, "/papers/exam-net-mid?kind=exam&step=select", "/papers/:paperId");
+    expect(screen.getByRole("button", { name: /题库筛选（可多选）/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /题型筛选（可多选）/ })).toBeInTheDocument();
+    expect(
+      screen.getByText("题库与题型均可多选；未选择时表示不限制，命中任一所选项即列出。"),
+    ).toBeInTheDocument();
   });
 });
 
@@ -123,6 +213,51 @@ describe("管理端组卷列表", () => {
     const practices = useCatalog.getState().practices;
     await user.click(screen.getByRole("button", { name: new RegExp(`练习 ${practices.length}`) }));
     expect(screen.getByRole("heading", { name: "练习" })).toBeInTheDocument();
+  });
+});
+
+describe("管理端实体标签", () => {
+  it("组卷列表的行操作可打开标签弹窗并保存", async () => {
+    const user = userEvent.setup();
+    renderPage(<PaperListPage />);
+    const exam = useCatalog.getState().exams[0]!;
+
+    await user.click(screen.getAllByRole("button", { name: "标签" })[0]!);
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText(
+        "标签用于把试卷接入领域 / 知识点 / 能力等维度，答题端据此筛选与归档。",
+      ),
+    ).toBeInTheDocument();
+
+    // 勾一个标签后保存，标签落到该试卷上。
+    const chips = within(dialog).getAllByRole("button");
+    const chip = chips.find((el) => el.getAttribute("aria-pressed") === "false");
+    await user.click(chip!);
+    await user.click(within(dialog).getByRole("button", { name: "保存标签" }));
+
+    expect(lastToast()).toBe("标签已更新");
+    const saved = useCatalog.getState().exams.find((e) => e.id === exam.id);
+    expect(saved?.tags.length).toBeGreaterThan(0);
+  });
+
+  it("向导页头有标签按钮并可保存", async () => {
+    const user = userEvent.setup();
+    renderPage(<PaperWizardPage />, "/papers/exam-net-mid?kind=exam&step=basic", "/papers/:paperId");
+
+    await user.click(screen.getByRole("button", { name: "标签" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/^试卷标签 · /)).toBeInTheDocument();
+
+    const chip = within(dialog)
+      .getAllByRole("button")
+      .find((el) => el.getAttribute("aria-pressed") === "false");
+    await user.click(chip!);
+    await user.click(within(dialog).getByRole("button", { name: "保存标签" }));
+
+    expect(lastToast()).toBe("标签已更新");
+    expect(useCatalog.getState().exams.find((e) => e.id === "exam-net-mid")?.tags.length)
+      .toBeGreaterThan(0);
   });
 });
 
@@ -160,6 +295,18 @@ describe("管理端阅卷中心", () => {
     expect(screen.getByText(`待阅卷 ${pending}`)).toBeInTheDocument();
   });
 
+  it("步骤级卷宗展示步骤评分卡（原型 admin.js:599-607）", async () => {
+    const user = userEvent.setup();
+    renderPage(<ReviewCenterPage />);
+
+    // 队列里有按步骤阅卷的卷宗（q-d-05 的第 2 步）。
+    const stepRows = screen.getAllByText(/步骤 s2/);
+    await user.click(stepRows[0]!);
+
+    expect(screen.getByRole("heading", { name: "步骤评分" })).toBeInTheDocument();
+    expect(screen.getByText("第二步：写出可编译的 C 代码。")).toBeInTheDocument();
+  });
+
   it("保存评分后卷宗标记为已阅", async () => {
     const user = userEvent.setup();
     renderPage(<ReviewCenterPage />);
@@ -193,9 +340,19 @@ describe("管理端考试场次", () => {
 });
 
 describe("管理端实时监考", () => {
+  it("不带场次时先让管理员挑一个场次", () => {
+    // 侧栏「实时监考」指向 /monitoring，没有这一屏就会落到 404。
+    renderPage(<ProctoringPage />, "/monitoring", "/monitoring/:sessionId?");
+    expect(screen.getByRole("heading", { name: "实时监考" })).toBeInTheDocument();
+    expect(screen.getByText("可监考场次")).toBeInTheDocument();
+    // 种子数据里 sess-net-mid 是进行中的场次，可以进入监考。
+    expect(screen.getByRole("button", { name: "进入监考" })).toBeInTheDocument();
+    expect(screen.getByText("计算机网络期中考试 · 第 1 场")).toBeInTheDocument();
+  });
+
   it("渲染考生状态表并可执行处置", async () => {
     const user = userEvent.setup();
-    renderPage(<ProctoringPage />, "/monitoring/sess-net-mid", "/monitoring/:sessionId");
+    renderPage(<ProctoringPage />, "/monitoring/sess-net-mid", "/monitoring/:sessionId?");
     expect(screen.getByRole("heading", { name: /实时监考/ })).toBeInTheDocument();
     expect(screen.getByText("考生状态")).toBeInTheDocument();
 
@@ -210,7 +367,7 @@ describe("管理端实时监考", () => {
 
   it("强制交卷必须填写原因", async () => {
     const user = userEvent.setup();
-    renderPage(<ProctoringPage />, "/monitoring/sess-net-mid", "/monitoring/:sessionId");
+    renderPage(<ProctoringPage />, "/monitoring/sess-net-mid", "/monitoring/:sessionId?");
     await user.click(screen.getAllByRole("button", { name: "强制交卷" })[0]!);
     const dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: "确认" }));

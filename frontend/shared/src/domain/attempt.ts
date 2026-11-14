@@ -5,55 +5,13 @@
    前端只依赖这些结构，不直接接触后端 DTO 细节。
    ========================================================================== */
 
-/** 题目类型。 */
-export type QuestionType = "single" | "multi" | "judge" | "short" | "comprehensive";
-
-/** 题目状态。 */
-export type QuestionStatus = "draft" | "published" | "disabled";
-
-/** 题目来源。 */
-export type QuestionSource = "manual" | "import" | "generated";
-
-/** 标签分组（五维）。组织维度只挂用户，题目只挂前四维。 */
-export type TagGroup = "domain" | "knowledge_point" | "ability" | "difficulty" | "organization";
-
-/** 题目选项。 */
-export interface QuestionOption {
-  key: string;
-  text: string;
-}
-
-/** 简答题评分要点。 */
-export interface QuestionKeypoint {
-  code: string;
-  text: string;
-  score?: number;
-}
-
-/** 综合题评分步骤。 */
-export interface QuestionStep {
-  code: string;
-  text: string;
-  score?: number;
-}
-
-/** 题目。 */
-export interface Question {
-  id: string;
-  code: string;
-  type: QuestionType;
-  stem: string;
-  defaultScore: number;
-  status: QuestionStatus;
-  source: QuestionSource;
-  analysis?: string | null;
-  referenceAnswer?: string | null;
-  tagIds: string[];
-  difficultyTagId: string;
-  options?: QuestionOption[];
-  keypoints?: QuestionKeypoint[];
-  steps?: QuestionStep[];
-}
+/**
+ * 题目类型。
+ *
+ * 内容域的类型统一在 `domain/types.ts` 定义，本模块只转出，
+ * 避免同一个概念存在两套互不兼容的形状。
+ */
+export type { QuestionType } from "./types";
 
 /**
  * 答案载荷值对象。按题型结构不同：
@@ -79,11 +37,33 @@ export function isPayloadEmpty(payload: AnswerPayload | null | undefined): boole
   return true;
 }
 
-/** 作答会话状态。 */
-export type AttemptStatus = "not_started" | "in_progress" | "submitted" | "graded";
+/**
+ * 作答会话状态。
+ *
+ * 与 docs/design/03-domain-model.md §5.3 的状态机一致：
+ * NotStarted → InProgress → Submitted / AutoSubmitted / ForceSubmitted，
+ * 另有 Abandoned（超时未交被清理）。
+ */
+export type AttemptStatus =
+  | "not_started"
+  | "in_progress"
+  | "submitted"
+  | "auto_submitted"
+  | "force_submitted"
+  | "abandoned";
 
-/** 交卷原因。 */
-export type SubmitReason = "manual" | "time_up" | "proctor_force" | "admin_force";
+/**
+ * 交卷原因。
+ *
+ * 与 §5.3 的 SubmitReason 一一对应：Manual / TimeUp / ProctorForce /
+ * AdminForce / NetworkTimeout。
+ */
+export type SubmitReason =
+  | "manual"
+  | "time_up"
+  | "proctor_force"
+  | "admin_force"
+  | "network_timeout";
 
 /**
  * 焦点事件类型。`isFocusLoss` 判定哪些类型计入切屏计数。

@@ -6,10 +6,13 @@ import type { CSSProperties } from "react";
    ========================================================================== */
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { z } from "zod";
-import { Button, Callout } from "@exam/shared";
+import { Button, Callout, useAuth } from "@exam/shared";
+import { useCatalog } from "@exam/shared/mock/catalog";
+import { useStudentStore } from "@/stores/studentStore";
 
 const loginSchema = z.object({
   account: z.string().min(1, "请输入账号"),
@@ -20,6 +23,12 @@ type LoginValues = z.infer<typeof loginSchema>;
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const signIn = useAuth((state) => state.signIn);
+  const mode = useAuth((state) => state.mode);
+  const students = useCatalog((state) => state.students);
+  const studentId = useStudentStore((state) => state.studentId);
+  const [formError, setFormError] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -29,10 +38,29 @@ export function LoginPage() {
     defaultValues: { account: "", password: "" },
   });
 
-  const onSubmit = async (_values: LoginValues) => {
-    // 骨架：接入 POST /auth/login 后在此换发令牌并跳转
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    navigate("/", { replace: true });
+  const onSubmit = async (values: LoginValues) => {
+    setFormError(null);
+    // 演示身份：账号命中题库里的学生就用该学生，否则用当前答题者。
+    const account = values.account.trim();
+    const student =
+      students.find((s) => s.id === account) ?? students.find((s) => s.id === studentId);
+    const demo = student
+      ? {
+          id: student.id,
+          account: student.id,
+          name: student.name,
+          roles: ["student" as const],
+          orgTags: [],
+        }
+      : null;
+
+    const result = await signIn(account, values.password, demo);
+    if (!result.ok) {
+      setFormError(result.message ?? "账号或密码错误");
+      return;
+    }
+    const from = (location.state as { from?: string } | null)?.from;
+    navigate(from ?? "/", { replace: true });
   };
 
   return (
@@ -61,9 +89,12 @@ export function LoginPage() {
           </div>
         </div>
         <div className="card-body stack">
-          <Callout tone="info" title="尚未接入后端">
-            当前为前端骨架：表单校验已可用，提交后不会真正登录。
-          </Callout>
+          {mode === "mock" ? (
+            <Callout tone="info" title="演示模式">
+              后端尚未接入：任意账号与密码即可进入演示，登录态与权限守卫照常生效。
+            </Callout>
+          ) : null}
+          {formError ? <Callout tone="danger" title="登录失败">{formError}</Callout> : null}
 
           <form
             className="stack"

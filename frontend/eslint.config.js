@@ -70,6 +70,13 @@ export default tseslint.config(
       globals: { ...globals.node },
     },
   },
+  // 根级脚本（构建检查、渲染冒烟、静态服务器等）是 Node 程序。
+  {
+    files: ["scripts/**/*.{js,mjs}", "**/*.mjs"],
+    languageOptions: {
+      globals: { ...globals.node },
+    },
+  },
 
   // 测试文件
   {

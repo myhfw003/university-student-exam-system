@@ -37,3 +37,10 @@ export {
   type RefreshTokenFn,
 } from "./authInterceptor";
 export { ENDPOINTS } from "./endpoints";
+export {
+  apiBaseUrl,
+  dataSourceMode,
+  isBackendEnabled,
+  type DataSourceMode,
+} from "./dataSource";
+export { loadCatalogSnapshot, type CatalogSnapshot } from "./catalogApi";

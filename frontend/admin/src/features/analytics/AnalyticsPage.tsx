@@ -9,7 +9,7 @@
 
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BarChart, Meter, PageHead, Segmented, Stat, formatPercent, formatScore } from "@exam/shared";
+import { BarChart, Dialog, Meter, PageHead, Segmented, Stat, formatPercent, formatScore } from "@exam/shared";
 import {
   className as classNameOf,
   getQuestion,
@@ -27,6 +27,7 @@ import {
   type PaperResponses,
 } from "@exam/shared/engine";
 import { TypeBadge } from "../shared/bits";
+import { PaperPreviewTable } from "../shared/PaperPreviewTable";
 
 /** 一行成绩。 */
 interface AnalyticsRow {
@@ -106,6 +107,8 @@ export function AnalyticsPage() {
   const ended = useMemo(() => exams.filter((e) => e.status === "ended"), [exams]);
   const [examId, setExamId] = useState(ended[0]?.id ?? exams[0]?.id ?? "");
   const [classFilter, setClassFilter] = useState("全部");
+  // 「卷面」按人预览：打开该答题者本人的卷面（原型 admin.js:1237 openPaperPreview）。
+  const [previewRow, setPreviewRow] = useState<AnalyticsRow | null>(null);
 
   const exam = exams.find((e) => e.id === examId);
 
@@ -330,13 +333,13 @@ export function AnalyticsPage() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>总排名</th>
-                    <th>答题者</th>
-                    <th>客观题</th>
-                    <th>主观题</th>
-                    <th>总分</th>
-                    <th>得分率</th>
-                    <th></th>
+                    <th scope="col">总排名</th>
+                    <th scope="col">答题者</th>
+                    <th scope="col">客观题</th>
+                    <th scope="col">主观题</th>
+                    <th scope="col">总分</th>
+                    <th scope="col">得分率</th>
+                    <th scope="col"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -367,7 +370,7 @@ export function AnalyticsPage() {
                           <button
                             type="button"
                             className="btn btn-sm"
-                            onClick={() => navigate(`/papers/${exam.id}?kind=exam&step=plum`)}
+                            onClick={() => setPreviewRow(r)}
                           >
                             卷面
                           </button>
@@ -410,7 +413,7 @@ export function AnalyticsPage() {
                   </span>
                   <span className="bar-track">
                     <span
-                      className={`bar-fill${t.rate >= 80 ? "" : t.rate >= 60 ? " is-warn" : " is-danger"}`}
+                      className="bar-fill is-warn"
                       style={{ width: `${Math.round(t.rate)}%` }}
                     />
                   </span>
@@ -432,13 +435,13 @@ export function AnalyticsPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>题号</th>
-                  <th>题型</th>
-                  <th>题干</th>
-                  <th>满分</th>
-                  <th>正确率</th>
-                  <th>平均得分</th>
-                  <th>掌握度</th>
+                  <th scope="col">题号</th>
+                  <th scope="col">题型</th>
+                  <th scope="col">题干</th>
+                  <th scope="col">满分</th>
+                  <th scope="col">正确率</th>
+                  <th scope="col">平均得分</th>
+                  <th scope="col">掌握度</th>
                 </tr>
               </thead>
               <tbody>
@@ -474,6 +477,32 @@ export function AnalyticsPage() {
           </div>
         </div>
       </section>
+
+      <Dialog
+        open={previewRow !== null}
+        onClose={() => setPreviewRow(null)}
+        title={
+          previewRow ? `${previewRow.studentName} · ${exam?.name ?? ""}` : "卷面预览"
+        }
+        className="dlg-wide"
+      >
+        {previewRow ? (
+          <>
+            <div className="row" style={{ marginBottom: "var(--sp-3)" }}>
+              <span className="variant-tag">{previewRow.paper.variantLabel}</span>
+              <span className="text-sm text-3">
+                卷型 {PAPER_MODES[previewRow.paper.mode].label} · 置换号{" "}
+                {previewRow.paper.seedLabel}（系统自动生成）· {previewRow.className} ·{" "}
+                {previewRow.studentId}
+              </span>
+            </div>
+            <PaperPreviewTable
+              paper={previewRow.paper}
+              showBase={previewRow.paper.mode === "large"}
+            />
+          </>
+        ) : null}
+      </Dialog>
     </>
   );
 }

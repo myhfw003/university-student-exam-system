@@ -18,12 +18,13 @@ export function Stat({ label, value, unit, hint, className }: StatProps) {
   const classes = ["stat", className].filter(Boolean).join(" ");
   return (
     <div className={classes}>
-      <div className="stat-label">{label}</div>
-      <div className={`stat-value ${NUM_CLASS}`}>
+      {/* 原型 .stat 是 grid，子元素一律用 span。 */}
+      <span className="stat-label">{label}</span>
+      <span className={`stat-value ${NUM_CLASS}`}>
         {value}
         {unit ? <span className="unit">{unit}</span> : null}
-      </div>
-      {hint ? <div className="stat-hint">{hint}</div> : null}
+      </span>
+      {hint ? <span className="stat-hint">{hint}</span> : null}
     </div>
   );
 }

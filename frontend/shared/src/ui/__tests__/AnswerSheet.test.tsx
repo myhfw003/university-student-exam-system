@@ -27,8 +27,8 @@ describe("AnswerSheet · 答题卡", () => {
     );
 
     expect(container.querySelectorAll(".sheet-flag")).toHaveLength(1);
-    expect(screen.getByLabelText("第 2 题，未作答，已标记")).toBeInTheDocument();
-    expect(screen.getByLabelText("第 1 题，已作答")).toBeInTheDocument();
+    expect(screen.getByLabelText("第 2 题（未作答）（已标记）")).toBeInTheDocument();
+    expect(screen.getByLabelText("第 1 题（已作答）")).toBeInTheDocument();
   });
 
   it("点击格子回调该题", async () => {
