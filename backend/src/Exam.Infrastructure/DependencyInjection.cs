@@ -61,6 +61,7 @@ public static class DependencyInjection
         services.AddScoped<IPaperRepository, PaperRepository>();
         services.AddScoped<IPaperSnapshotRepository, PaperSnapshotRepository>();
         services.AddScoped<IBlueprintRepository, BlueprintRepository>();
+        services.AddScoped<IPaperTemplateRepository, PaperTemplateRepository>();
         services.AddScoped<BlueprintPoolBuilder>();
         services.AddSingleton<IQuestionFileParser, QuestionFileParser>();
         services.AddScoped<IUserPermissionService, UserPermissionService>();

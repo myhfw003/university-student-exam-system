@@ -510,6 +510,126 @@ namespace Exam.Infrastructure.Persistence.Migrations
                     b.ToTable("paper_tag", "authoring");
                 });
 
+            modelBuilder.Entity("Exam.Domain.Authoring.PaperTemplate", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<int>("DurationMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_minutes");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<decimal?>("PassScore")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("numeric(8,2)")
+                        .HasColumnName("pass_score");
+
+                    b.Property<long?>("SourcePaperId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("source_paper_id");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long?>("UpdatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("updated_by");
+
+                    b.Property<string>("VariantRule")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("variant_rule");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_paper_template");
+
+                    b.HasIndex("Name")
+                        .HasDatabaseName("ix_paper_template_name");
+
+                    b.ToTable("paper_template", "authoring", t =>
+                        {
+                            t.HasCheckConstraint("ck_paper_template_duration", "duration_minutes BETWEEN 1 AND 300");
+
+                            t.HasCheckConstraint("ck_paper_template_kind", "kind IN ('exam','practice')");
+
+                            t.HasCheckConstraint("ck_paper_template_variant_rule", "variant_rule IN ('standard','small_plum','large_plum')");
+                        });
+                });
+
+            modelBuilder.Entity("Exam.Domain.Authoring.PaperTemplateItem", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("QuestionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("question_id");
+
+                    b.Property<decimal>("Score")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("score");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<long>("TemplateId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("template_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_template_item");
+
+                    b.HasIndex("TemplateId", "SortOrder")
+                        .HasDatabaseName("ix_template_item_template");
+
+                    b.ToTable("template_item", "authoring", t =>
+                        {
+                            t.HasCheckConstraint("ck_template_item_score", "score >= 0 AND score <= 40");
+                        });
+                });
+
             modelBuilder.Entity("Exam.Domain.Authoring.SnapshotItem", b =>
                 {
                     b.Property<long>("Id")
@@ -1764,6 +1884,16 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_paper_tag_paper_paper_id");
                 });
 
+            modelBuilder.Entity("Exam.Domain.Authoring.PaperTemplateItem", b =>
+                {
+                    b.HasOne("Exam.Domain.Authoring.PaperTemplate", null)
+                        .WithMany("Items")
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_template_item_paper_template_template_id");
+                });
+
             modelBuilder.Entity("Exam.Domain.Authoring.SnapshotItem", b =>
                 {
                     b.HasOne("Exam.Domain.Authoring.PaperSnapshot", null)
@@ -1863,6 +1993,11 @@ namespace Exam.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("Exam.Domain.Authoring.PaperSnapshot", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Authoring.PaperTemplate", b =>
                 {
                     b.Navigation("Items");
                 });
