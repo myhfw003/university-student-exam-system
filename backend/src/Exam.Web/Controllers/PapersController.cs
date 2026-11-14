@@ -204,6 +204,18 @@ public sealed class PapersController : ControllerBase
     public async Task<PaperSnapshotDetailDto> GetSnapshot(long id, int version, CancellationToken cancellationToken) =>
         await _mediator.Send(new GetPaperSnapshotQuery(id, version), cancellationToken);
 
+    /// <summary>预览某位考生实际拿到的卷面（题序与选项显示顺序）。</summary>
+    [HttpGet("{id:long}/preview")]
+    [Authorize(Policy = PermissionCatalog.PaperRead)]
+    [ProducesResponseType(typeof(PaperVariantDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<PaperVariantDto> Preview(
+        long id,
+        [FromQuery] string? studentKey,
+        [FromQuery] string? sessionSeed,
+        CancellationToken cancellationToken) =>
+        await _mediator.Send(new PreviewPaperVariantQuery(id, studentKey ?? string.Empty, sessionSeed ?? string.Empty), cancellationToken);
+
     /// <summary>取回试卷的组卷方案。</summary>
     [HttpGet("{id:long}/blueprint")]
     [Authorize(Policy = PermissionCatalog.PaperRead)]

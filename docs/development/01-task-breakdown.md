@@ -371,7 +371,7 @@ P0 基础设施
 | T-P3-03 分值分配器 | ✅ 完成 | 均分 / 按权重分配，余数按序补给，结果之和精确等于目标总分 |
 | T-P3-04 发布校验器 | ✅ 完成 | 八项校验 + 阻断 / 警告分级 + 题目定位 |
 | T-P3-05 试卷快照 | ✅ 完成 | 发布即冻结：版本号 + 内容哈希 + 题目正文全量快照 |
-| T-P3-06 卷型派生 | ⬜ 未开始 | |
+| T-P3-06 卷型派生 | ✅ 完成 | 标准 / 小梅花 / 大梅花三种卷型，确定性种子 + 卷面预览 |
 | T-P3-07 卷型模板 | ⬜ 未开始 | |
 | T-P3-08 管理端组卷向导 | ⬜ 未开始 | 前端阶段 |
 
@@ -411,6 +411,16 @@ P0 基础设施
 - 接口：`GET /papers/{id}/blueprint`、`PUT /papers/{id}/blueprint`、`POST /papers/{id}/blueprint/generate`、`GET /papers/{id}/blueprint/diff`。
 - **错误响应带结构化载荷**：422 的响应体里直接带 `shortfalls`（组卷）与 `items`（发布校验），前端不用再发一次请求。
 - 相对设计文档的偏差：`blueprint` 表增加 `generated_items`（jsonb）保存抽题结果——设计里的 `GeneratedItemIds` 没有对应列。
+
+**T-P3-06 交付说明**
+
+- 新增领域服务 `PaperVariantBuilder`：由已发布快照派生考生实际卷面。
+  - 标准卷：题序与选项都不动，`variantKey = STD`。
+  - 小梅花：题序不动，每题选项按 `hash(questionId, studentKey, sessionSeed)` 洗牌。
+  - 大梅花：题型块顺序保留，块内题序洗牌，选项同小梅花。
+- **判断题不参与置换**（固定「正确 / 错误」两个选项，置换没有意义）。
+- **确定性**：同 `(studentKey, sessionSeed)` 必得同一卷面——重进考场不会换卷；不同考生卷面不同。
+- 接口：`GET /papers/{id}/preview?studentKey=&sessionSeed=` 预览某位考生实际拿到的卷面（只给选项显示顺序，**不下发正确答案**）。
 
 ### T-P3-01 试卷聚合与题位
 - **依赖**：T-P2-02
