@@ -411,6 +411,8 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 | POST | `/attempts/{id}/heartbeat` | 本人 | 心跳 |
 | POST | `/attempts/{id}/submit` | 本人 | 交卷 |
 | POST | `/attempts/{id}/feedback` | 本人 | 练习即时反馈查询 |
+| GET | `/attempts/{id}/scores` | 本人 | 成绩汇总与逐题明细 |
+| GET | `/attempts/{id}/grade-revisions` | 本人 | **改分流水**（改过几次分、谁改的） |
 
 ### 8.1 `POST /attempts`
 

@@ -44,6 +44,17 @@ public interface IReviewTaskRepository
         ReviewTaskSearchCriteria criteria,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// 取回某次作答里某道题的全部阅卷任务。
+    /// <para>
+    /// 综合题按步骤拆分：一步一条。定分要看这些任务是不是都评完了。
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<ReviewTask>> ListByAttemptQuestionAsync(
+        long attemptId,
+        long questionId,
+        CancellationToken cancellationToken = default);
+
     Task AddRangeAsync(IReadOnlyCollection<ReviewTask> tasks, CancellationToken cancellationToken = default);
 
     void Update(ReviewTask task);

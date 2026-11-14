@@ -82,8 +82,9 @@ public static class AttemptScoreSummaryFactory
         var totalMax = results.Sum(r => r.MaxScore.Value);
 
         // 主观题还没定分时，成绩只能算「待阅」。
+        // 综合题按步骤拆分阅卷：一步评完只更新总分，全部评完才定分——期间仍是「待阅」。
         var subjectivePending = results.Any(r =>
-            r.Method == Domain.Grading.ScoringMethod.AutoSuggested
+            r.Status == Domain.Grading.ScoringStatus.Suggested
             || r.Status == Domain.Grading.ScoringStatus.Pending);
 
         var visibility = subjectivePending

@@ -76,6 +76,22 @@ public sealed class ReviewTasksController : ControllerBase
         CancellationToken cancellationToken = default) =>
         await _mediator.Send(new AssignReviewTaskCommand(id, request.UserId), cancellationToken);
 
+    /// <summary>
+    /// 人工评分。分数 0..满分、0.5 为步进；每次评分都追加一条改分流水，学生端看得见。
+    /// </summary>
+    [HttpPost("{id:long}/grade")]
+    [Authorize(Policy = PermissionCatalog.ReviewGrade)]
+    [ProducesResponseType(typeof(GradeReviewTaskResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<GradeReviewTaskResponse> Grade(
+        long id,
+        GradeReviewTaskRequest request,
+        CancellationToken cancellationToken = default) =>
+        await _mediator.Send(
+            new GradeReviewTaskCommand(id, request.Score, request.Comment),
+            cancellationToken);
+
     /// <summary>队列中的上一份 / 下一份，连续阅卷用。</summary>
     [HttpGet("{id:long}/neighbors")]
     [Authorize(Policy = PermissionCatalog.ReviewGrade)]

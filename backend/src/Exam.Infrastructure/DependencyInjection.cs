@@ -73,6 +73,7 @@ public static class DependencyInjection
         services.AddScoped<IProctorActionRepository, ProctorActionRepository>();
         services.AddScoped<IScoreResultRepository, ScoreResultRepository>();
         services.AddScoped<IReviewTaskRepository, ReviewTaskRepository>();
+        services.AddScoped<IGradeRevisionRepository, GradeRevisionRepository>();
         services.AddScoped<AttemptPaperSurfaceBuilder>();
         services.AddScoped<ExamMonitoringService>();
         services.AddScoped<AttemptScoringService>();

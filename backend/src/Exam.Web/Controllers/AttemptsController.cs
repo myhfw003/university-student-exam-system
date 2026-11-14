@@ -2,6 +2,8 @@ using Exam.Application.Common.Interfaces;
 using Exam.Application.Delivery.Commands;
 using Exam.Application.Delivery.Contracts;
 using Exam.Application.Delivery.Queries;
+using Exam.Application.Grading.Contracts;
+using Exam.Application.Grading.Queries;
 using Exam.Domain.Identity;
 using Exam.Web.Api.Contracts;
 using MediatR;
@@ -135,6 +137,16 @@ public sealed class AttemptsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<AttemptScoreSummaryDto> GetScores(long id, CancellationToken cancellationToken) =>
         await _mediator.Send(new GetAttemptScoresQuery(id), cancellationToken);
+
+    /// <summary>改分流水。学生端可见：改过几次分、谁改的。</summary>
+    [HttpGet("{id:long}/grade-revisions")]
+    [Authorize(Policy = PermissionCatalog.AttemptReadOwn)]
+    [ProducesResponseType(typeof(GradeRevisionListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<GradeRevisionListResponse> GetGradeRevisions(
+        long id,
+        CancellationToken cancellationToken = default) =>
+        await _mediator.Send(new GetAttemptGradeRevisionsQuery(id), cancellationToken);
 
     /// <summary>恢复作答状态。</summary>
     [HttpGet("{id:long}")]

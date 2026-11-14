@@ -99,6 +99,18 @@ public sealed class ReviewTaskRepository : IReviewTaskRepository
         return (previous == 0 ? null : previous, next == 0 ? null : next);
     }
 
+    /// <summary>
+    /// 取回某次作答里某道题的全部阅卷任务（综合题一步一条）。
+    /// </summary>
+    public async Task<IReadOnlyList<ReviewTask>> ListByAttemptQuestionAsync(
+        long attemptId,
+        long questionId,
+        CancellationToken cancellationToken = default) =>
+        await _db.Set<ReviewTask>()
+            .Where(t => t.AttemptId == attemptId && t.QuestionId == questionId)
+            .OrderBy(t => t.Id)
+            .ToListAsync(cancellationToken);
+
     public async Task AddRangeAsync(
         IReadOnlyCollection<ReviewTask> tasks,
         CancellationToken cancellationToken = default)

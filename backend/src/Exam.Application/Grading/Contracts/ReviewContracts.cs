@@ -74,3 +74,37 @@ public sealed record ReviewStepDto(
     string Prompt,
     decimal Score,
     bool Hit);
+
+/// <summary>
+/// 评分结果。
+/// <para>
+/// 阅卷人提交后立刻能看到这道题现在的状态：定了分没有、改了几次。
+/// </para>
+/// </summary>
+public sealed record GradeReviewTaskResponse(
+    long ReviewTaskId,
+    string Status,
+    string StatusLabel,
+    decimal FinalScore,
+    decimal MaxScore,
+    string? Comment,
+    string ScoreResultStatus,
+    string ScoreResultStatusLabel,
+    int Revision);
+
+/// <summary>一条改分流水。学生端可见。</summary>
+public sealed record GradeRevisionDto(
+    long Id,
+    long QuestionId,
+    long ScoreResultId,
+    decimal? PreviousScore,
+    decimal NewScore,
+    string? Comment,
+    long OperatorId,
+    DateTimeOffset OccurredAt);
+
+/// <summary>改分流水列表。</summary>
+public sealed record GradeRevisionListResponse(
+    long AttemptId,
+    IReadOnlyList<GradeRevisionDto> Items,
+    int Total);

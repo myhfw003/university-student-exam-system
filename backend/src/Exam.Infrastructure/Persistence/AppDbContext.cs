@@ -105,6 +105,8 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
 
     public DbSet<QuestionBankItem> QuestionBankItems => Set<QuestionBankItem>();
 
+    public DbSet<GradeRevision> GradeRevisions => Set<GradeRevision>();
+
     /// <summary>工作单元提交。EF Core 的单次 SaveChanges 本身即一个事务。</summary>
     /// <para>
     /// 乐观并发冲突（xmin 令牌不匹配）翻译成应用层的并发异常，

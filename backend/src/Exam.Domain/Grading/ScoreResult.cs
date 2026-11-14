@@ -118,6 +118,27 @@ public sealed class ScoreResult : AuditableEntity, IAuditedEntity
         Touch(now, reviewerId);
     }
 
+    /// <summary>
+    /// 写入人工得分，但**不定分**。
+    /// <para>
+    /// 综合题按步骤拆分阅卷：一步评完只更新当前总分，全部步骤评完才定分。
+    /// </para>
+    /// </summary>
+    public void ApplyPartialManualScore(decimal score, long reviewerId, DateTimeOffset now)
+    {
+        if (score < 0m || score > MaxScore.Value)
+        {
+            throw new BusinessRuleException($"分数必须在 0 到 {MaxScore.Value} 之间。");
+        }
+
+        Score = Score.Graded(score, MaxScore.Value);
+        Method = ScoringMethod.ManualScored;
+        Status = ScoringStatus.Suggested;
+        ScoredBy = reviewerId;
+        ScoredAt = now;
+        Touch(now, reviewerId);
+    }
+
     /// <summary>采纳系统建议分，转为最终分。</summary>
     public void AdoptSuggestion(long reviewerId, DateTimeOffset now)
     {

@@ -1965,6 +1965,53 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Exam.Domain.Grading.GradeRevision", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Comment")
+                        .HasColumnType("text")
+                        .HasColumnName("comment");
+
+                    b.Property<decimal>("NewScore")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("new_score");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<long>("OperatorId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("operator_id");
+
+                    b.Property<decimal?>("PreviousScore")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("previous_score");
+
+                    b.Property<long>("ScoreResultId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("score_result_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_grade_revision");
+
+                    b.HasIndex("OccurredAt")
+                        .HasDatabaseName("ix_grade_revision_occurred_at");
+
+                    b.HasIndex("ScoreResultId")
+                        .HasDatabaseName("ix_grade_revision_score_result");
+
+                    b.ToTable("grade_revision", "app");
+                });
+
             modelBuilder.Entity("Exam.Domain.Grading.ReviewTask", b =>
                 {
                     b.Property<long>("Id")

@@ -139,6 +139,25 @@ public sealed class ReviewTask : AuditableEntity, IAuditedEntity
         Touch(now, actorId);
     }
 
+    /// <summary>
+    /// 确认这个人能给这份任务评分。
+    /// <para>
+    /// 别人正在阅的卷子不能抢；已阅完的卷子允许改分——改分留痕，学生端看得见。
+    /// </para>
+    /// </summary>
+    public void EnsureCanGrade(long reviewerId)
+    {
+        if (Status == ReviewTaskStatus.InReview && ReviewerId != reviewerId)
+        {
+            throw new BusinessRuleException("该任务已由其他阅卷人领取，不能评分。");
+        }
+
+        if (Status == ReviewTaskStatus.Pending && AssigneeId is { } assignee && assignee != reviewerId)
+        {
+            throw new BusinessRuleException("该任务已指派给其他阅卷人。");
+        }
+    }
+
     /// <summary>评分并写评语。</summary>
     public void Grade(Score score, string? comment, long reviewerId, DateTimeOffset now)
     {
