@@ -2687,6 +2687,141 @@ namespace Exam.Infrastructure.Persistence.Migrations
                     b.ToTable("user_tag", "iam");
                 });
 
+            modelBuilder.Entity("Exam.Domain.Learning.Mistake", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateTimeOffset>("LastWrongAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_wrong_at");
+
+                    b.Property<long>("QuestionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("question_id");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("reason");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at");
+
+                    b.Property<long?>("SourceAttemptId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("source_attempt_id");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("source_type");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long?>("UpdatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("updated_by");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<int>("WrongCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("wrong_count");
+
+                    b.HasKey("Id")
+                        .HasName("pk_mistake");
+
+                    b.HasIndex("UserId", "QuestionId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_mistake_user_question")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("UserId", "WrongCount")
+                        .HasDatabaseName("ix_mistake_user_wrong");
+
+                    b.ToTable("mistake", "learning", t =>
+                        {
+                            t.HasCheckConstraint("ck_mistake_reason", "reason IN ('multi_missed','multi_wrong','single_wrong','judge_wrong','short_keypoints_missed','comprehensive_step_missed','unanswered')");
+
+                            t.HasCheckConstraint("ck_mistake_source_type", "source_type IN ('exam','practice')");
+                        });
+                });
+
+            modelBuilder.Entity("Exam.Infrastructure.Persistence.OutboxMessage", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<DateTimeOffset?>("DispatchedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("dispatched_at");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text")
+                        .HasColumnName("last_error");
+
+                    b.Property<string>("MessageType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("message_type");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload");
+
+                    b.HasKey("Id")
+                        .HasName("pk_outbox_message");
+
+                    b.HasIndex("DispatchedAt")
+                        .HasDatabaseName("ix_outbox_pending")
+                        .HasFilter("dispatched_at IS NULL");
+
+                    b.ToTable("outbox_message", "outbox");
+                });
+
             modelBuilder.Entity("Exam.Infrastructure.Persistence.SeedMarker", b =>
                 {
                     b.Property<int>("Id")

@@ -63,6 +63,8 @@ public sealed class AppDbContextFixture : IAsyncLifetime
                      delivery.attempt, app.answer_revision,
                      grading.review_task, grading.score_result,
                      grading.grade_publication,
+                     learning.mistake,
+                     outbox.outbox_message,
                      app.grade_revision RESTART IDENTITY CASCADE
             """);
     }

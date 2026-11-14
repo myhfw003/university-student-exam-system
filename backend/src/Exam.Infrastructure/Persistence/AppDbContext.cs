@@ -4,6 +4,7 @@ using Exam.Domain.Delivery;
 using Exam.Application.Common.Exceptions;
 using Exam.Domain.Grading;
 using Exam.Domain.Catalog;
+using Exam.Domain.Learning;
 using Exam.Domain.Identity;
 using Exam.Domain.SharedKernel.Abstractions;
 using Exam.Domain.SharedKernel.Entities;
@@ -33,6 +34,12 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
 
     /// <summary>评分与阅卷上下文所在 Schema。</summary>
     public const string GradingSchema = "grading";
+
+    /// <summary>学习与分析上下文所在 Schema。</summary>
+    public const string LearningSchema = "learning";
+
+    /// <summary>领域事件出站箱所在 Schema。</summary>
+    public const string OutboxSchema = "outbox";
 
     public AppDbContext(DbContextOptions<AppDbContext> options)
         : base(options) { }
@@ -108,6 +115,10 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
     public DbSet<GradeRevision> GradeRevisions => Set<GradeRevision>();
 
     public DbSet<GradePublication> GradePublications => Set<GradePublication>();
+
+    public DbSet<Mistake> Mistakes => Set<Mistake>();
+
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     /// <summary>工作单元提交。EF Core 的单次 SaveChanges 本身即一个事务。</summary>
     /// <para>

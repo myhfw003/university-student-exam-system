@@ -1,5 +1,6 @@
 using Exam.Application.Common.Interfaces;
 using Exam.Infrastructure.Audit;
+using Exam.Infrastructure.Messaging;
 using Exam.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -59,8 +60,10 @@ public sealed class ExamWebFactory : WebApplicationFactory<Program>
             services.AddDbContext<AppDbContext>((sp, options) =>
                 options.UseNpgsql(_connectionString)
                     .UseSnakeCaseNamingConvention()
-                    // 与生产装配保持一致：实体字段变更的自动留痕
-                    .AddInterceptors(sp.GetRequiredService<AuditSaveChangesInterceptor>()));
+                    // 与生产装配保持一致：实体字段变更的自动留痕 + 领域事件出站
+                    .AddInterceptors(
+                        sp.GetRequiredService<AuditSaveChangesInterceptor>(),
+                        sp.GetRequiredService<OutboxSaveChangesInterceptor>()));
         });
     }
 }

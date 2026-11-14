@@ -187,6 +187,43 @@ public sealed class GradeReviewTests
     }
 
     [Fact]
+    public void 客观题定分发出定分事件()
+    {
+        var result = ScoreResult.FromOutcome(
+            attemptId: 1,
+            questionId: 2,
+            paperItemId: 3,
+            outcome: new ScoringOutcome(
+                10m,
+                10m,
+                ScoringMethod.AutoScored,
+                ScoringStatus.AutoScored,
+                ["答对"]),
+            now: Now);
+
+        result.DomainEvents.Count.ShouldBe(1);
+        result.DomainEvents.First().ShouldBeOfType<Exam.Domain.Grading.Events.ScoreFinalized>();
+    }
+
+    [Fact]
+    public void 主观题建议分不发定分事件()
+    {
+        var result = ScoreResult.FromOutcome(
+            attemptId: 1,
+            questionId: 2,
+            paperItemId: 3,
+            outcome: new ScoringOutcome(
+                5m,
+                10m,
+                ScoringMethod.AutoSuggested,
+                ScoringStatus.Suggested,
+                []),
+            now: Now);
+
+        result.DomainEvents.ShouldBeEmpty();
+    }
+
+    [Fact]
     public void 改分流水保留改前与改后的分数()
     {
         var revision = GradeRevision.Create(

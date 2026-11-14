@@ -2,12 +2,16 @@ using Exam.Application.Authoring.Services;
 using Exam.Application.Delivery.Services;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Grading.Services;
+using Exam.Application.Learning.Services;
+using Exam.Application.Messaging;
+using Exam.Domain.Grading.Events;
 using Exam.Application.Identity.Services;
 using Exam.Domain.SharedKernel.Abstractions;
 using Exam.Infrastructure.Audit;
 using Exam.Infrastructure.Caching;
 using Exam.Infrastructure.Configuration;
 using Exam.Infrastructure.Identity;
+using Exam.Infrastructure.Messaging;
 using Exam.Infrastructure.Persistence;
 using Exam.Infrastructure.Persistence.Repositories;
 using Exam.Infrastructure.Time;
@@ -43,7 +47,9 @@ public static class DependencyInjection
                 npgsql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName);
             })
             // 实体字段变更的自动留痕
-            .AddInterceptors(sp.GetRequiredService<AuditSaveChangesInterceptor>())
+            .AddInterceptors(
+                sp.GetRequiredService<AuditSaveChangesInterceptor>(),
+                sp.GetRequiredService<OutboxSaveChangesInterceptor>())
             // 列名、表名统一使用 snake_case，与数据库设计文档一致
             .UseSnakeCaseNamingConvention();
         });
@@ -76,6 +82,10 @@ public static class DependencyInjection
         services.AddScoped<IReviewTaskRepository, ReviewTaskRepository>();
         services.AddScoped<IGradeRevisionRepository, GradeRevisionRepository>();
         services.AddScoped<IGradePublicationRepository, GradePublicationRepository>();
+        services.AddScoped<IMistakeRepository, MistakeRepository>();
+        services.AddScoped<IOutboxStore, OutboxStore>();
+        services.AddScoped<IDomainEventDispatcher, DomainEventDispatcher>();
+        services.AddScoped<IDomainEventHandler<ScoreFinalized>, MistakeWriteBackHandler>();
         services.AddScoped<GradeVisibilityResolver, GradeVisibilityResolver>();
         services.AddScoped<AttemptPaperSurfaceBuilder>();
         services.AddScoped<ExamMonitoringService>();
@@ -90,6 +100,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditRecorder, AuditRecorder>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<Audit.AuditSaveChangesInterceptor>();
+        services.AddScoped<OutboxSaveChangesInterceptor>();
         services.AddScoped<Seeding.DataSeeder>();
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IPasswordVerifier, Pbkdf2PasswordVerifier>();

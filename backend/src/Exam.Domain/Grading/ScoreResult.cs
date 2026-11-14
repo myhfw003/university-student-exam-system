@@ -1,4 +1,5 @@
 using Exam.Domain.Catalog;
+using Exam.Domain.Grading.Events;
 using Exam.Domain.SharedKernel.Entities;
 using Exam.Domain.SharedKernel.Exceptions;
 
@@ -89,7 +90,7 @@ public sealed class ScoreResult : AuditableEntity, IAuditedEntity
         var maxScore = Score.Paper(outcome.MaxScore);
         var score = Score.Graded(outcome.Score, maxScore.Value);
 
-        return new ScoreResult(
+        var result = new ScoreResult(
             attemptId,
             questionId,
             paperItemId,
@@ -100,7 +101,26 @@ public sealed class ScoreResult : AuditableEntity, IAuditedEntity
             BuildDetail(outcome.Details),
             now,
             actorId);
+
+        // 客观题交卷即定分：错题回流与掌握度更新靠这个事件。
+        if (outcome.Method == ScoringMethod.AutoScored)
+        {
+            result.RaiseFinalized();
+        }
+
+        return result;
     }
+
+    /// <summary>发出「成绩定分」事件。</summary>
+    private void RaiseFinalized() =>
+        AddDomainEvent(new ScoreFinalized(
+            AttemptId,
+            QuestionId,
+            Score.Value,
+            MaxScore.Value,
+            Method.ToStorage(),
+            Detail.HitItems,
+            Detail.MissedItems));
 
     /// <summary>人工评分。分数必须在 0..满分之间，且以 0.5 为步进。</summary>
     public void ApplyManualScore(decimal score, long reviewerId, DateTimeOffset now)
@@ -116,6 +136,9 @@ public sealed class ScoreResult : AuditableEntity, IAuditedEntity
         ScoredBy = reviewerId;
         ScoredAt = now;
         Touch(now, reviewerId);
+
+        // 人工定分也是定分：错题回流与掌握度更新靠这个事件。
+        RaiseFinalized();
     }
 
     /// <summary>
@@ -148,6 +171,8 @@ public sealed class ScoreResult : AuditableEntity, IAuditedEntity
         ScoredBy = reviewerId;
         ScoredAt = now;
         Touch(now, reviewerId);
+
+        RaiseFinalized();
     }
 
     /// <summary>按判分明细拆分命中与漏选。</summary>

@@ -20,6 +20,7 @@ builder.Logging.AddSerilog(Log.Logger, dispose: true);
 
 builder.Services.AddExamInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<WorkerHeartbeatService>();
+builder.Services.AddHostedService<OutboxDispatchService>();
 
 var host = builder.Build();
 
