@@ -29,7 +29,8 @@
 │   ├── development/              开发文档集（3 份）
 │   └── ui-design/                交互原型（只读参考）
 ├── scripts/                  运维脚本（密钥扫描等）
-└── .github/workflows/ci.yml   CI 流水线
+├── .workflow/frontend.yml     Gitee Go 流水线（前端门禁）
+└── .github/workflows/ci.yml   GitHub Actions 流水线（镜像仓库用）
 ```
 
 ---

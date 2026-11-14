@@ -1,0 +1,82 @@
+# ==========================================================================
+#    Gitee Go 流水线 · 前端门禁
+# --------------------------------------------------------------------------
+#    仓库托管在 Gitee，GitHub Actions 不会执行 .github/workflows/ci.yml，
+#    所以前端门禁在 Gitee 上用 Gitee Go 重写一份——配置目录是仓库根的
+#    .workflow/（不是 .github/workflows/），语法也不是 GitHub 的那套。
+#
+#    与 GitHub Actions 的 frontend 作业一一对应：
+#      typecheck → lint → test → build → 渲染冒烟检查 → 端到端测试
+#
+#    **Node 版本不交给插件决定**：Gitee Go 的 nodejs 插件会忽略 nodeVersion
+#    落到 Node 14（gitee.com/oschina/git-osc/issues/IKQ93J），而本仓库的
+#    Vite 7 要求 Node ≥ 20.19。所以命令里自己用 nvm 装 Node 22，
+#    插件给什么基础版本都不影响。
+# ==========================================================================
+
+version: '1.0'
+name: frontend-gate
+displayName: '前端门禁（类型 / 静态 / 测试 / 浏览器复核）'
+
+triggers:
+  push:
+    branches:
+      precise:
+        - master
+      include:
+        - '^feature/.*$'
+  pr:
+    branches:
+      include:
+        - '.*'
+
+stages:
+  - stage:
+      name: frontend
+      displayName: '前端门禁'
+      failFast: false
+      steps:
+        # ---------------------------------------------------------------
+        - step: build@nodejs
+          name: frontend-check
+          displayName: '类型检查 / 静态检查 / 单元测试'
+          nodeVersion: '20'
+          commands:
+            - |
+              set -e
+              export NVM_DIR="$HOME/.nvm"
+              curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+              . "$NVM_DIR/nvm.sh"
+              nvm install 22
+              nvm use 22
+              node -v
+              npm i -g pnpm@11.20.0
+              cd frontend
+              pnpm install --frozen-lockfile
+              pnpm typecheck
+              pnpm lint
+              pnpm test
+
+        # ---------------------------------------------------------------
+        - step: build@nodejs
+          name: frontend-browser
+          displayName: '构建 / 渲染冒烟 / 端到端'
+          nodeVersion: '20'
+          commands:
+            - |
+              set -e
+              export NVM_DIR="$HOME/.nvm"
+              curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+              . "$NVM_DIR/nvm.sh"
+              nvm install 22
+              nvm use 22
+              node -v
+              npm i -g pnpm@11.20.0
+              cd frontend
+              pnpm install --frozen-lockfile
+              pnpm build
+              # 渲染冒烟检查需要真实的 Chromium：脚本零依赖（直接走 CDP），
+              # 这里用 playwright 只做浏览器下载。缺浏览器即失败，不静默跳过。
+              npx --yes playwright@1.65.0 install --with-deps chromium
+              node scripts/smoke-render.mjs --serve-dist --require-browser
+              pnpm e2e
