@@ -26,10 +26,12 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
     private readonly IAttemptRepository _attempts;
     private readonly IAnswerRepository _answers;
     private readonly IScoreResultRepository _scoreResults;
+    private readonly IReviewTaskRepository _reviewTaskRepository;
     private readonly IExamParticipantRepository _participants;
     private readonly IExamSessionRepository _sessions;
     private readonly IPaperRepository _papers;
     private readonly AttemptScoringService _scoring;
+    private readonly Exam.Application.Grading.Services.ReviewTaskGenerator _reviewTasks;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAuditRecorder _audit;
     private readonly IClock _clock;
@@ -39,10 +41,12 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
         IAttemptRepository attempts,
         IAnswerRepository answers,
         IScoreResultRepository scoreResults,
+        IReviewTaskRepository reviewTaskRepository,
         IExamParticipantRepository participants,
         IExamSessionRepository sessions,
         IPaperRepository papers,
         AttemptScoringService scoring,
+        Exam.Application.Grading.Services.ReviewTaskGenerator reviewTasks,
         IUnitOfWork unitOfWork,
         IAuditRecorder audit,
         IClock clock,
@@ -51,10 +55,12 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
         _attempts = attempts;
         _answers = answers;
         _scoreResults = scoreResults;
+        _reviewTaskRepository = reviewTaskRepository;
         _participants = participants;
         _sessions = sessions;
         _papers = papers;
         _scoring = scoring;
+        _reviewTasks = reviewTasks;
         _unitOfWork = unitOfWork;
         _audit = audit;
         _clock = clock;
@@ -101,6 +107,10 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
             cancellationToken);
 
         await _scoreResults.AddRangeAsync(scoreResults, cancellationToken);
+
+        // 主观题生成待阅任务：综合题按步骤拆开。
+        var reviewTasks = await _reviewTasks.GenerateAsync(attempt, session, scoreResults, now, cancellationToken);
+        await _reviewTaskRepository.AddRangeAsync(reviewTasks, cancellationToken);
 
         if (attempt.ExamSessionId is { } sessionId)
         {

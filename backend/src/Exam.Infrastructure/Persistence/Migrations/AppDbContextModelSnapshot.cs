@@ -1965,6 +1965,118 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Exam.Domain.Grading.ReviewTask", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AnswerText")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("answer_text");
+
+                    b.Property<long?>("AssigneeId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("assignee_id");
+
+                    b.Property<long>("AttemptId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("attempt_id");
+
+                    b.Property<string>("Comment")
+                        .HasColumnType("text")
+                        .HasColumnName("comment");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<long?>("ExamSessionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("exam_session_id");
+
+                    b.Property<decimal?>("FinalScore")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("final_score");
+
+                    b.Property<decimal>("MaxScore")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("max_score");
+
+                    b.Property<long>("QuestionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("question_id");
+
+                    b.Property<DateTimeOffset?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<long?>("ReviewerId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("reviewer_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("StepCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("step_code");
+
+                    b.Property<decimal?>("SuggestedScore")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("suggested_score");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long?>("UpdatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_review_task");
+
+                    b.HasIndex("AttemptId")
+                        .HasDatabaseName("ix_review_task_attempt");
+
+                    b.HasIndex("ExamSessionId", "Status")
+                        .HasDatabaseName("ix_review_task_exam");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasDatabaseName("ix_review_task_status");
+
+                    b.ToTable("review_task", "grading", t =>
+                        {
+                            t.HasCheckConstraint("ck_review_task_status", "status IN ('pending','in_review','reviewed')");
+                        });
+                });
+
             modelBuilder.Entity("Exam.Domain.Grading.ScoreResult", b =>
                 {
                     b.Property<long>("Id")
@@ -2660,6 +2772,16 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_proctor_action_exam_session_exam_session_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Grading.ReviewTask", b =>
+                {
+                    b.HasOne("Exam.Domain.Delivery.Attempt", null)
+                        .WithMany()
+                        .HasForeignKey("AttemptId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_review_task_attempt_attempt_id");
                 });
 
             modelBuilder.Entity("Exam.Domain.Grading.ScoreResult", b =>

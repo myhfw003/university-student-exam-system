@@ -25,6 +25,22 @@ public sealed class AttemptRepository : IAttemptRepository
             .OrderByDescending(a => a.AttemptNo)
             .FirstOrDefaultAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Attempt>> GetByIdsAsync(
+        IReadOnlyCollection<long> ids,
+        CancellationToken cancellationToken = default)
+    {
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        var idList = ids.ToList();
+        return await _db.Set<Attempt>()
+            .AsNoTracking()
+            .Where(a => idList.Contains(a.Id))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Attempt>> ListBySessionAsync(
         long examSessionId,
         CancellationToken cancellationToken = default) =>

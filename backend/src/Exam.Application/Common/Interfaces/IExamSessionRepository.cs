@@ -12,6 +12,11 @@ public interface IExamSessionRepository
         string? keyword,
         CancellationToken cancellationToken = default);
 
+    /// <summary>按主键集合取回场次。</summary>
+    Task<IReadOnlyList<ExamSession>> GetByIdsAsync(
+        IReadOnlyCollection<long> ids,
+        CancellationToken cancellationToken = default);
+
     Task<int> CountAsync(
         ExamSessionStatus? status,
         string? keyword,

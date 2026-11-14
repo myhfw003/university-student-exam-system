@@ -100,6 +100,8 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
 
     public DbSet<ScoreResult> ScoreResults => Set<ScoreResult>();
 
+    public DbSet<ReviewTask> ReviewTasks => Set<ReviewTask>();
+
     public DbSet<QuestionBankItem> QuestionBankItems => Set<QuestionBankItem>();
 
     /// <summary>工作单元提交。EF Core 的单次 SaveChanges 本身即一个事务。</summary>
