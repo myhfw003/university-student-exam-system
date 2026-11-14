@@ -16,6 +16,8 @@ public interface IExamParticipantRepository
 
     Task AddRangeAsync(IReadOnlyCollection<ExamParticipant> participants, CancellationToken cancellationToken = default);
 
+    void Update(ExamParticipant participant);
+
     /// <summary>清空场次名单（重新物化前先清）。</summary>
     Task DeleteBySessionAsync(long examSessionId, CancellationToken cancellationToken = default);
 }

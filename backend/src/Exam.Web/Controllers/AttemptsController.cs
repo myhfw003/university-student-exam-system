@@ -70,6 +70,17 @@ public sealed class AttemptsController : ControllerBase
         return new SaveAnswersInput(request.ClientSeq, items, request.ClientSentAt);
     }
 
+    /// <summary>交卷。重复交卷返回同一个结果。</summary>
+    [HttpPost("{id:long}/submit")]
+    [Authorize(Policy = PermissionCatalog.AttemptTake)]
+    [ProducesResponseType(typeof(SubmitAttemptResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<SubmitAttemptResponse> Submit(
+        long id,
+        SubmitAttemptRequest? request,
+        CancellationToken cancellationToken) =>
+        await _mediator.Send(new SubmitAttemptCommand(id, request?.Reason), cancellationToken);
+
     /// <summary>恢复作答状态。</summary>
     [HttpGet("{id:long}")]
     [Authorize(Policy = PermissionCatalog.AttemptReadOwn)]

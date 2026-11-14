@@ -42,6 +42,8 @@ public sealed class ExamParticipantRepository : IExamParticipantRepository
         await _db.Set<ExamParticipant>().AddRangeAsync(participants, cancellationToken);
     }
 
+    public void Update(ExamParticipant participant) => _db.Set<ExamParticipant>().Update(participant);
+
     public async Task DeleteBySessionAsync(long examSessionId, CancellationToken cancellationToken = default)
     {
         var existing = await _db.Set<ExamParticipant>()

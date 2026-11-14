@@ -20,3 +20,6 @@ public sealed record AnswerPayloadRequest(
 
 /// <summary>综合题的分步作答。</summary>
 public sealed record AnswerStepRequest(string? Code, string? Text);
+
+/// <summary>交卷。客户端只能表达「主动交卷」，其它原因由服务端判定。</summary>
+public sealed record SubmitAttemptRequest(string? Reason);
