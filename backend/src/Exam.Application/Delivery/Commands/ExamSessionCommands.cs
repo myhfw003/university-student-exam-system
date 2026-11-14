@@ -4,6 +4,7 @@ using Exam.Application.Common.Exceptions;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
 using Exam.Application.Delivery.Contracts;
+using Exam.Application.Delivery.Services;
 using Exam.Domain.Authoring;
 using Exam.Domain.Delivery;
 using Exam.Domain.Identity;
@@ -228,20 +229,26 @@ public sealed record PublishExamSessionCommand(long Id)
 public sealed class PublishExamSessionHandler : IRequestHandler<PublishExamSessionCommand, ExamSessionDetailDto>
 {
     private readonly IExamSessionRepository _sessions;
+    private readonly IExamParticipantRepository _participants;
     private readonly IPaperRepository _papers;
+    private readonly ExamRosterBuilder _roster;
     private readonly IAuditRecorder _audit;
     private readonly IClock _clock;
     private readonly ICurrentUser _currentUser;
 
     public PublishExamSessionHandler(
         IExamSessionRepository sessions,
+        IExamParticipantRepository participants,
         IPaperRepository papers,
+        ExamRosterBuilder roster,
         IAuditRecorder audit,
         IClock clock,
         ICurrentUser currentUser)
     {
         _sessions = sessions;
+        _participants = participants;
         _papers = papers;
+        _roster = roster;
         _audit = audit;
         _clock = clock;
         _currentUser = currentUser;
@@ -266,6 +273,15 @@ public sealed class PublishExamSessionHandler : IRequestHandler<PublishExamSessi
         session.Publish(paper.PublishedSnapshotId.Value, now, _currentUser.UserId);
         _sessions.Update(session);
 
+        // 名单在发布时物化：之后的标签变更不再影响这一场。
+        var rosterUserIds = await _roster.ResolveUserIdsAsync(session, cancellationToken);
+        await _participants.DeleteBySessionAsync(session.Id, cancellationToken);
+        await _participants.AddRangeAsync(
+            rosterUserIds
+                .Select(userId => ExamParticipant.Create(session.Id, userId, now))
+                .ToList(),
+            cancellationToken);
+
         await _audit.RecordAsync(
             "exam_session.publish",
             "exam_session",
@@ -274,6 +290,7 @@ public sealed class PublishExamSessionHandler : IRequestHandler<PublishExamSessi
             {
                 ["name"] = session.Name,
                 ["snapshotId"] = session.SnapshotId,
+                ["participantCount"] = rosterUserIds.Count,
             },
             cancellationToken);
 

@@ -49,6 +49,40 @@ public sealed class UserRepository : IUserRepository
         CancellationToken cancellationToken = default) =>
         await Filtered(keyword, status, roleId).CountAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<User>> GetByIdsAsync(
+        IReadOnlyCollection<long> ids,
+        CancellationToken cancellationToken = default)
+    {
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        var idList = ids.ToList();
+        return await _db.Users
+            .AsNoTracking()
+            .Where(u => idList.Contains(u.Id))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<long>> GetUserIdsByTagIdsAsync(
+        IReadOnlyCollection<long> tagIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (tagIds.Count == 0)
+        {
+            return [];
+        }
+
+        var tagIdList = tagIds.ToList();
+        return await _db.UserTags
+            .AsNoTracking()
+            .Where(t => tagIdList.Contains(t.TagId))
+            .Select(t => t.UserId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<long>> GetUserIdsByRoleAsync(
         long roleId,
         CancellationToken cancellationToken = default) =>

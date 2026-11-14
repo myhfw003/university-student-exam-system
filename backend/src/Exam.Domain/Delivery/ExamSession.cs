@@ -274,6 +274,40 @@ public sealed class ExamSession : AuditableEntity, IAuditedEntity
         }
     }
 
+    /// <summary>设置名单口径：按组织标签纳入。</summary>
+    public void SetParticipantTags(
+        IReadOnlyList<long> tagIds,
+        DateTimeOffset now,
+        long? actorId = null)
+    {
+        if (tagIds.Count == 0)
+        {
+            throw new BusinessRuleException("按标签纳入时必须至少选择一个组织标签。");
+        }
+
+        ParticipantMode = ParticipantMode.FromTags;
+        ParticipantTagIds = tagIds.Distinct().ToList();
+        ParticipantUserIds = [];
+        Touch(now, actorId);
+    }
+
+    /// <summary>设置名单口径：指定考生纳入。</summary>
+    public void SetParticipantUsers(
+        IReadOnlyList<long> userIds,
+        DateTimeOffset now,
+        long? actorId = null)
+    {
+        if (userIds.Count == 0)
+        {
+            throw new BusinessRuleException("指定考生时必须至少选择一名考生。");
+        }
+
+        ParticipantMode = ParticipantMode.Direct;
+        ParticipantUserIds = userIds.Distinct().ToList();
+        ParticipantTagIds = [];
+        Touch(now, actorId);
+    }
+
     /// <summary>发布后还能不能改配置。</summary>
     public void EnsureScheduled()
     {

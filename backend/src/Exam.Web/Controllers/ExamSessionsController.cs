@@ -95,6 +95,29 @@ public sealed class ExamSessionsController : ControllerBase
     public async Task<ExamSessionDetailDto> Publish(long id, CancellationToken cancellationToken) =>
         await _mediator.Send(new PublishExamSessionCommand(id), cancellationToken);
 
+    /// <summary>取回场次名单。</summary>
+    [HttpGet("{id:long}/participants")]
+    [Authorize(Policy = PermissionCatalog.ExamRead)]
+    [ProducesResponseType(typeof(ExamParticipantListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ExamParticipantListResponse> ListParticipants(
+        long id,
+        CancellationToken cancellationToken) =>
+        await _mediator.Send(new ListExamParticipantsQuery(id), cancellationToken);
+
+    /// <summary>设置场次名单（按组织标签）。已发布的场次会立即重新物化。</summary>
+    [HttpPut("{id:long}/participants")]
+    [Authorize(Policy = PermissionCatalog.ExamWrite)]
+    [ProducesResponseType(typeof(ExamParticipantListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ExamParticipantListResponse> SetParticipants(
+        long id,
+        SetExamParticipantsRequest request,
+        CancellationToken cancellationToken) =>
+        await _mediator.Send(
+            new SetExamParticipantsCommand(id, request.ParticipantTagIds ?? []),
+            cancellationToken);
+
     /// <summary>关闭场次。</summary>
     [HttpPost("{id:long}/close")]
     [Authorize(Policy = PermissionCatalog.ExamPublish)]

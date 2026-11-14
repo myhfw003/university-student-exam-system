@@ -31,6 +31,16 @@ public interface IUserRepository
         long? roleId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>按主键集合取回用户。</summary>
+    Task<IReadOnlyList<User>> GetByIdsAsync(
+        IReadOnlyCollection<long> ids,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>取回挂有指定组织标签的全部用户 ID。</summary>
+    Task<IReadOnlyList<long>> GetUserIdsByTagIdsAsync(
+        IReadOnlyCollection<long> tagIds,
+        CancellationToken cancellationToken = default);
+
     /// <summary>取回拥有指定角色的全部用户 ID。</summary>
     Task<IReadOnlyList<long>> GetUserIdsByRoleAsync(long roleId, CancellationToken cancellationToken = default);
 }

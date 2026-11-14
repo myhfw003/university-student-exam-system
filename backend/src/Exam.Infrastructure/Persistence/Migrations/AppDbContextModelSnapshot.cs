@@ -1425,6 +1425,57 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Exam.Domain.Delivery.ExamParticipant", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AttemptsUsed")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts_used");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long>("ExamSessionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("exam_session_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_exam_participant");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_exam_participant_user");
+
+                    b.HasIndex("ExamSessionId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_exam_participant_user");
+
+                    b.ToTable("exam_participant", "delivery", t =>
+                        {
+                            t.HasCheckConstraint("ck_exam_participant_status", "status IN ('invited','not_started','in_progress','submitted','absent','disqualified')");
+                        });
+                });
+
             modelBuilder.Entity("Exam.Domain.Delivery.ExamSession", b =>
                 {
                     b.Property<long>("Id")
@@ -2111,6 +2162,16 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ParentId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_tag_tag_parent_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Delivery.ExamParticipant", b =>
+                {
+                    b.HasOne("Exam.Domain.Delivery.ExamSession", null)
+                        .WithMany()
+                        .HasForeignKey("ExamSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_exam_participant_exam_sessions_exam_session_id");
                 });
 
             modelBuilder.Entity("Exam.Domain.Delivery.ExamSession", b =>

@@ -28,3 +28,6 @@ public sealed record UpdateExamSessionRequest(
     string? VariantRule,
     ExamRulesDtoInput? Rules,
     string? Note);
+
+/// <summary>设置场次名单（按组织标签）。</summary>
+public sealed record SetExamParticipantsRequest(IReadOnlyList<long>? ParticipantTagIds);

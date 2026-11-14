@@ -1,4 +1,5 @@
 using Exam.Application.Authoring.Services;
+using Exam.Application.Delivery.Services;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Identity.Services;
 using Exam.Domain.SharedKernel.Abstractions;
@@ -63,6 +64,8 @@ public static class DependencyInjection
         services.AddScoped<IBlueprintRepository, BlueprintRepository>();
         services.AddScoped<IPaperTemplateRepository, PaperTemplateRepository>();
         services.AddScoped<IExamSessionRepository, ExamSessionRepository>();
+        services.AddScoped<IExamParticipantRepository, ExamParticipantRepository>();
+        services.AddScoped<ExamRosterBuilder>();
         services.AddScoped<BlueprintPoolBuilder>();
         services.AddSingleton<IQuestionFileParser, QuestionFileParser>();
         services.AddScoped<IUserPermissionService, UserPermissionService>();

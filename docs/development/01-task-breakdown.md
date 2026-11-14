@@ -481,7 +481,7 @@ P0 基础设施
 | 任务 | 状态 | 说明 |
 |---|---|---|
 | T-P4-01 考试场次聚合与状态机 | ✅ 完成 | 时间窗校验 + 状态机 + 发布绑定试卷快照 |
-| T-P4-02 名单物化 | ⬜ 未开始 | |
+| T-P4-02 名单物化 | ✅ 完成 | 三种纳入方式 + 发布时展开名单快照 + 名单接口 |
 | T-P4-03 作答会话创建与恢复 | ⬜ 未开始 | |
 | T-P4-04 答案批量保存 | ⬜ 未开始 | |
 | T-P4-05 答案修订流水 | ⬜ 未开始 | |
@@ -500,6 +500,15 @@ P0 基础设施
 - 三种名单纳入方式随场次配置：`tags`（按组织标签）/ `direct`（指定考生）/ `open`（全员开放）。
 - 接口：`GET/POST /exam-sessions`、`GET/PUT /exam-sessions/{id}`、`POST /exam-sessions/{id}/publish|close|cancel`。
 - 顺带修复：`deploy/db/02-grant-app-role.sql` 漏授 `authoring` schema 权限（P3 起新增的组卷表在生产上应用账号无权访问），本次一并补上 `authoring` 与 `delivery`。
+
+**T-P4-02 交付说明**
+
+- 新增 `ExamParticipant` 实体（`delivery.exam_participant`）：名单项带状态（待入场 / 未开始 / 作答中 / 已交卷 / 缺考 / 已取消资格）与已用尝试次数。
+- **三种纳入方式**：`tags`（按组织维度标签，含子标签）、`direct`（指定考生，可含社会人士）、`open`（全员开放，不物化名单）。
+- **名单在场次发布时物化**：发布那一刻展开成独立名单项，之后标签怎么改都不影响这一场——名单是快照，不是活引用。
+- 只有组织维度的标签能作为名单；拿难度标签当名单直接报错。
+- 接口：`GET /exam-sessions/{id}/participants`（名单与状态）、`PUT /exam-sessions/{id}/participants`（按标签设置名单；已发布的场次立即重新物化并留审计）。
+- 相对设计文档的偏差：`exam_participant` 用代理主键 + `(exam_session_id, user_id)` 唯一索引，而不是复合主键——与本项目其它实体保持一致。
 
 ### T-P4-01 考试场次聚合与状态机
 - **依赖**：T-P3-05
