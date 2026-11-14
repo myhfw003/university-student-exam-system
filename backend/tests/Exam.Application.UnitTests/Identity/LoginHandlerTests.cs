@@ -1,4 +1,5 @@
 using Exam.Application.Common.Interfaces;
+using Exam.Application.Identity.Services;
 using Exam.Application.Identity.Commands;
 using Exam.Application.Identity.Contracts;
 using Exam.Domain.Identity;
@@ -39,8 +40,12 @@ public sealed class LoginHandlerTests
     private readonly IClock _clock = new FixedClock(Now);
     private readonly IRequestContext _requestContext = Substitute.For<IRequestContext>();
 
+    private readonly UserOrganizationResolver _organization = new(
+        Substitute.For<IUserTagRepository>(),
+        Substitute.For<ITagRepository>());
+
     private LoginHandler CreateHandler() =>
-        new(_users, _refreshTokens, _permissions, _tokenService, new StubPasswordVerifier(), _clock, _requestContext);
+        new(_users, _refreshTokens, _permissions, _tokenService, new StubPasswordVerifier(), _clock, _requestContext, _organization);
 
     private void ArrangeExistingUser(string username = "zhangsan", string password = "Passw0rd!")
     {

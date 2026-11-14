@@ -18,6 +18,7 @@ public sealed class TagCommandHandlerTests
     private readonly IClock _clock = new FixedClock(Now);
     private readonly ICurrentUser _currentUser = Substitute.For<ICurrentUser>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IUserTagRepository _userTags = Substitute.For<IUserTagRepository>();
 
     /// <summary>给标签赋主键，模拟已持久化的实体。</summary>
     private static Tag WithId(Tag tag, long id)
@@ -32,7 +33,7 @@ public sealed class TagCommandHandlerTests
 
     private UpdateTagHandler UpdateHandler() => new(_tags, _clock, _currentUser);
 
-    private DeleteTagHandler DeleteHandler() => new(_tags, _clock, _currentUser);
+    private DeleteTagHandler DeleteHandler() => new(_tags, _userTags, _clock, _currentUser);
 
     [Fact]
     public async Task 新建标签_编码重复时报错()

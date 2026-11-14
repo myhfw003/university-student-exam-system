@@ -29,6 +29,8 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
 
     public DbSet<UserRole> UserRoles => Set<UserRole>();
 
+    public DbSet<UserTag> UserTags => Set<UserTag>();
+
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
 
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();

@@ -26,6 +26,14 @@ public interface ITagRepository : IReadRepository<Tag>
         IReadOnlyCollection<long> ids,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// 按主键集合取回标签，并把它们的全部祖先一并带出。
+    /// 推导组织完整路径时必须拿到祖先，否则路径只能停在自身。
+    /// </summary>
+    Task<IReadOnlyList<Tag>> GetWithAncestorsAsync(
+        IReadOnlyCollection<long> ids,
+        CancellationToken cancellationToken = default);
+
     /// <summary>取回指定标签的全部后代（含自身）。由数据库递归查询实现。</summary>
     Task<IReadOnlyList<long>> GetDescendantIdsAsync(
         long rootId,

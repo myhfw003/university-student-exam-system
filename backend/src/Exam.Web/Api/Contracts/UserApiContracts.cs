@@ -17,6 +17,8 @@ public sealed record UpdateUserRequest(
 
 public sealed record AssignRolesRequest(IReadOnlyList<long> RoleIds);
 
+public sealed record AssignTagsRequest(IReadOnlyList<long> TagIds);
+
 public sealed record CreateRoleRequest(
     string Code,
     string Name,

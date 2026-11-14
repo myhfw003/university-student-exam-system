@@ -1,6 +1,7 @@
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
 using Exam.Application.Identity.Contracts;
+using Exam.Application.Identity.Services;
 using MediatR;
 
 namespace Exam.Application.Identity.Queries;
@@ -16,15 +17,18 @@ public sealed class GetCurrentUserHandler : IRequestHandler<GetCurrentUserQuery,
     private readonly ICurrentUser _currentUser;
     private readonly IUserPermissionService _permissions;
     private readonly IUserRepository _users;
+    private readonly UserOrganizationResolver _organization;
 
     public GetCurrentUserHandler(
         ICurrentUser currentUser,
         IUserPermissionService permissions,
-        IUserRepository users)
+        IUserRepository users,
+        UserOrganizationResolver organization)
     {
         _currentUser = currentUser;
         _permissions = permissions;
         _users = users;
+        _organization = organization;
     }
 
     public async Task<UserProfileDto?> Handle(GetCurrentUserQuery request, CancellationToken cancellationToken)
@@ -40,13 +44,15 @@ public sealed class GetCurrentUserHandler : IRequestHandler<GetCurrentUserQuery,
         // 令牌里只有登录名，真实姓名与「需修改密码」标记要从库里取。
         var user = await _users.GetByIdAsync(userId, cancellationToken);
 
+        var organization = await _organization.ResolveAsync(userId, cancellationToken);
+
         return new UserProfileDto(
             userId,
             user?.Username ?? _currentUser.Username ?? string.Empty,
             user?.DisplayName ?? _currentUser.Username ?? string.Empty,
             roleCodes.ToList(),
             permissionCodes.ToList(),
-            [],
+            organization.Tags.Select(t => new OrganizationTagDto(t.Id, t.Name)).ToList(),
             user?.MustChangePassword ?? false);
     }
 }

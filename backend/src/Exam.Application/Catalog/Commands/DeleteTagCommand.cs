@@ -26,12 +26,18 @@ public sealed class DeleteTagCommandValidator : AbstractValidator<DeleteTagComma
 public sealed class DeleteTagHandler : IRequestHandler<DeleteTagCommand, Unit>
 {
     private readonly ITagRepository _tags;
+    private readonly IUserTagRepository _userTags;
     private readonly IClock _clock;
     private readonly ICurrentUser _currentUser;
 
-    public DeleteTagHandler(ITagRepository tags, IClock clock, ICurrentUser currentUser)
+    public DeleteTagHandler(
+        ITagRepository tags,
+        IUserTagRepository userTags,
+        IClock clock,
+        ICurrentUser currentUser)
     {
         _tags = tags;
+        _userTags = userTags;
         _clock = clock;
         _currentUser = currentUser;
     }
@@ -42,7 +48,8 @@ public sealed class DeleteTagHandler : IRequestHandler<DeleteTagCommand, Unit>
             ?? throw new BusinessRuleException("标签不存在。");
 
         var hasChildren = await _tags.CountChildrenAsync(tag.Id, cancellationToken) > 0;
-        tag.EnsureDeletable(hasChildren, usedByUsers: false, usedByQuestions: false);
+        var usedByUsers = await _userTags.CountByTagAsync(tag.Id, cancellationToken) > 0;
+        tag.EnsureDeletable(hasChildren, usedByUsers, usedByQuestions: false);
 
         tag.SoftDelete(_clock.UtcNow, _currentUser.UserId);
         _tags.Update(tag);

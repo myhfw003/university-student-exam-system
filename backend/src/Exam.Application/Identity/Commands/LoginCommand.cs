@@ -2,6 +2,7 @@ using Exam.Application.Common.Attributes;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
 using Exam.Application.Identity.Contracts;
+using Exam.Application.Identity.Services;
 using Exam.Domain.Identity;
 using Exam.Domain.SharedKernel.Abstractions;
 using Exam.Domain.SharedKernel.Exceptions;
@@ -38,6 +39,7 @@ public sealed class LoginHandler : IRequestHandler<LoginCommand, LoginResult>
     private readonly IPasswordVerifier _passwordVerifier;
     private readonly IClock _clock;
     private readonly IRequestContext _requestContext;
+    private readonly UserOrganizationResolver _organization;
 
     public LoginHandler(
         IUserRepository users,
@@ -46,8 +48,10 @@ public sealed class LoginHandler : IRequestHandler<LoginCommand, LoginResult>
         ITokenService tokenService,
         IPasswordVerifier passwordVerifier,
         IClock clock,
-        IRequestContext requestContext)
+        IRequestContext requestContext,
+        UserOrganizationResolver organization)
     {
+        _organization = organization;
         _users = users;
         _refreshTokens = refreshTokens;
         _permissions = permissions;
@@ -89,13 +93,15 @@ public sealed class LoginHandler : IRequestHandler<LoginCommand, LoginResult>
 
         await _refreshTokens.AddAsync(refreshEntity, cancellationToken);
 
+        var organization = await _organization.ResolveAsync(user.Id, cancellationToken);
+
         var profile = new UserProfileDto(
             user.Id,
             user.Username,
             user.DisplayName,
             roleCodes.ToList(),
             permissionCodes.ToList(),
-            [],
+            organization.Tags.Select(t => new OrganizationTagDto(t.Id, t.Name)).ToList(),
             user.MustChangePassword);
 
         return new LoginResult(

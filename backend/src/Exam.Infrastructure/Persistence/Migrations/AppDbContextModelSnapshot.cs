@@ -548,6 +548,40 @@ namespace Exam.Infrastructure.Persistence.Migrations
                     b.ToTable("user_role", "iam");
                 });
 
+            modelBuilder.Entity("Exam.Domain.Identity.UserTag", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("AssignedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("assigned_at");
+
+                    b.Property<long>("TagId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("tag_id");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_user_tag");
+
+                    b.HasIndex("TagId")
+                        .HasDatabaseName("ix_user_tag_tag");
+
+                    b.HasIndex("UserId", "TagId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_user_tag");
+
+                    b.ToTable("user_tag", "iam");
+                });
+
             modelBuilder.Entity("Exam.Infrastructure.Persistence.SeedMarker", b =>
                 {
                     b.Property<int>("Id")

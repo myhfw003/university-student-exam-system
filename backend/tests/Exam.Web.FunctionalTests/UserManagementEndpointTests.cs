@@ -49,7 +49,9 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
         var now = DateTimeOffset.UtcNow;
         _adminRoleId = await SeedRoleAsync(db, "admin_role", "管理员", [
             PermissionCatalog.UserRead, PermissionCatalog.UserWrite,
-            PermissionCatalog.RoleRead, PermissionCatalog.RoleWrite]);
+            PermissionCatalog.RoleRead, PermissionCatalog.RoleWrite,
+            PermissionCatalog.UserTagAssign,
+            PermissionCatalog.TagRead, PermissionCatalog.TagWrite]);
         _readerRoleId = await SeedRoleAsync(db, "reader_role", "只读", [PermissionCatalog.UserRead]);
 
         _adminUserId = await SeedUserAsync(db, AdminUsername, AdminPassword, "系统管理员", _adminRoleId);
@@ -231,7 +233,7 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
 
         var roles = await response.Content.ReadFromJsonAsync<JsonElement>();
         var adminRole = roles.EnumerateArray().First(r => r.GetProperty("code").GetString() == "admin_role");
-        adminRole.GetProperty("permissions").GetArrayLength().ShouldBe(4);
+        adminRole.GetProperty("permissions").GetArrayLength().ShouldBe(7);
     }
 
     [Fact]
@@ -245,6 +247,113 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
 
         var permissions = await response.Content.ReadFromJsonAsync<JsonElement>();
         permissions.GetArrayLength().ShouldBeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task 组织标签_挂载后返回完整路径()
+    {
+        var adminToken = await LoginAsync(AdminUsername, AdminPassword);
+        UseToken(adminToken);
+
+        var facultyId = await CreateOrgTagAsync("org.cs.faculty", "计算机学院", null);
+        var majorId = await CreateOrgTagAsync("org.cs.faculty.major", "计算机科学与技术", facultyId);
+        var classId = await CreateOrgTagAsync("org.cs.faculty.major.c2301", "计科 2301 班", majorId);
+
+        await _client.PostAsJsonAsync(
+            "/api/v1/users",
+            new { username = "orguser01", displayName = "林知远", password = "Passw0rd!" });
+
+        var users = await _client.GetAsync("/api/v1/users?keyword=orguser01");
+        var listBody = await users.Content.ReadFromJsonAsync<JsonElement>();
+        var userId = listBody.GetProperty("items")[0].GetProperty("id").GetInt64();
+
+        var assign = await _client.PutAsJsonAsync(
+            $"/api/v1/users/{userId}/tags",
+            new { tagIds = new[] { classId } });
+        assign.StatusCode.ShouldBe(HttpStatusCode.OK, await assign.Content.ReadAsStringAsync());
+
+        var tags = await _client.GetAsync($"/api/v1/users/{userId}/tags");
+        tags.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        var body = await tags.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("organizationPath").GetString()
+            .ShouldBe("计算机学院 / 计算机科学与技术 / 计科 2301 班");
+        body.GetProperty("tags")[0].GetProperty("name").GetString().ShouldBe("计科 2301 班");
+    }
+
+    [Fact]
+    public async Task 组织标签_只接受组织维度()
+    {
+        var adminToken = await LoginAsync(AdminUsername, AdminPassword);
+        UseToken(adminToken);
+
+        var domainTagId = await CreateTagAsync("math", "高等数学", "domain", null, null);
+
+        await _client.PostAsJsonAsync(
+            "/api/v1/users",
+            new { username = "badorg01", displayName = "越权组织", password = "Passw0rd!" });
+
+        var users = await _client.GetAsync("/api/v1/users?keyword=badorg01");
+        var listBody = await users.Content.ReadFromJsonAsync<JsonElement>();
+        var userId = listBody.GetProperty("items")[0].GetProperty("id").GetInt64();
+
+        var assign = await _client.PutAsJsonAsync(
+            $"/api/v1/users/{userId}/tags",
+            new { tagIds = new[] { domainTagId } });
+
+        assign.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+    }
+
+    [Fact]
+    public async Task 组织标签_被用户引用时不可删除()
+    {
+        var adminToken = await LoginAsync(AdminUsername, AdminPassword);
+        UseToken(adminToken);
+
+        var facultyId = await CreateOrgTagAsync("org.del.faculty", " deletable 学院", null);
+
+        await _client.PostAsJsonAsync(
+            "/api/v1/users",
+            new { username = "delorg01", displayName = "引用者", password = "Passw0rd!" });
+
+        var users = await _client.GetAsync("/api/v1/users?keyword=delorg01");
+        var listBody = await users.Content.ReadFromJsonAsync<JsonElement>();
+        var userId = listBody.GetProperty("items")[0].GetProperty("id").GetInt64();
+
+        var assign = await _client.PutAsJsonAsync(
+            $"/api/v1/users/{userId}/tags",
+            new { tagIds = new[] { facultyId } });
+        assign.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        var delete = await _client.DeleteAsync($"/api/v1/tags/{facultyId}");
+        delete.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+
+        var problem = await delete.Content.ReadFromJsonAsync<JsonElement>();
+        problem.GetProperty("errorCode").GetInt32().ShouldBe(22101);
+    }
+
+    private async Task<long> CreateOrgTagAsync(string code, string name, long? parentId)
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/api/v1/tags",
+            new { code, name, group = "organization", parentId, sortOrder = 0 });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return body.GetProperty("id").GetInt64();
+    }
+
+    private async Task<long> CreateTagAsync(string code, string name, string group, long? parentId, int? level)
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/api/v1/tags",
+            new { code, name, group, parentId, level, sortOrder = 0 });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return body.GetProperty("id").GetInt64();
     }
 
     private void UseToken(string token) =>

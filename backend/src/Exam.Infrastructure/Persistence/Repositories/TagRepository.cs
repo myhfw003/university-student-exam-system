@@ -71,6 +71,25 @@ public sealed class TagRepository : ITagRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Tag>> GetWithAncestorsAsync(
+        IReadOnlyCollection<long> ids,
+        CancellationToken cancellationToken = default)
+    {
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        var all = new HashSet<long>(ids);
+        foreach (var id in ids)
+        {
+            var ancestors = await GetAncestorIdsAsync(id, cancellationToken);
+            all.UnionWith(ancestors);
+        }
+
+        return await GetByIdsAsync(all.ToList(), cancellationToken);
+    }
+
     /// <summary>
     /// 递归 CTE 一次展开全部后代，避免逐层查询。
     /// </summary>

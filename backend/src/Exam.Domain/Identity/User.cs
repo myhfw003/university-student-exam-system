@@ -1,4 +1,5 @@
 using Exam.Domain.Identity.Events;
+using Exam.Domain.Catalog;
 using Exam.Domain.SharedKernel.Abstractions;
 using Exam.Domain.SharedKernel.Entities;
 using Exam.Domain.SharedKernel.Exceptions;
@@ -221,6 +222,35 @@ public sealed class User : AuditableEntity
     {
         Phone = string.IsNullOrWhiteSpace(phone) ? null : phone.Trim();
         Touch(now, actorId);
+    }
+
+    /// <summary>
+    /// 变更用户挂载的组织维度标签。
+    /// <para>只接受组织维度的标签——领域 / 知识点 / 能力 / 难度都挂不到用户上。</para>
+    /// </summary>
+    public void AssignTags(
+        IReadOnlyCollection<Tag> tags,
+        IReadOnlyCollection<long> previousTagIds,
+        DateTimeOffset now,
+        long? actorId = null)
+    {
+        foreach (var tag in tags)
+        {
+            if (tag.Group != TagGroup.Organization)
+            {
+                throw new BusinessRuleException(
+                    $"只能挂载组织维度的标签，「{tag.Name}」属于{tag.Group.Label()}维度。");
+            }
+        }
+
+        var current = tags.Select(t => t.Id).ToHashSet();
+        var previous = previousTagIds.ToHashSet();
+
+        Touch(now, actorId);
+        AddDomainEvent(new UserTagsChanged(
+            Id,
+            current.Except(previous).ToArray(),
+            previous.Except(current).ToArray()));
     }
 
     /// <summary>标记为「下次登录必须修改密码」。用于发放随机初始密码的场景。</summary>

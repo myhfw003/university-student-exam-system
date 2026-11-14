@@ -98,6 +98,24 @@ public sealed class UsersController : ControllerBase
         CancellationToken cancellationToken) =>
         await _mediator.Send(new AssignUserRolesCommand(id, request.RoleIds), cancellationToken);
 
+    /// <summary>取回用户挂载的组织标签与完整组织路径。</summary>
+    [HttpGet("{id:long}/tags")]
+    [ProducesResponseType(typeof(UserTagsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<UserTagsResponse> GetTags(long id, CancellationToken cancellationToken) =>
+        await _mediator.Send(new GetUserTagsQuery(id), cancellationToken);
+
+    /// <summary>覆盖式设置用户挂载的组织维度标签。</summary>
+    [HttpPut("{id:long}/tags")]
+    [Authorize(Policy = PermissionCatalog.UserTagAssign)]
+    [ProducesResponseType(typeof(UserTagsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<UserTagsResponse> AssignTags(
+        long id,
+        AssignTagsRequest request,
+        CancellationToken cancellationToken) =>
+        await _mediator.Send(new AssignUserTagsCommand(id, request.TagIds), cancellationToken);
+
     /// <summary>撤销用户的某个角色。</summary>
     [HttpDelete("{id:long}/roles/{roleId:long}")]
     [Authorize(Policy = PermissionCatalog.RoleWrite)]
