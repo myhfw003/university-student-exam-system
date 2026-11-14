@@ -10,7 +10,7 @@ namespace Exam.Domain.Identity;
 /// 用户聚合根。承载登录名、密码、状态与锁定策略。
 /// 组织归属不在本聚合内，由 user_tag 关联表与组织维度标签表达。
 /// </summary>
-public sealed class User : AuditableEntity
+public sealed class User : AuditableEntity, IAuditedEntity
 {
     public const int MaxFailedLoginCount = 5;
 

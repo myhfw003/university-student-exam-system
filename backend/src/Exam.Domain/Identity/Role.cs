@@ -4,7 +4,7 @@ using Exam.Domain.SharedKernel.Exceptions;
 namespace Exam.Domain.Identity;
 
 /// <summary>角色。系统内置角色不可删除，只能调整其权限集合。</summary>
-public sealed class Role : AuditableEntity
+public sealed class Role : AuditableEntity, IAuditedEntity
 {
     public static class Codes
     {

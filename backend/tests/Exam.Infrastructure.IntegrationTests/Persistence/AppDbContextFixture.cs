@@ -21,12 +21,17 @@ public sealed class AppDbContextFixture : IAsyncLifetime
     /// <summary>同一连接串的 DbContext 选项，用于构造并发的第二个上下文。</summary>
     public DbContextOptions<AppDbContext> Options { get; private set; } = null!;
 
+    /// <summary>容器连接串。用于构造带拦截器的第二个上下文。</summary>
+    public string ConnectionString { get; private set; } = string.Empty;
+
     public async Task InitializeAsync()
     {
         await _postgres.StartAsync();
 
+        ConnectionString = _postgres.GetConnectionString();
+
         Options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseNpgsql(_postgres.GetConnectionString())
+            .UseNpgsql(ConnectionString)
             .UseSnakeCaseNamingConvention()
             .Options;
 
@@ -48,7 +53,7 @@ public sealed class AppDbContextFixture : IAsyncLifetime
         DbContext.ChangeTracker.Clear();
 
         await DbContext.Database.ExecuteSqlRawAsync("""
-            TRUNCATE catalog.tag,
+            TRUNCATE audit.audit_log, catalog.tag,
                      iam.user_role, iam.role_permission, iam.refresh_token,
                      iam.user, iam.role, iam.permission, iam.seed_markers RESTART IDENTITY CASCADE
             """);

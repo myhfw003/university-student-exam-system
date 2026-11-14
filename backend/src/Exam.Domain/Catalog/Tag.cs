@@ -7,7 +7,7 @@ namespace Exam.Domain.Catalog;
 /// 标签聚合根。五个维度共用一张表，用 <see cref="Group"/> 区分。
 /// <para>层级只允许同维度内部；难度维度是平铺的且必须带 <see cref="Level"/>。</para>
 /// </summary>
-public sealed class Tag : AuditableEntity
+public sealed class Tag : AuditableEntity, IAuditedEntity
 {
     public const int MaxNameLength = 50;
 

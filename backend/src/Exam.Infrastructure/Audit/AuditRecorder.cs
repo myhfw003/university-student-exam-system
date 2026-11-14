@@ -16,11 +16,19 @@ public sealed class AuditRecorder : IAuditRecorder
 
     private readonly AppDbContext _db;
     private readonly IClock _clock;
+    private readonly ICurrentUser _currentUser;
+    private readonly IRequestContext _requestContext;
 
-    public AuditRecorder(AppDbContext db, IClock clock)
+    public AuditRecorder(
+        AppDbContext db,
+        IClock clock,
+        ICurrentUser currentUser,
+        IRequestContext requestContext)
     {
         _db = db;
         _clock = clock;
+        _currentUser = currentUser;
+        _requestContext = requestContext;
     }
 
     public async Task RecordAsync(
@@ -30,7 +38,15 @@ public sealed class AuditRecorder : IAuditRecorder
         IReadOnlyDictionary<string, object?>? summary = null,
         CancellationToken cancellationToken = default)
     {
-        var log = AuditLog.Create(null, null, action, targetType, targetId, _clock.UtcNow);
+        var log = AuditLog.Create(
+            _currentUser.UserId,
+            _currentUser.Username,
+            action,
+            targetType,
+            targetId,
+            _clock.UtcNow);
+
+        log.WithContext(_requestContext.IpAddress, _requestContext.UserAgent, _currentUser.UserId?.ToString());
 
         if (summary is { Count: > 0 })
         {

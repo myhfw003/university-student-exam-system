@@ -1,3 +1,4 @@
+using Exam.Infrastructure.Audit;
 using Exam.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -40,11 +41,16 @@ public sealed class ExamWebFactory : WebApplicationFactory<Program>
         builder.ConfigureServices(services =>
         {
             // 容器连接串在配置里给出，但默认注册发生在更早，需要替换。
+            // EF 9+ 把 DbContext 选项拆成 IDbContextOptionsConfiguration，
+            // 只移除 DbContextOptions 不会移除原配置——那会让默认连接串与拦截器叠加生效。
+            services.RemoveAll<Microsoft.EntityFrameworkCore.Infrastructure.IDbContextOptionsConfiguration<AppDbContext>>();
             services.RemoveAll<DbContextOptions<AppDbContext>>();
             services.RemoveAll<AppDbContext>();
             services.AddDbContext<AppDbContext>((sp, options) =>
                 options.UseNpgsql(_connectionString)
-                    .UseSnakeCaseNamingConvention());
+                    .UseSnakeCaseNamingConvention()
+                    // 与生产装配保持一致：实体字段变更的自动留痕
+                    .AddInterceptors(sp.GetRequiredService<AuditSaveChangesInterceptor>()));
         });
     }
 }

@@ -39,6 +39,8 @@ public static class DependencyInjection
             {
                 npgsql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName);
             })
+            // 实体字段变更的自动留痕
+            .AddInterceptors(sp.GetRequiredService<AuditSaveChangesInterceptor>())
             // 列名、表名统一使用 snake_case，与数据库设计文档一致
             .UseSnakeCaseNamingConvention();
         });
@@ -56,6 +58,8 @@ public static class DependencyInjection
         services.AddScoped<Exam.Application.Identity.Services.UserOrganizationResolver, Exam.Application.Identity.Services.UserOrganizationResolver>();
         services.AddScoped<Exam.Application.Catalog.Services.OrganizationTagProvisioner, Exam.Application.Catalog.Services.OrganizationTagProvisioner>();
         services.AddScoped<IAuditRecorder, AuditRecorder>();
+        services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<Audit.AuditSaveChangesInterceptor>();
         services.AddScoped<Seeding.DataSeeder>();
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IPasswordVerifier, Pbkdf2PasswordVerifier>();

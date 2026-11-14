@@ -51,7 +51,8 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
             PermissionCatalog.UserRead, PermissionCatalog.UserWrite,
             PermissionCatalog.RoleRead, PermissionCatalog.RoleWrite,
             PermissionCatalog.UserTagAssign, PermissionCatalog.UserImport,
-            PermissionCatalog.TagRead, PermissionCatalog.TagWrite]);
+            PermissionCatalog.TagRead, PermissionCatalog.TagWrite,
+            PermissionCatalog.AuditRead]);
         _readerRoleId = await SeedRoleAsync(db, "reader_role", "只读", [PermissionCatalog.UserRead]);
 
         // 名单导入会按角色编码查找角色，系统角色必须先在库里。
@@ -237,7 +238,7 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
 
         var roles = await response.Content.ReadFromJsonAsync<JsonElement>();
         var adminRole = roles.EnumerateArray().First(r => r.GetProperty("code").GetString() == "admin_role");
-        adminRole.GetProperty("permissions").GetArrayLength().ShouldBe(8);
+        adminRole.GetProperty("permissions").GetArrayLength().ShouldBe(9);
     }
 
     [Fact]
@@ -434,6 +435,60 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
         var tagBody = await tags.Content.ReadFromJsonAsync<JsonElement>();
         tagBody.GetProperty("tags").GetArrayLength().ShouldBe(0);
         tagBody.GetProperty("organizationPath").ValueKind.ShouldBe(System.Text.Json.JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task 审计日志_记录关键操作并可查询()
+    {
+        var adminToken = await LoginAsync(AdminUsername, AdminPassword);
+        UseToken(adminToken);
+
+        await _client.PostAsJsonAsync(
+            "/api/v1/users",
+            new { username = "audited01", displayName = "被审计者", password = "Passw0rd!" });
+
+        var users = await _client.GetAsync("/api/v1/users?keyword=audited01");
+        var listBody = await users.Content.ReadFromJsonAsync<JsonElement>();
+        var userId = listBody.GetProperty("items")[0].GetProperty("id").GetInt64();
+
+        await _client.PutAsJsonAsync(
+            $"/api/v1/users/{userId}",
+            new { displayName = "改名了", status = "active" });
+
+        var logs = await _client.GetAsync($"/api/v1/audit-logs?targetType=user&targetId={userId}");
+        logs.StatusCode.ShouldBe(HttpStatusCode.OK, await logs.Content.ReadAsStringAsync());
+
+        var body = await logs.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("total").GetInt32().ShouldBeGreaterThan(0);
+
+        var items = body.GetProperty("items").EnumerateArray()
+            .Select(x => $"{x.GetProperty("action").GetString()}::{x.GetProperty("summary").GetString()}")
+            .ToList();
+
+        items.ShouldContain(x => x.StartsWith("user.update"));
+        items.ShouldContain(x => x.StartsWith("entity.user.updated"));
+        items.Count.ShouldBe(3, $"审计条目：{string.Join(" | ", items)}");
+    }
+
+    [Fact]
+    public async Task 审计日志_无权限时拒绝()
+    {
+        var adminToken = await LoginAsync(AdminUsername, AdminPassword);
+        UseToken(adminToken);
+
+        await _client.PostAsJsonAsync(
+            "/api/v1/users",
+            new { username = "noperm001", displayName = "无权限", password = "Passw0rd!" });
+
+        var users = await _client.GetAsync("/api/v1/users?keyword=noperm001");
+        var listBody = await users.Content.ReadFromJsonAsync<JsonElement>();
+        var userId = listBody.GetProperty("items")[0].GetProperty("id").GetInt64();
+
+        var targetToken = await LoginAsync("noperm001", "Passw0rd!");
+        UseToken(targetToken);
+
+        var response = await _client.GetAsync("/api/v1/audit-logs");
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
 
     private async Task<HttpResponseMessage> PostCsvAsync(string path, string content, string fileName)
