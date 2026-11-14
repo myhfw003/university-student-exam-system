@@ -17,6 +17,12 @@ public interface IAnswerRepository
 
     Task<Answer?> GetAsync(long attemptId, long questionId, CancellationToken cancellationToken = default);
 
+    /// <summary>取回某次作答中指定题目的当前答案。</summary>
+    Task<IReadOnlyList<Answer>> ListByQuestionsAsync(
+        long attemptId,
+        IReadOnlyCollection<long> questionIds,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// 批量写入当前答案。同一 (attempt, question) 覆盖写并把修订序号 +1。
     /// </summary>

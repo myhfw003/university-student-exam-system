@@ -242,6 +242,63 @@ public sealed class SaveAnswersEndpointTests : IAsyncLifetime
         body.GetProperty("rejected")[0].GetProperty("reason").GetString()!.ShouldContain("只能选一个");
     }
 
+    [Fact]
+    public async Task 保存答案会留下修订流水()
+    {
+        var attemptId = await StartAttemptAsync();
+
+        await _client.PostAsJsonAsync(
+            $"/api/v1/attempts/{attemptId}/answers",
+            new
+            {
+                clientSeq = 7,
+                items = new[]
+                {
+                    new { questionId = _questionId, payload = new { selectedOptionKeys = new[] { "A" } } },
+                },
+            });
+
+        var revisions = await LoadRevisionsAsync(attemptId);
+        revisions.Count.ShouldBe(1);
+        revisions[0].ClientSeq.ShouldBe(7);
+        revisions[0].Revision.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task 重复提交不会多写修订流水()
+    {
+        var attemptId = await StartAttemptAsync();
+
+        var request = new
+        {
+            clientSeq = 3,
+            items = new[]
+            {
+                new { questionId = _questionId, payload = new { selectedOptionKeys = new[] { "A" } } },
+            },
+        };
+
+        await _client.PostAsJsonAsync($"/api/v1/attempts/{attemptId}/answers", request);
+        await _client.PostAsJsonAsync($"/api/v1/attempts/{attemptId}/answers", request);
+
+        var revisions = await LoadRevisionsAsync(attemptId);
+        revisions.Count.ShouldBe(1);
+    }
+
+    private async Task<IReadOnlyList<AnswerRevisionRow>> LoadRevisionsAsync(long attemptId)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        return await db.Set<AnswerRevision>()
+            .AsNoTracking()
+            .Where(r => r.AttemptId == attemptId)
+            .Select(r => new AnswerRevisionRow(r.Id, r.QuestionId, r.ClientSeq, r.Revision))
+            .ToListAsync();
+    }
+
+    private sealed record AnswerRevisionRow(long Id, long QuestionId, int ClientSeq, int Revision);
+
     private async Task<long> StartAttemptAsync()
     {
         await LoginAsync(TeacherUsername, TeacherPassword);

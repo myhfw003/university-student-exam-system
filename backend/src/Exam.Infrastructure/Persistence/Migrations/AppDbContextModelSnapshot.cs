@@ -1484,6 +1484,57 @@ namespace Exam.Infrastructure.Persistence.Migrations
                     b.ToTable("answer", "delivery");
                 });
 
+            modelBuilder.Entity("Exam.Domain.Delivery.AnswerRevision", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("AttemptId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("attempt_id");
+
+                    b.Property<DateTimeOffset?>("ClientSentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("client_sent_at");
+
+                    b.Property<int>("ClientSeq")
+                        .HasColumnType("integer")
+                        .HasColumnName("client_seq");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload");
+
+                    b.Property<long>("QuestionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("question_id");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision");
+
+                    b.Property<DateTimeOffset>("ServerReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("server_received_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_answer_revision");
+
+                    b.HasIndex("AttemptId", "ServerReceivedAt")
+                        .HasDatabaseName("ix_answer_revision_attempt");
+
+                    b.HasIndex("AttemptId", "ClientSeq", "QuestionId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_answer_revision_seq");
+
+                    b.ToTable("answer_revision", "app");
+                });
+
             modelBuilder.Entity("Exam.Domain.Delivery.Attempt", b =>
                 {
                     b.Property<long>("Id")

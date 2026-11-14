@@ -30,6 +30,23 @@ public sealed class AnswerRepository : IAnswerRepository
         _db.Set<Answer>()
             .FirstOrDefaultAsync(a => a.AttemptId == attemptId && a.QuestionId == questionId, cancellationToken);
 
+    public async Task<IReadOnlyList<Answer>> ListByQuestionsAsync(
+        long attemptId,
+        IReadOnlyCollection<long> questionIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (questionIds.Count == 0)
+        {
+            return [];
+        }
+
+        var idList = questionIds.ToList();
+        return await _db.Set<Answer>()
+            .AsNoTracking()
+            .Where(a => a.AttemptId == attemptId && idList.Contains(a.QuestionId))
+            .ToListAsync(cancellationToken);
+    }
+
     /// <summary>
     /// 原生 SQL upsert：一批答案一次往返。
     /// <para>

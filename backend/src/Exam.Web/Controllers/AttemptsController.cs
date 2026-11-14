@@ -51,21 +51,24 @@ public sealed class AttemptsController : ControllerBase
         SaveAnswersRequest request,
         CancellationToken cancellationToken) =>
         await _mediator.Send(
-            new SaveAnswersCommand(
-                id,
-                new SaveAnswersInput(
-                    request.ClientSeq,
-                    (request.Items ?? [])
-                        .Select(i => new SaveAnswerItemInput(
-                            i.QuestionId,
-                            new AnswerPayloadInput(
-                                i.Payload?.SelectedOptionKeys,
-                                i.Payload?.Text,
-                                i.Payload?.Steps?
-                                    .Select(s => new AnswerStepInput(s.Code, s.Text))
-                                    .ToList())))
-                        .ToList())),
+            new SaveAnswersCommand(id, ToInput(request)),
             cancellationToken);
+
+    private static SaveAnswersInput ToInput(SaveAnswersRequest request)
+    {
+        var items = (request.Items ?? [])
+            .Select(i => new SaveAnswerItemInput(
+                i.QuestionId,
+                new AnswerPayloadInput(
+                    i.Payload?.SelectedOptionKeys,
+                    i.Payload?.Text,
+                    i.Payload?.Steps?
+                        .Select(s => new AnswerStepInput(s.Code, s.Text))
+                        .ToList())))
+            .ToList();
+
+        return new SaveAnswersInput(request.ClientSeq, items, request.ClientSentAt);
+    }
 
     /// <summary>恢复作答状态。</summary>
     [HttpGet("{id:long}")]

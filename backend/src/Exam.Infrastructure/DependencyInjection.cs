@@ -68,6 +68,7 @@ public static class DependencyInjection
         services.AddScoped<ExamRosterBuilder>();
         services.AddScoped<IAttemptRepository, AttemptRepository>();
         services.AddScoped<IAnswerRepository, AnswerRepository>();
+        services.AddScoped<IAnswerRevisionRepository, AnswerRevisionRepository>();
         services.AddScoped<AttemptPaperSurfaceBuilder>();
         services.AddScoped<BlueprintPoolBuilder>();
         services.AddSingleton<IQuestionFileParser, QuestionFileParser>();

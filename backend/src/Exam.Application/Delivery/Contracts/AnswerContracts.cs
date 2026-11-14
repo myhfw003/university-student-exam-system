@@ -32,7 +32,10 @@ public sealed record AnswerPayloadInput(
 public sealed record SaveAnswerItemInput(long QuestionId, AnswerPayloadInput Payload);
 
 /// <summary>批量保存请求。</summary>
-public sealed record SaveAnswersInput(int ClientSeq, IReadOnlyList<SaveAnswerItemInput> Items);
+public sealed record SaveAnswersInput(
+    int ClientSeq,
+    IReadOnlyList<SaveAnswerItemInput> Items,
+    DateTimeOffset? ClientSentAt = null);
 
 /// <summary>被拒绝的答案及原因。</summary>
 public sealed record RejectedAnswerDto(long QuestionId, string Reason);

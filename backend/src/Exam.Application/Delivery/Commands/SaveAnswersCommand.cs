@@ -46,6 +46,7 @@ public sealed class SaveAnswersHandler : IRequestHandler<SaveAnswersCommand, Sav
 {
     private readonly IAttemptRepository _attempts;
     private readonly IAnswerRepository _answers;
+    private readonly IAnswerRevisionRepository _revisions;
     private readonly IExamSessionRepository _sessions;
     private readonly IPaperSnapshotRepository _snapshots;
     private readonly IUnitOfWork _unitOfWork;
@@ -55,6 +56,7 @@ public sealed class SaveAnswersHandler : IRequestHandler<SaveAnswersCommand, Sav
     public SaveAnswersHandler(
         IAttemptRepository attempts,
         IAnswerRepository answers,
+        IAnswerRevisionRepository revisions,
         IExamSessionRepository sessions,
         IPaperSnapshotRepository snapshots,
         IUnitOfWork unitOfWork,
@@ -63,6 +65,7 @@ public sealed class SaveAnswersHandler : IRequestHandler<SaveAnswersCommand, Sav
     {
         _attempts = attempts;
         _answers = answers;
+        _revisions = revisions;
         _sessions = sessions;
         _snapshots = snapshots;
         _unitOfWork = unitOfWork;
@@ -138,7 +141,28 @@ public sealed class SaveAnswersHandler : IRequestHandler<SaveAnswersCommand, Sav
                 now));
         }
 
+        // 修订序号：已有答案 +1，新答案为 1。
+        var existing = await _answers.ListByQuestionsAsync(
+            attempt.Id,
+            accepted.Select(a => a.QuestionId).ToList(),
+            cancellationToken);
+        var nextRevision = existing.ToDictionary(a => a.QuestionId, a => a.Revision + 1);
+
         await _answers.UpsertRangeAsync(attempt.Id, accepted, cancellationToken);
+
+        // 流水只追加：事后能完整还原答案的演变过程。
+        await _revisions.AddRangeAsync(
+            accepted
+                .Select(a => AnswerRevision.Create(
+                    attempt.Id,
+                    a.QuestionId,
+                    request.Input.ClientSeq,
+                    a.Payload,
+                    nextRevision.GetValueOrDefault(a.QuestionId, 1),
+                    request.Input.ClientSentAt,
+                    now))
+                .ToList(),
+            cancellationToken);
 
         if (!attempt.AcceptSave(request.Input.ClientSeq, now))
         {

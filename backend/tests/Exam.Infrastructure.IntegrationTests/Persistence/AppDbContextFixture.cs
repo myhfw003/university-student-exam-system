@@ -55,7 +55,12 @@ public sealed class AppDbContextFixture : IAsyncLifetime
         await DbContext.Database.ExecuteSqlRawAsync("""
             TRUNCATE audit.audit_log, catalog.tag,
                      iam.user_role, iam.role_permission, iam.refresh_token,
-                     iam.user, iam.role, iam.permission, iam.seed_markers RESTART IDENTITY CASCADE
+                     iam.user, iam.role, iam.permission, iam.seed_markers,
+                     authoring.paper_tag, authoring.paper_item, authoring.paper_section,
+                     authoring.paper, authoring.blueprint, authoring.paper_template,
+                     authoring.template_item, authoring.paper_snapshot, authoring.snapshot_item,
+                     delivery.exam_participant, delivery.exam_session, delivery.answer,
+                     delivery.attempt, app.answer_revision RESTART IDENTITY CASCADE
             """);
     }
 }

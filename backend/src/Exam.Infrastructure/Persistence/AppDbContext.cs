@@ -26,6 +26,9 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
     /// <summary>考试组织与作答上下文所在 Schema。</summary>
     public const string DeliverySchema = "delivery";
 
+    /// <summary>追加式流水所在 Schema。应用账号只有 SELECT / INSERT 权限。</summary>
+    public const string AppSchema = "app";
+
     public AppDbContext(DbContextOptions<AppDbContext> options)
         : base(options) { }
 
@@ -84,6 +87,8 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
     public DbSet<Attempt> Attempts => Set<Attempt>();
 
     public DbSet<Answer> Answers => Set<Answer>();
+
+    public DbSet<AnswerRevision> AnswerRevisions => Set<AnswerRevision>();
 
     public DbSet<QuestionBankItem> QuestionBankItems => Set<QuestionBankItem>();
 

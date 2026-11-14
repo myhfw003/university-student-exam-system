@@ -4,7 +4,10 @@ namespace Exam.Web.Api.Contracts;
 public sealed record StartAttemptRequest(long? ExamSessionId, long? PracticeAssignmentId);
 
 /// <summary>批量保存答案。</summary>
-public sealed record SaveAnswersRequest(int ClientSeq, IReadOnlyList<SaveAnswerItemRequest> Items);
+public sealed record SaveAnswersRequest(
+    int ClientSeq,
+    IReadOnlyList<SaveAnswerItemRequest> Items,
+    DateTimeOffset? ClientSentAt = null);
 
 /// <summary>一条待保存的答案。</summary>
 public sealed record SaveAnswerItemRequest(long QuestionId, AnswerPayloadRequest Payload);
