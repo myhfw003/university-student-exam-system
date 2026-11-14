@@ -48,6 +48,7 @@ public sealed class AttemptConfiguration : IEntityTypeConfiguration<Attempt>
                 v => v == null ? null : ParseSubmitReason(v))
             .HasMaxLength(20);
         builder.Property(x => x.LastSavedAt).HasColumnName("last_saved_at");
+        builder.Property(x => x.LastHeartbeatAt).HasColumnName("last_heartbeat_at");
         builder.Property(x => x.LastClientSeq).HasColumnName("last_client_seq").IsRequired();
         builder.Property(x => x.FocusLossCount).HasColumnName("focus_loss_count").IsRequired();
         builder.Property(x => x.DisconnectCount).HasColumnName("disconnect_count").IsRequired();

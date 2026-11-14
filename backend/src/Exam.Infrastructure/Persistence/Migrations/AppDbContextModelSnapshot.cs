@@ -1584,6 +1584,10 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("last_client_seq");
 
+                    b.Property<DateTimeOffset?>("LastHeartbeatAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_heartbeat_at");
+
                     b.Property<DateTimeOffset?>("LastSavedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_saved_at");

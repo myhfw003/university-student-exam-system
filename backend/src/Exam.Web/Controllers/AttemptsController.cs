@@ -99,6 +99,14 @@ public sealed class AttemptsController : ControllerBase
                         .ToList())),
             cancellationToken);
 
+    /// <summary>心跳。断连次数超限时按断网超时代交。</summary>
+    [HttpPost("{id:long}/heartbeat")]
+    [Authorize(Policy = PermissionCatalog.AttemptTake)]
+    [ProducesResponseType(typeof(HeartbeatResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<HeartbeatResponse> Heartbeat(long id, CancellationToken cancellationToken) =>
+        await _mediator.Send(new HeartbeatAttemptCommand(id), cancellationToken);
+
     /// <summary>恢复作答状态。</summary>
     [HttpGet("{id:long}")]
     [Authorize(Policy = PermissionCatalog.AttemptReadOwn)]

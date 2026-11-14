@@ -108,6 +108,9 @@ public sealed class Attempt : AuditableEntity, IAuditedEntity
     /// <summary>服务端已接收的最大客户端序列号。</summary>
     public int LastClientSeq { get; private set; }
 
+    /// <summary>服务端最近一次收到心跳的时间。</summary>
+    public DateTimeOffset? LastHeartbeatAt { get; private set; }
+
     /// <summary>切屏计数（服务端权威）。</summary>
     public int FocusLossCount { get; private set; }
 
@@ -234,6 +237,41 @@ public sealed class Attempt : AuditableEntity, IAuditedEntity
         Touch(now, UserId);
         return DisconnectCount;
     }
+
+    /// <summary>收到一次心跳。</summary>
+    public void RecordHeartbeat(DateTimeOffset now)
+    {
+        LastHeartbeatAt = now;
+        Touch(now, UserId);
+    }
+
+    /// <summary>
+    /// 判定断连：距上次心跳超过超时时间就算断连一次。
+    /// <para>
+    /// 判定后把心跳置空，因此同一次断网只会被记一次——
+    /// 否则每两秒检查一次的心跳聚合会把一次断网记成几十次。
+    /// </para>
+    /// </summary>
+    public bool TryMarkDisconnected(DateTimeOffset now, int timeoutSeconds)
+    {
+        if (LastHeartbeatAt is null)
+        {
+            return false;
+        }
+
+        if ((now - LastHeartbeatAt.Value).TotalSeconds <= timeoutSeconds)
+        {
+            return false;
+        }
+
+        LastHeartbeatAt = null;
+        RecordDisconnect(now);
+        return true;
+    }
+
+    /// <summary>心跳是否已经超时（用于监考面板标记离线）。</summary>
+    public bool IsHeartbeatStale(DateTimeOffset now, int timeoutSeconds) =>
+        LastHeartbeatAt is null || (now - LastHeartbeatAt.Value).TotalSeconds > timeoutSeconds;
 
     /// <summary>警告计数 +1。</summary>
     public int RecordWarning(DateTimeOffset now)
