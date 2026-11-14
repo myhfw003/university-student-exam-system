@@ -557,7 +557,9 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 }
 ```
 
-`answersRevealed` 由场次的 `answerPolicy` 与考生状态共同决定。
+`answersRevealed` 由场次的 `answerPolicy` 与考生状态共同决定：开考即公布（`immediately`）、本人交卷后（`after_submit`）、场次关闭后（`after_close`）。没到公布时机，`correctAnswer` / `analysis` 一律为空。
+
+**`GET /my/results`**：我的成绩列表（每场考试的总分、总分上限、待阅标记与可见性）。
 
 ---
 

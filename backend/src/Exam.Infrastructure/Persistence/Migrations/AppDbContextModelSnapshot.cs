@@ -426,6 +426,12 @@ namespace Exam.Infrastructure.Persistence.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
+                    b.Property<string>("AnswerPolicy")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("answer_policy");
+
                     b.Property<string>("ContentHash")
                         .IsRequired()
                         .HasMaxLength(128)

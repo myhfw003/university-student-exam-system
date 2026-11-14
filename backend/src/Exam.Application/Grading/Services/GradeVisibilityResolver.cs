@@ -30,6 +30,15 @@ public sealed class GradeVisibilityResolver
         }
 
         var publication = await _publications.GetCoveringAsync(sessionId, attemptId, cancellationToken);
+        return Resolve(publication, subjectivePending);
+    }
+
+    /// <summary>
+    /// 按已取回的发布记录判定可见性。
+    /// <para>批量判定时先取回场次的发布记录，再逐份作答算——省得一份一份去查。</para>
+    /// </summary>
+    public static string Resolve(GradePublication? publication, bool subjectivePending)
+    {
         if (publication is null)
         {
             return subjectivePending ? GradeVisibilities.PendingReview : GradeVisibilities.ObjectiveOnly;

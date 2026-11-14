@@ -138,6 +138,16 @@ public sealed class AttemptsController : ControllerBase
     public async Task<AttemptScoreSummaryDto> GetScores(long id, CancellationToken cancellationToken) =>
         await _mediator.Send(new GetAttemptScoresQuery(id), cancellationToken);
 
+    /// <summary>
+    /// 成绩报告。正确答案与解析受答案公布策略约束：没到公布时机一律不给。
+    /// </summary>
+    [HttpGet("{id:long}/report")]
+    [Authorize(Policy = PermissionCatalog.AttemptReadOwn)]
+    [ProducesResponseType(typeof(ExamReportDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ExamReportDto> GetReport(long id, CancellationToken cancellationToken = default) =>
+        await _mediator.Send(new GetAttemptReportQuery(id), cancellationToken);
+
     /// <summary>改分流水。学生端可见：改过几次分、谁改的。</summary>
     [HttpGet("{id:long}/grade-revisions")]
     [Authorize(Policy = PermissionCatalog.AttemptReadOwn)]

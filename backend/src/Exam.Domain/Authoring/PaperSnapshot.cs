@@ -36,12 +36,19 @@ public sealed class PaperSnapshot : AuditableEntity
     {
     }
 
-    private PaperSnapshot(long paperId, int version, string contentHash, DateTimeOffset now, long? actorId)
+    private PaperSnapshot(
+        long paperId,
+        int version,
+        string contentHash,
+        AnswerPolicy answerPolicy,
+        DateTimeOffset now,
+        long? actorId)
         : base(now, actorId)
     {
         PaperId = paperId;
         SnapshotVersion = version;
         ContentHash = contentHash;
+        AnswerPolicy = answerPolicy;
     }
 
     public long PaperId { get; private set; }
@@ -55,6 +62,11 @@ public sealed class PaperSnapshot : AuditableEntity
     /// <summary>内容哈希，用于变更检测。</summary>
     public string ContentHash { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// 答案公布策略。发布时冻结：考完之后改试卷，也改不动这场考试什么时候公布答案。
+    /// </summary>
+    public AnswerPolicy AnswerPolicy { get; private set; } = AnswerPolicy.AfterClose;
+
     public IReadOnlyCollection<SnapshotItem> Items => _items.AsReadOnly();
 
     /// <summary>按发布时的内容冻结快照。</summary>
@@ -66,7 +78,7 @@ public sealed class PaperSnapshot : AuditableEntity
         long? actorId = null)
     {
         var byId = questions.ToDictionary(q => q.Id);
-        var snapshot = new PaperSnapshot(paper.Id, version, string.Empty, now, actorId);
+        var snapshot = new PaperSnapshot(paper.Id, version, string.Empty, paper.AnswerPolicy, now, actorId);
 
         foreach (var item in paper.Items.OrderBy(i => i.SortOrder))
         {
@@ -93,6 +105,7 @@ public sealed class PaperSnapshot : AuditableEntity
         var builder = new StringBuilder();
         builder.Append(paper.Id).Append('|').Append(paper.TotalItemScore).Append('|');
         builder.Append(paper.TargetTotalScore.Value).Append('|');
+        builder.Append(paper.AnswerPolicy.ToStorage()).Append('|');
 
         foreach (var item in items.OrderBy(i => i.SortOrder))
         {

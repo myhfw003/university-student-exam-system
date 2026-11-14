@@ -18,6 +18,11 @@ public sealed class PaperSnapshotConfiguration : IEntityTypeConfiguration<PaperS
         builder.Property(x => x.PaperId).HasColumnName("paper_id").IsRequired();
         builder.Property(x => x.SnapshotVersion).HasColumnName("version").IsRequired();
         builder.Property(x => x.ContentHash).HasColumnName("content_hash").HasMaxLength(128).IsRequired();
+        builder.Property(x => x.AnswerPolicy)
+            .HasColumnName("answer_policy")
+            .HasConversion(v => v.ToStorage(), v => ParseAnswerPolicy(v))
+            .HasMaxLength(16)
+            .IsRequired();
         builder.Property(x => x.CreatedAt).IsRequired();
         builder.Property(x => x.CreatedBy).HasColumnName("created_by");
         builder.Property(x => x.Version).HasColumnName("xmin").IsRowVersion();
@@ -38,6 +43,10 @@ public sealed class PaperSnapshotConfiguration : IEntityTypeConfiguration<PaperS
         builder.Metadata.FindNavigation(nameof(PaperSnapshot.Items))!
             .SetPropertyAccessMode(PropertyAccessMode.Field);
     }
+
+    private static AnswerPolicy ParseAnswerPolicy(string value) =>
+        Exam.Domain.Authoring.AnswerPolicies.FromStorage(value)
+        ?? throw new InvalidOperationException($"未知答案公布策略：{value}。");
 }
 
 public sealed class SnapshotItemConfiguration : IEntityTypeConfiguration<SnapshotItem>
