@@ -84,6 +84,8 @@ public static class DependencyInjection
         services.AddScoped<IGradePublicationRepository, GradePublicationRepository>();
         services.AddScoped<IMistakeRepository, MistakeRepository>();
         services.AddScoped<IPracticeAssignmentRepository, PracticeAssignmentRepository>();
+        services.AddScoped<IAbilityProfileRepository, AbilityProfileRepository>();
+        services.AddScoped<IDomainEventHandler<ScoreFinalized>, AbilityProfileUpdateHandler>();
         services.AddScoped<AttemptPaperResolver>();
         services.AddScoped<IOutboxStore, OutboxStore>();
         services.AddScoped<IDomainEventDispatcher, DomainEventDispatcher>();

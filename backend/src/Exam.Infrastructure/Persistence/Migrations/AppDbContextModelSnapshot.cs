@@ -2687,6 +2687,78 @@ namespace Exam.Infrastructure.Persistence.Migrations
                     b.ToTable("user_tag", "iam");
                 });
 
+            modelBuilder.Entity("Exam.Domain.Learning.AbilityProfile", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("AbilityTagId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("ability_tag_id");
+
+                    b.Property<int>("CorrectCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("correct_count");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<decimal>("MasteryRate")
+                        .HasPrecision(6, 4)
+                        .HasColumnType("numeric(6,4)")
+                        .HasColumnName("mastery_rate");
+
+                    b.Property<int>("SampleSize")
+                        .HasColumnType("integer")
+                        .HasColumnName("sample_size");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long?>("UpdatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("updated_by");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ability_profile");
+
+                    b.HasIndex("AbilityTagId")
+                        .HasDatabaseName("ix_ability_profile_ability_tag_id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_ability_profile_user");
+
+                    b.HasIndex("UserId", "AbilityTagId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_ability_profile");
+
+                    b.ToTable("ability_profile", "learning");
+                });
+
             modelBuilder.Entity("Exam.Domain.Learning.Mistake", b =>
                 {
                     b.Property<long>("Id")
@@ -3148,6 +3220,23 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_score_result_attempt_attempt_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Learning.AbilityProfile", b =>
+                {
+                    b.HasOne("Exam.Domain.Catalog.Tag", null)
+                        .WithMany()
+                        .HasForeignKey("AbilityTagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_ability_profile_tags_ability_tag_id");
+
+                    b.HasOne("Exam.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_ability_profile_users_user_id");
                 });
 
             modelBuilder.Entity("Exam.Domain.Learning.PracticeAssignment", b =>

@@ -668,11 +668,24 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 | GET | `/mistakes` | 登录 | 错题本（过滤：标签、题型、时间范围） |
 | POST | `/mistakes/{questionId}/resolve` | 登录 | 重做正确后标记已掌握 |
 | POST | `/mistakes/{questionId}/redo` | 登录 | 生成单题重做练习 |
-| GET | `/abilities/profile` | 登录 | 能力画像 |
+| GET | `/abilities/profile` | 登录 | 能力画像（样本不足的不参与排序） |
 | GET | `/practices` | 登录 | 可见练习列表 |
 | GET | `/dashboard/summary` | 登录 | 工作台汇总 |
 | GET | `/statistics/exam-sessions/{id}` | `analytics:read` | 成绩分析 |
 | GET | `/statistics/questions/{id}` | `analytics:read` | 逐题正确率 |
+
+**`GET /abilities/profile`**
+
+```json
+// 200
+{ "total": 2, "insufficientCount": 1,
+  "items": [
+    { "abilityTagId": 12, "tagName": "计算能力", "masteryRate": 0.8482,
+      "sampleSize": 5, "correctCount": 5, "sampleSufficient": true, "masteryLabel": "掌握" },
+    { "abilityTagId": 15, "tagName": "表达能力", "masteryRate": 0.4000,
+      "sampleSize": 2, "correctCount": 0, "sampleSufficient": false, "masteryLabel": "样本不足" }
+  ] }
+```
 
 **`GET /mistakes`**：查询参数 `tagId`、`questionType`、`from`、`to`、`includeResolved`、`page`、`size`。标签过滤含标签子树。
 

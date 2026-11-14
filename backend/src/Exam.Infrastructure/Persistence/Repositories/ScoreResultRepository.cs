@@ -37,6 +37,28 @@ public sealed class ScoreResultRepository : IScoreResultRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<ScoreResult>> ListFinalByUserAndTagAsync(
+        long userId,
+        long abilityTagId,
+        CancellationToken cancellationToken = default)
+    {
+        var attemptIds = _db.Set<Exam.Domain.Delivery.Attempt>()
+            .Where(a => a.UserId == userId)
+            .Select(a => a.Id);
+
+        var questionIds = _db.Set<Exam.Domain.Catalog.QuestionTag>()
+            .Where(qt => qt.TagId == abilityTagId)
+            .Select(qt => qt.QuestionId);
+
+        return await _db.Set<ScoreResult>()
+            .AsNoTracking()
+            .Where(r => attemptIds.Contains(r.AttemptId) && questionIds.Contains(r.QuestionId))
+            // 只认已定分：客观题自动定分，主观题人工定分。
+            .Where(r => r.Method == Exam.Domain.Grading.ScoringMethod.AutoScored
+                || r.Status == Exam.Domain.Grading.ScoringStatus.Final)
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<ScoreResult?> GetAsync(long attemptId, long questionId, CancellationToken cancellationToken = default) =>
         _db.Set<ScoreResult>()
             .FirstOrDefaultAsync(r => r.AttemptId == attemptId && r.QuestionId == questionId, cancellationToken);

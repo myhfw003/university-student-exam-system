@@ -120,6 +120,8 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
 
     public DbSet<PracticeAssignment> PracticeAssignments => Set<PracticeAssignment>();
 
+    public DbSet<AbilityProfile> AbilityProfiles => Set<AbilityProfile>();
+
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     /// <summary>工作单元提交。EF Core 的单次 SaveChanges 本身即一个事务。</summary>
