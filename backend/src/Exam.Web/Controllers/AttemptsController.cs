@@ -40,6 +40,33 @@ public sealed class AttemptsController : ControllerBase
             new StartAttemptCommand(request?.ExamSessionId, request?.PracticeAssignmentId),
             cancellationToken);
 
+    /// <summary>批量保存答案。同一批 clientSeq 重复提交整体忽略。</summary>
+    [HttpPost("{id:long}/answers")]
+    [Authorize(Policy = PermissionCatalog.AttemptTake)]
+    [ProducesResponseType(typeof(SaveAnswersResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<SaveAnswersResponse> SaveAnswers(
+        long id,
+        SaveAnswersRequest request,
+        CancellationToken cancellationToken) =>
+        await _mediator.Send(
+            new SaveAnswersCommand(
+                id,
+                new SaveAnswersInput(
+                    request.ClientSeq,
+                    (request.Items ?? [])
+                        .Select(i => new SaveAnswerItemInput(
+                            i.QuestionId,
+                            new AnswerPayloadInput(
+                                i.Payload?.SelectedOptionKeys,
+                                i.Payload?.Text,
+                                i.Payload?.Steps?
+                                    .Select(s => new AnswerStepInput(s.Code, s.Text))
+                                    .ToList())))
+                        .ToList())),
+            cancellationToken);
+
     /// <summary>恢复作答状态。</summary>
     [HttpGet("{id:long}")]
     [Authorize(Policy = PermissionCatalog.AttemptReadOwn)]

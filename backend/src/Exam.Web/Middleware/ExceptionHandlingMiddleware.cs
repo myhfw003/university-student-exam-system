@@ -50,6 +50,12 @@ public sealed class ExceptionHandlingMiddleware
             _logger.LogInformation("并发冲突：{ErrorCode}", ex.ErrorCode);
             await WriteProblemAsync(context, ex.ErrorCode, ex.Message, StatusCodes.Status409Conflict, null);
         }
+        catch (Exam.Domain.Delivery.AttemptDeadlineExceededException ex)
+        {
+            // 超时不是业务规则错误，是状态冲突：前端应立即触发交卷。
+            _logger.LogInformation("作答超时：{ErrorCode}", ex.ErrorCode);
+            await WriteProblemAsync(context, ex.ErrorCode, ex.Message, StatusCodes.Status409Conflict, null);
+        }
         catch (DomainException ex)
         {
             _logger.LogWarning(ex, "业务规则拒绝：{ErrorCode} {Message}", ex.ErrorCode, ex.Message);
