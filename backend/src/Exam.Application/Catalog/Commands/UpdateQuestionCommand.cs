@@ -24,6 +24,7 @@ public sealed record UpdateQuestionCommand(
     IReadOnlyList<QuestionOptionInput>? Options,
     IReadOnlyList<QuestionKeypointInput>? Keypoints,
     IReadOnlyList<QuestionStepInput>? Steps,
+    IReadOnlyList<AttachmentInput>? Attachments,
     string? Analysis,
     string? ReferenceAnswer) : IAppCommand<QuestionDetailDto>, IAuthorizableRequest
 {
@@ -191,6 +192,28 @@ public sealed class UpdateQuestionHandler : IRequestHandler<UpdateQuestionComman
                         step.Keywords ?? [],
                         Score.Question(step.Score),
                         0),
+                    now,
+                    _currentUser.UserId);
+            }
+        }
+
+        if (request.Attachments is not null)
+        {
+            foreach (var existing in question.Attachments.ToList())
+            {
+                question.RemoveAttachment(existing.Id, now, _currentUser.UserId);
+            }
+
+            foreach (var attachment in request.Attachments)
+            {
+                question.AttachAttachment(
+                    QuestionAttachment.Create(
+                        attachment.ObjectKey,
+                        attachment.FileName,
+                        attachment.ContentType,
+                        attachment.SizeBytes,
+                        question.Attachments.Count,
+                        now),
                     now,
                     _currentUser.UserId);
             }

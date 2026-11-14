@@ -133,11 +133,20 @@ services:
       Jwt__SigningPrivateKeyPemBase64: ${JWT_SIGNING_PRIVATE_KEY_PEM_BASE64:-}
       Jwt__SigningPrivateKeyPem: ${JWT_SIGNING_PRIVATE_KEY_PEM:-}
       Jwt__RefreshTokenPepper: ${JWT_REFRESH_TOKEN_PEPPER:?必须设置 JWT_REFRESH_TOKEN_PEPPER}
+      # 对象存储（题目附件）。附件桶是私有的，外部只通过短期签名 URL 访问。
+      ObjectStorage__Enabled: ${OBJECT_STORAGE_ENABLED:-true}
+      ObjectStorage__Endpoint: ${OBJECT_STORAGE_ENDPOINT:-minio:9000}
+      ObjectStorage__AccessKey: ${MINIO_ROOT_USER:-exam}
+      ObjectStorage__SecretKey: ${MINIO_ROOT_PASSWORD:?必须设置 MINIO_ROOT_PASSWORD}
+      ObjectStorage__Bucket: ${OBJECT_STORAGE_BUCKET:-exam-attachments}
+      ObjectStorage__UseSsl: ${OBJECT_STORAGE_USE_SSL:-false}
     depends_on:
       db-grants:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+      minio:
+        condition: service_started
     ports:
       - "${API_PORT:-8080}:8080"
     healthcheck:

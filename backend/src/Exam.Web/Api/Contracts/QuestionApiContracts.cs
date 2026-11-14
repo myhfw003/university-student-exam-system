@@ -12,6 +12,7 @@ public sealed record CreateQuestionRequest(
     IReadOnlyList<QuestionOptionInput>? Options,
     IReadOnlyList<QuestionKeypointInput>? Keypoints,
     IReadOnlyList<QuestionStepInput>? Steps,
+    IReadOnlyList<AttachmentInput>? Attachments,
     string? Analysis,
     string? ReferenceAnswer);
 
@@ -25,6 +26,7 @@ public sealed record UpdateQuestionRequest(
     IReadOnlyList<QuestionOptionInput>? Options,
     IReadOnlyList<QuestionKeypointInput>? Keypoints,
     IReadOnlyList<QuestionStepInput>? Steps,
+    IReadOnlyList<AttachmentInput>? Attachments,
     string? Analysis,
     string? ReferenceAnswer);
 

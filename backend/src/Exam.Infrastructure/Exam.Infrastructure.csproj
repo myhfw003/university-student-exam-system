@@ -19,6 +19,7 @@
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="ClosedXML" />
     <PackageReference Include="CsvHelper" />
+    <PackageReference Include="Minio" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Exam.Application\Exam.Application.csproj" />

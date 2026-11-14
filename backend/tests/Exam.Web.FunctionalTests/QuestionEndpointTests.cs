@@ -289,6 +289,106 @@ public sealed class QuestionEndpointTests : IAsyncLifetime
         question.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
+    [Fact]
+    public async Task 上传附件_白名单内的图片可以上传并挂到题目上()
+    {
+        await LoginAsync();
+
+        var questionId = await CreateSingleQuestionAsync("Q-2026-00011");
+
+        var upload = await PostFileAsync(
+            "/api/v1/questions/attachments?questionId=" + questionId,
+            "diagram.png",
+            "image/png",
+            PngBytes());
+
+        upload.StatusCode.ShouldBe(HttpStatusCode.OK, await upload.Content.ReadAsStringAsync());
+
+        var uploaded = await upload.Content.ReadFromJsonAsync<JsonElement>();
+        uploaded.GetProperty("fileName").GetString().ShouldBe("diagram.png");
+        uploaded.GetProperty("id").GetInt64().ShouldBeGreaterThan(0);
+
+        var attachments = await _client.GetAsync($"/api/v1/questions/{questionId}/attachments");
+        attachments.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        var list = await attachments.Content.ReadFromJsonAsync<JsonElement>();
+        list.GetArrayLength().ShouldBe(1);
+
+        var attachmentId = list[0].GetProperty("id").GetInt64();
+        var url = await _client.GetAsync($"/api/v1/questions/{questionId}/attachments/{attachmentId}/url");
+        url.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        var urlBody = await url.Content.ReadFromJsonAsync<JsonElement>();
+        urlBody.GetProperty("url").GetString().ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task 上传附件_非白名单类型被拒绝()
+    {
+        await LoginAsync();
+
+        var upload = await PostFileAsync(
+            "/api/v1/questions/attachments",
+            "doc.pdf",
+            "application/pdf",
+            PngBytes());
+
+        upload.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+    }
+
+    [Fact]
+    public async Task 上传附件_内容与类型不符被拒绝()
+    {
+        await LoginAsync();
+
+        // 声明是 png，实际内容是 jpeg。
+        var upload = await PostFileAsync(
+            "/api/v1/questions/attachments",
+            "fake.png",
+            "image/png",
+            [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10]);
+
+        upload.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+    }
+
+    [Fact]
+    public async Task 题目删除后附件不可访问()
+    {
+        await LoginAsync();
+
+        var questionId = await CreateSingleQuestionAsync("Q-2026-00012");
+
+        var upload = await PostFileAsync(
+            "/api/v1/questions/attachments?questionId=" + questionId,
+            "diagram.png",
+            "image/png",
+            PngBytes());
+        upload.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        var uploaded = await upload.Content.ReadFromJsonAsync<JsonElement>();
+        var attachmentId = uploaded.GetProperty("id").GetInt64();
+
+        // 草稿可以删除。
+        var delete = await _client.DeleteAsync($"/api/v1/questions/{questionId}");
+        delete.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        var url = await _client.GetAsync($"/api/v1/questions/{questionId}/attachments/{attachmentId}/url");
+        url.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    private static byte[] PngBytes() =>
+        [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x00];
+
+    private async Task<HttpResponseMessage> PostFileAsync(string path, string fileName, string contentType, byte[] content)
+    {
+        using var body = new MultipartFormDataContent();
+        var fileContent = new ByteArrayContent(content);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        body.Add(fileContent, "file", fileName);
+
+        return await _client.PostAsync(path, body);
+    }
+
     private async Task<long> CreateSingleQuestionAsync(string code)
     {
         var response = await _client.PostAsJsonAsync(

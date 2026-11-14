@@ -85,6 +85,7 @@ public sealed class QuestionsController : ControllerBase
                 request.Options,
                 request.Keypoints,
                 request.Steps,
+                request.Attachments,
                 request.Analysis,
                 request.ReferenceAnswer),
             cancellationToken);
@@ -110,6 +111,7 @@ public sealed class QuestionsController : ControllerBase
                 request.Options,
                 request.Keypoints,
                 request.Steps,
+                request.Attachments,
                 request.Analysis,
                 request.ReferenceAnswer),
             cancellationToken);

@@ -1,3 +1,4 @@
+using Exam.Application.Common.Interfaces;
 using Exam.Infrastructure.Audit;
 using Exam.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
@@ -46,6 +47,10 @@ public sealed class ExamWebFactory : WebApplicationFactory<Program>
             services.RemoveAll<Microsoft.EntityFrameworkCore.Infrastructure.IDbContextOptionsConfiguration<AppDbContext>>();
             services.RemoveAll<DbContextOptions<AppDbContext>>();
             services.RemoveAll<AppDbContext>();
+            // 真实实现是 MinIO；测试用内存实现，不需要真对象存储。
+            services.RemoveAll<IObjectStorage>();
+            services.AddSingleton<IObjectStorage, InMemoryObjectStorage>();
+
             services.AddDbContext<AppDbContext>((sp, options) =>
                 options.UseNpgsql(_connectionString)
                     .UseSnakeCaseNamingConvention()

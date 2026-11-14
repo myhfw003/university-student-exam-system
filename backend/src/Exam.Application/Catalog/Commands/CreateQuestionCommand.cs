@@ -22,6 +22,7 @@ public sealed record CreateQuestionCommand(
     IReadOnlyList<QuestionOptionInput>? Options,
     IReadOnlyList<QuestionKeypointInput>? Keypoints,
     IReadOnlyList<QuestionStepInput>? Steps,
+    IReadOnlyList<AttachmentInput>? Attachments,
     string? Analysis,
     string? ReferenceAnswer) : IAppCommand<QuestionDetailDto>, IAuthorizableRequest
 {
@@ -134,6 +135,20 @@ public sealed class CreateQuestionHandler : IRequestHandler<CreateQuestionComman
         foreach (var tag in tags)
         {
             question.AttachTag(tag.Id, now, _currentUser.UserId);
+        }
+
+        foreach (var attachment in request.Attachments ?? [])
+        {
+            question.AttachAttachment(
+                QuestionAttachment.Create(
+                    attachment.ObjectKey,
+                    attachment.FileName,
+                    attachment.ContentType,
+                    attachment.SizeBytes,
+                    question.Attachments.Count,
+                    now),
+                now,
+                _currentUser.UserId);
         }
 
         await _questions.AddAsync(question, cancellationToken);

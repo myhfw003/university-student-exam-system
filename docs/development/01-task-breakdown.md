@@ -274,12 +274,21 @@ P0 基础设施
 | T-P2-01 题目聚合与五种题型 | ✅ 完成 | `Question` 聚合 + 选项 / 要点 / 步骤子结构 + 题型专属校验 |
 | T-P2-02 题目 CRUD 与状态流转 | ✅ 完成 | 建 / 改 / 删 / 发布 / 停用 / 恢复 / 批量状态 |
 | T-P2-03 题目列表查询 | ✅ 完成 | 服务端分页与过滤（题库 / 题型 / 状态 / 标签 / 难度 / 关键词） |
-| T-P2-04 附件上传与访问 | ⬜ 未开始 | |
+| T-P2-04 附件上传与访问 | ✅ 完成 | `IObjectStorage` + MinIO 实现 + 上传 / 清单 / 签名 URL 端点 + 类型白名单与内容嗅探 |
 | T-P2-05 题库管理 | ✅ 完成 | `QuestionBank` 聚合 + 批量加入 / 移除 + 三态与客观主观统计 |
 | T-P2-06 CSV 导入 | ⬜ 未开始 | |
 | T-P2-07 XLSX 导入 | ⬜ 未开始 | |
 | T-P2-08 导入采纳与批次追溯 | ⬜ 未开始 | |
 | T-P2-09 管理端题库工作台 | ⬜ 未开始 | 前端阶段 |
+
+**P2-04 交付说明**
+
+- 新增 `IObjectStorage` 抽象与 MinIO（及任何 S3 兼容服务）实现；附件桶**私有**，外部只能通过短期签名 URL 访问（默认 5 分钟）。
+- 接口：`POST /questions/attachments`（multipart，带 `questionId` 时直接挂到题目上）、`GET /questions/{id}/attachments`、`GET /questions/{id}/attachments/{attachmentId}/url`。
+- **白名单 + 内容嗅探**：只接受 png / jpg / webp，大小上限 10 MB；**不信任扩展名与 Content-Type**，文件头必须与声明类型一致，否则拒收。
+- 对象键按上传者隔离（`attachments/{userId}/{yyyyMM}/{guid}{ext}`），避免互相覆盖。
+- **题目删除后附件不可访问**：题目查不到即 404，不会签发 URL。
+- compose 已把 MinIO 配置注入 API 与 Worker。
 
 **P2 已交付部分说明**
 

@@ -65,6 +65,16 @@ public static class DependencyInjection
         services.AddScoped<Seeding.DataSeeder>();
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IPasswordVerifier, Pbkdf2PasswordVerifier>();
+
+        var storageSection = configuration.GetSection(ObjectStorageOptions.SectionName);
+        services.Configure<ObjectStorageOptions>(storageSection);
+        services.AddOptions<ObjectStorageOptions>()
+            .Bind(storageSection)
+            .Validate(o => !o.Enabled || !string.IsNullOrWhiteSpace(o.Endpoint), "ObjectStorage:Endpoint 必须配置。")
+            .Validate(o => !o.Enabled || !string.IsNullOrWhiteSpace(o.AccessKey), "ObjectStorage:AccessKey 必须配置。")
+            .Validate(o => !o.Enabled || !string.IsNullOrWhiteSpace(o.SecretKey), "ObjectStorage:SecretKey 必须配置。")
+            .ValidateOnStart();
+        services.AddSingleton<IObjectStorage, Storage.MinioObjectStorage>();
         services.AddSingleton<IUserRosterParser, UserRosterCsvParser>();
         services.AddSingleton<ITokenService, JwtTokenService>();
         services.AddSingleton<RedisCacheNamespace>();

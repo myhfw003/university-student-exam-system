@@ -28,6 +28,7 @@
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.15" />
     <PackageVersion Include="ClosedXML" Version="0.105.1" />
     <PackageVersion Include="CsvHelper" Version="33.1.0" />
+    <PackageVersion Include="Minio" Version="6.0.5" />
   </ItemGroup>
 
   <ItemGroup Label="Observability">
