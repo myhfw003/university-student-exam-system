@@ -39,6 +39,22 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
 
     public DbSet<Tag> Tags => Set<Tag>();
 
+    public DbSet<Question> Questions => Set<Question>();
+
+    public DbSet<QuestionOption> QuestionOptions => Set<QuestionOption>();
+
+    public DbSet<QuestionKeypoint> QuestionKeypoints => Set<QuestionKeypoint>();
+
+    public DbSet<QuestionStep> QuestionSteps => Set<QuestionStep>();
+
+    public DbSet<QuestionAttachment> QuestionAttachments => Set<QuestionAttachment>();
+
+    public DbSet<QuestionTag> QuestionTags => Set<QuestionTag>();
+
+    public DbSet<QuestionBank> QuestionBanks => Set<QuestionBank>();
+
+    public DbSet<QuestionBankItem> QuestionBankItems => Set<QuestionBankItem>();
+
     /// <summary>工作单元提交。EF Core 的单次 SaveChanges 本身即一个事务。</summary>
     Task<int> IUnitOfWork.SaveChangesAsync(CancellationToken cancellationToken) =>
         base.SaveChangesAsync(cancellationToken);

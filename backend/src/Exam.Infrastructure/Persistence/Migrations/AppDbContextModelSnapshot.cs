@@ -96,6 +96,445 @@ namespace Exam.Infrastructure.Persistence.Migrations
                     b.ToTable("audit_log", "audit");
                 });
 
+            modelBuilder.Entity("Exam.Domain.Catalog.Question", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Analysis")
+                        .HasColumnType("text")
+                        .HasColumnName("analysis");
+
+                    b.Property<long?>("BatchId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("batch_id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_by");
+
+                    b.Property<decimal>("DefaultScore")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("default_score");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<long>("DifficultyTagId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("difficulty_tag_id");
+
+                    b.Property<DateTimeOffset?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("published_at");
+
+                    b.Property<string>("ReferenceAnswer")
+                        .HasColumnType("text")
+                        .HasColumnName("reference_answer");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("source");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Stem")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("stem");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("type");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long?>("UpdatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_question");
+
+                    b.HasIndex("BatchId")
+                        .HasDatabaseName("ix_question_batch");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("uq_question_code")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("DifficultyTagId")
+                        .HasDatabaseName("ix_question_difficulty")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("Status", "Type")
+                        .HasDatabaseName("ix_question_status_type")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("question", "catalog", t =>
+                        {
+                            t.HasCheckConstraint("ck_question_default_score", "default_score > 0 AND default_score <= 40");
+
+                            t.HasCheckConstraint("ck_question_source", "source IN ('manual','import','generated')");
+
+                            t.HasCheckConstraint("ck_question_status", "status IN ('draft','published','disabled')");
+
+                            t.HasCheckConstraint("ck_question_type", "type IN ('single','multi','judge','short','comprehensive')");
+                        });
+                });
+
+            modelBuilder.Entity("Exam.Domain.Catalog.QuestionAttachment", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("content_type");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("file_name");
+
+                    b.Property<string>("ObjectKey")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("object_key");
+
+                    b.Property<long>("QuestionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("question_id");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.HasKey("Id")
+                        .HasName("pk_question_attachment");
+
+                    b.HasIndex("QuestionId")
+                        .HasDatabaseName("ix_question_attachment_q");
+
+                    b.ToTable("question_attachment", "catalog");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Catalog.QuestionBank", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long?>("UpdatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_question_bank");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("uq_question_bank_name")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("question_bank", "catalog");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Catalog.QuestionBankItem", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("AddedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_at");
+
+                    b.Property<long>("BankId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("bank_id");
+
+                    b.Property<long>("QuestionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("question_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_question_bank_item");
+
+                    b.HasIndex("QuestionId")
+                        .HasDatabaseName("ix_question_bank_item_q");
+
+                    b.HasIndex("BankId", "QuestionId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_question_bank_item");
+
+                    b.ToTable("question_bank_item", "catalog");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Catalog.QuestionKeypoint", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.PrimitiveCollection<string[]>("Keywords")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("keywords");
+
+                    b.Property<long>("QuestionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("question_id");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("text");
+
+                    b.HasKey("Id")
+                        .HasName("pk_question_keypoint");
+
+                    b.HasIndex("QuestionId")
+                        .HasDatabaseName("ix_question_keypoint_q");
+
+                    b.ToTable("question_keypoint", "catalog");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Catalog.QuestionOption", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("IsCorrect")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_correct");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(1)
+                        .HasColumnType("character varying(1)")
+                        .HasColumnName("option_key");
+
+                    b.Property<long>("QuestionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("question_id");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("text");
+
+                    b.HasKey("Id")
+                        .HasName("pk_question_option");
+
+                    b.HasIndex("QuestionId")
+                        .HasDatabaseName("ix_question_option_q");
+
+                    b.HasIndex("QuestionId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("uq_question_option_key");
+
+                    b.ToTable("question_option", "catalog", t =>
+                        {
+                            t.HasCheckConstraint("ck_question_option_key", "option_key IN ('A','B','C','D','E','F')");
+                        });
+                });
+
+            modelBuilder.Entity("Exam.Domain.Catalog.QuestionStep", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("step_code");
+
+                    b.PrimitiveCollection<string[]>("Keywords")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("keywords");
+
+                    b.Property<string>("Prompt")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("prompt");
+
+                    b.Property<long>("QuestionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("question_id");
+
+                    b.Property<string>("ReferenceAnswer")
+                        .HasColumnType("text")
+                        .HasColumnName("reference_answer");
+
+                    b.Property<decimal>("Score")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("score");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.HasKey("Id")
+                        .HasName("pk_question_step");
+
+                    b.HasIndex("QuestionId")
+                        .HasDatabaseName("ix_question_step_q");
+
+                    b.HasIndex("QuestionId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("uq_question_step_code");
+
+                    b.ToTable("question_step", "catalog", t =>
+                        {
+                            t.HasCheckConstraint("ck_question_step_score", "score > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Exam.Domain.Catalog.QuestionTag", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("AssignedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("assigned_at");
+
+                    b.Property<long>("QuestionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("question_id");
+
+                    b.Property<long>("TagId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("tag_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_question_tag");
+
+                    b.HasIndex("TagId")
+                        .HasDatabaseName("ix_question_tag_tag");
+
+                    b.HasIndex("QuestionId", "TagId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_question_tag");
+
+                    b.ToTable("question_tag", "catalog");
+                });
+
             modelBuilder.Entity("Exam.Domain.Catalog.Tag", b =>
                 {
                     b.Property<long>("Id")
@@ -606,6 +1045,66 @@ namespace Exam.Infrastructure.Persistence.Migrations
                     b.ToTable("seed_markers", "iam");
                 });
 
+            modelBuilder.Entity("Exam.Domain.Catalog.QuestionAttachment", b =>
+                {
+                    b.HasOne("Exam.Domain.Catalog.Question", null)
+                        .WithMany("Attachments")
+                        .HasForeignKey("QuestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_question_attachment_questions_question_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Catalog.QuestionBankItem", b =>
+                {
+                    b.HasOne("Exam.Domain.Catalog.QuestionBank", null)
+                        .WithMany("Items")
+                        .HasForeignKey("BankId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_question_bank_item_question_bank_bank_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Catalog.QuestionKeypoint", b =>
+                {
+                    b.HasOne("Exam.Domain.Catalog.Question", null)
+                        .WithMany("Keypoints")
+                        .HasForeignKey("QuestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_question_keypoint_question_question_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Catalog.QuestionOption", b =>
+                {
+                    b.HasOne("Exam.Domain.Catalog.Question", null)
+                        .WithMany("Options")
+                        .HasForeignKey("QuestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_question_option_question_question_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Catalog.QuestionStep", b =>
+                {
+                    b.HasOne("Exam.Domain.Catalog.Question", null)
+                        .WithMany("Steps")
+                        .HasForeignKey("QuestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_question_step_question_question_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Catalog.QuestionTag", b =>
+                {
+                    b.HasOne("Exam.Domain.Catalog.Question", null)
+                        .WithMany("Tags")
+                        .HasForeignKey("QuestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_question_tag_question_question_id");
+                });
+
             modelBuilder.Entity("Exam.Domain.Catalog.Tag", b =>
                 {
                     b.HasOne("Exam.Domain.Catalog.Tag", null)
@@ -613,6 +1112,24 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ParentId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_tag_tag_parent_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Catalog.Question", b =>
+                {
+                    b.Navigation("Attachments");
+
+                    b.Navigation("Keypoints");
+
+                    b.Navigation("Options");
+
+                    b.Navigation("Steps");
+
+                    b.Navigation("Tags");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Catalog.QuestionBank", b =>
+                {
+                    b.Navigation("Items");
                 });
 #pragma warning restore 612, 618
         }
