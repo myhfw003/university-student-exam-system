@@ -56,9 +56,12 @@ public static class DependencyInjection
         services.AddScoped<ITagRepository, TagRepository>();
         services.AddScoped<IQuestionRepository, QuestionRepository>();
         services.AddScoped<IQuestionBankRepository, QuestionBankRepository>();
+        services.AddScoped<IImportBatchRepository, ImportBatchRepository>();
+        services.AddSingleton<IQuestionFileParser, QuestionFileParser>();
         services.AddScoped<IUserPermissionService, UserPermissionService>();
         services.AddScoped<Exam.Application.Identity.Services.UserOrganizationResolver, Exam.Application.Identity.Services.UserOrganizationResolver>();
         services.AddScoped<Exam.Application.Catalog.Services.OrganizationTagProvisioner, Exam.Application.Catalog.Services.OrganizationTagProvisioner>();
+        services.AddScoped<Exam.Application.Catalog.Services.QuestionImportRowProcessor, Exam.Application.Catalog.Services.QuestionImportRowProcessor>();
         services.AddScoped<IAuditRecorder, AuditRecorder>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<Audit.AuditSaveChangesInterceptor>();

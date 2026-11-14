@@ -18,6 +18,12 @@ public interface ITagRepository : IReadRepository<Tag>
     /// <summary>列出全部标签，可按维度过滤。排序：维度 → 排序号 → 主键。</summary>
     Task<IReadOnlyList<Tag>> ListAsync(TagGroup? group, CancellationToken cancellationToken = default);
 
+    /// <summary>按名称集合取回标签。可按维度过滤。</summary>
+    Task<IReadOnlyList<Tag>> GetByNamesAsync(
+        IReadOnlyCollection<string> names,
+        TagGroup? group,
+        CancellationToken cancellationToken = default);
+
     /// <summary>按父标签与名称查标签。父为 null 表示顶级标签。</summary>
     Task<Tag?> GetByParentAndNameAsync(
         long? parentId,

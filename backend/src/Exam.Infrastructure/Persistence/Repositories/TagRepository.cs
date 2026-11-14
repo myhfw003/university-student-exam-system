@@ -52,6 +52,27 @@ public sealed class TagRepository : ITagRepository
             x => x.ParentId == parentId && x.Name == name,
             cancellationToken);
 
+    public async Task<IReadOnlyList<Tag>> GetByNamesAsync(
+        IReadOnlyCollection<string> names,
+        TagGroup? group,
+        CancellationToken cancellationToken = default)
+    {
+        if (names.Count == 0)
+        {
+            return [];
+        }
+
+        var nameList = names.ToList();
+        var query = _db.Tags.AsNoTracking().Where(t => nameList.Contains(t.Name));
+
+        if (group is not null)
+        {
+            query = query.Where(t => t.Group == group.Value);
+        }
+
+        return await query.ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Tag>> GetChildrenAsync(
         long parentId,
         CancellationToken cancellationToken = default) =>

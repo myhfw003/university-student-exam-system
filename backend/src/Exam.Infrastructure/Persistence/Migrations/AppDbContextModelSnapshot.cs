@@ -96,6 +96,164 @@ namespace Exam.Infrastructure.Persistence.Migrations
                     b.ToTable("audit_log", "audit");
                 });
 
+            modelBuilder.Entity("Exam.Domain.Catalog.ImportBatch", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset?>("AdoptedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("adopted_at");
+
+                    b.Property<long?>("AdoptedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("adopted_by");
+
+                    b.Property<int>("AdoptedCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("adopted_count");
+
+                    b.Property<string>("ColumnMapping")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("column_mapping");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("file_name");
+
+                    b.Property<string>("FileType")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("file_type");
+
+                    b.Property<int>("InvalidRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("invalid_rows");
+
+                    b.Property<string>("ObjectKey")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("object_key");
+
+                    b.Property<long>("OperatorId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("operator_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<int>("TotalRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("total_rows");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long?>("UpdatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("ValidRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("valid_rows");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_import_batch");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_import_batch_created");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_import_batch_status");
+
+                    b.ToTable("import_batch", "catalog", t =>
+                        {
+                            t.HasCheckConstraint("ck_import_batch_file_type", "file_type IN ('csv','xlsx')");
+
+                            t.HasCheckConstraint("ck_import_batch_status", "status IN ('parsed','adopted','failed')");
+                        });
+                });
+
+            modelBuilder.Entity("Exam.Domain.Catalog.ImportRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("BatchId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("batch_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Errors")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("errors");
+
+                    b.Property<string>("Parsed")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("parsed");
+
+                    b.Property<string>("Raw")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("raw");
+
+                    b.Property<int>("RowNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("row_number");
+
+                    b.HasKey("Id")
+                        .HasName("pk_import_row");
+
+                    b.HasIndex("BatchId", "RowNumber")
+                        .IsUnique()
+                        .HasDatabaseName("uq_import_row_batch_no");
+
+                    b.ToTable("import_row", "catalog");
+                });
+
             modelBuilder.Entity("Exam.Domain.Catalog.Question", b =>
                 {
                     b.Property<long>("Id")
@@ -1045,6 +1203,16 @@ namespace Exam.Infrastructure.Persistence.Migrations
                     b.ToTable("seed_markers", "iam");
                 });
 
+            modelBuilder.Entity("Exam.Domain.Catalog.ImportRow", b =>
+                {
+                    b.HasOne("Exam.Domain.Catalog.ImportBatch", null)
+                        .WithMany("Rows")
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_import_row_import_batch_batch_id");
+                });
+
             modelBuilder.Entity("Exam.Domain.Catalog.QuestionAttachment", b =>
                 {
                     b.HasOne("Exam.Domain.Catalog.Question", null)
@@ -1112,6 +1280,11 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ParentId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_tag_tag_parent_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Catalog.ImportBatch", b =>
+                {
+                    b.Navigation("Rows");
                 });
 
             modelBuilder.Entity("Exam.Domain.Catalog.Question", b =>

@@ -53,6 +53,10 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
 
     public DbSet<QuestionBank> QuestionBanks => Set<QuestionBank>();
 
+    public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
+
+    public DbSet<ImportRow> ImportRows => Set<ImportRow>();
+
     public DbSet<QuestionBankItem> QuestionBankItems => Set<QuestionBankItem>();
 
     /// <summary>工作单元提交。EF Core 的单次 SaveChanges 本身即一个事务。</summary>
