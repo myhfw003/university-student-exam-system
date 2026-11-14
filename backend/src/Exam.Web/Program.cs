@@ -6,6 +6,7 @@ using Exam.Application.Common.Interfaces;
 using Exam.Infrastructure;
 using Exam.Infrastructure.Identity;
 using Exam.Web.HealthChecks;
+using Exam.Web.Hubs;
 using Exam.Web.Middleware;
 using Exam.Web.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -51,6 +52,22 @@ builder.Services.AddScoped<IRequestContext, HttpRequestContext>();
 // ---------------------------------------------------------------- 控制器
 builder.Services.AddControllers();
 
+// ---------------------------------------------------------------- 实时通道（SignalR）
+// 多实例部署时靠 Redis Backplane 广播，客户端不必连到同一台机器。
+// 连接复用基础设施已注册的那个 Redis 连接 multiplexer。
+IServiceProvider? rootProvider = null;
+builder.Services
+    .AddSignalR()
+    .AddStackExchangeRedis(options =>
+    {
+        options.Configuration.ChannelPrefix = StackExchange.Redis.RedisChannel.Literal("exam-signalr");
+        options.ConnectionFactory = _ =>
+        {
+            var multiplexer = rootProvider!.GetRequiredService<StackExchange.Redis.IConnectionMultiplexer>();
+            return Task.FromResult(multiplexer);
+        };
+    });
+
 // ---------------------------------------------------------------- 认证与授权
 var jwtOptions = builder.Configuration.GetSection("Jwt").Get<Exam.Infrastructure.Configuration.JwtOptions>()
     ?? new Exam.Infrastructure.Configuration.JwtOptions();
@@ -78,6 +95,19 @@ builder.Services
 
         options.Events = new JwtBearerEvents
         {
+            OnMessageReceived = context =>
+            {
+                // SignalR 的 WebSocket 握手带不了 Authorization 头，
+                // 约定用 ?access_token= 传令牌。
+                var accessToken = context.Request.Query["access_token"];
+                if (!string.IsNullOrWhiteSpace(accessToken)
+                    && context.HttpContext.Request.Path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            },
             OnTokenValidated = async context =>
             {
                 var jti = context.Principal?.FindFirst("jti")?.Value;
@@ -165,6 +195,7 @@ builder.Services.AddHealthChecks()
     .AddCheck<RedisReadinessCheck>("redis", tags: ["ready"]);
 
 var app = builder.Build();
+rootProvider = app.Services;
 
 if (keyProvider.IsEphemeral)
 {
@@ -189,6 +220,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<ProctoringHub>("/hubs/proctoring");
+app.MapHub<ExamHub>("/hubs/exam");
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });

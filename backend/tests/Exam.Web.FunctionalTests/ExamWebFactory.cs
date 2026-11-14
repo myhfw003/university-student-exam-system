@@ -19,8 +19,13 @@ namespace Exam.Web.FunctionalTests;
 public sealed class ExamWebFactory : WebApplicationFactory<Program>
 {
     private readonly string _connectionString;
+    private readonly string _redisConnectionString;
 
-    public ExamWebFactory(string connectionString) => _connectionString = connectionString;
+    public ExamWebFactory(string connectionString, string? redisConnectionString = null)
+    {
+        _connectionString = connectionString;
+        _redisConnectionString = redisConnectionString ?? "localhost:6379,abortConnect=false";
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -31,7 +36,7 @@ public sealed class ExamWebFactory : WebApplicationFactory<Program>
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Database"] = _connectionString,
-                ["ConnectionStrings:Redis"] = "localhost:6379,abortConnect=false",
+                ["ConnectionStrings:Redis"] = _redisConnectionString,
                 ["Jwt:Issuer"] = "exam",
                 ["Jwt:Audience"] = "exam-web",
                 ["Jwt:RefreshTokenPepper"] = "test-pepper",
