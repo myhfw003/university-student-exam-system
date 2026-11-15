@@ -92,6 +92,8 @@ public static class DependencyInjection
         services.AddScoped<Exam.Application.Learning.Services.PracticeRulesResolver>();
         services.AddScoped<Exam.Application.Learning.Services.PracticeAssignmentService>();
         services.AddScoped<Exam.Application.Delivery.Services.AnswerReconciler>();
+        // 快照不可变，缓存住：开考瞬间 1000 人进考场读的是同一份。
+        services.AddSingleton<Exam.Application.Authoring.Services.PaperSnapshotCache>();
         services.AddScoped<Exam.Application.Learning.Services.DashboardService>();
         services.AddScoped<IDomainEventHandler<ScoreFinalized>, AbilityProfileUpdateHandler>();
         services.AddScoped<AttemptPaperResolver>();

@@ -1865,6 +1865,10 @@ namespace Exam.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_attempt");
 
+                    b.HasIndex("SubmittedAt")
+                        .HasDatabaseName("ix_attempt_submitted")
+                        .HasFilter("submitted_at IS NOT NULL AND deleted_at IS NULL");
+
                     b.HasIndex("ExamSessionId", "Status")
                         .HasDatabaseName("ix_attempt_session_status");
 

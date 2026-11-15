@@ -71,6 +71,10 @@ public sealed class AttemptConfiguration : IEntityTypeConfiguration<Attempt>
         builder.HasIndex(x => new { x.Status, x.DeadlineAt })
             .HasDatabaseName("ix_attempt_active")
             .HasFilter("status = 'in_progress' AND deleted_at IS NULL");
+        // 对账作业按交卷时间回看：只索引已交卷的行，未交卷的行不占地方。
+        builder.HasIndex(x => x.SubmittedAt)
+            .HasDatabaseName("ix_attempt_submitted")
+            .HasFilter("submitted_at IS NOT NULL AND deleted_at IS NULL");
     }
 
     private static AttemptTargetType ParseTargetType(string value) =>

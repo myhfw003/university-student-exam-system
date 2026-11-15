@@ -27,6 +27,7 @@ public sealed class MistakeRepository : IMistakeRepository
         int take,
         CancellationToken cancellationToken = default) =>
         await Apply(criteria)
+            .AsNoTracking()
             .OrderByDescending(m => m.LastWrongAt)
             .ThenByDescending(m => m.Id)
             .Skip(skip)

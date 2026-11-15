@@ -88,6 +88,10 @@ docker compose up -d                          # 不启用，API 直连 PG
    默认值若指向未启动的 PgBouncer，新环境按 `.env.example` 部署必然连不上库。
 3. 迁移作业（`dotnet ef database update`）**绕过 PgBouncer**，直连 PG。
 4. 长事务不可用：本系统的写事务都在毫秒级，无长事务，符合事务池要求。
+5. **连接池按实例数算**：直连 PG 时 `max_connections=200`，2 个 API 实例各 80 条连接
+   （Worker 20 条、迁移与运维直连若干），留有余量；启用 PgBouncer 后客户端池可以放大到 200，
+   因为事务池会把客户端连接复用为 `default_pool_size` 条后端连接。连接串里的
+   `Maximum Pool Size` / `Minimum Pool Size` 由 `DB_MAX_POOL_SIZE` / `DB_MIN_POOL_SIZE` 注入。
 
 ---
 
@@ -139,8 +143,9 @@ docker compose up -d                          # 不启用，API 直连 PG
 # 应用
 ASPNETCORE_ENVIRONMENT=Production
 ASPNETCORE_URLS=http://+:8080
-ConnectionStrings__Database=Host=postgres;Port=5432;Database=exam;Username=exam_app;Password=<secret>
+ConnectionStrings__Database=Host=postgres;Port=5432;Database=exam;Username=exam_app;Password=<secret>;Maximum Pool Size=80;Minimum Pool Size=10;Timeout=15;Command Timeout=30;Keepalive=30
 # 启用 PgBouncer profile 时改为 Host=pgbouncer;Port=6432
+# 连接池大小按「实例数 × 池大小 ≤ max_connections」算；启用 PgBouncer 后可放大（事务池复用后端连接）
 ConnectionStrings__Migration=Host=postgres;Port=5432;Database=exam;Username=exam_owner;Password=<secret>
 ConnectionStrings__Redis=redis:6379,password=<secret>,abortConnect=false
 Jwt__Issuer=https://exam.example.edu
