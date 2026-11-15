@@ -37,6 +37,13 @@ jobs:
         with:
           name: backend-coverage
           path: backend/TestResults
+      - name: OpenAPI 契约与代码一致
+        # 改了控制器或契约却忘了导出，接口文档就与实现对不上。
+        # 契约从运行中的应用导出，与 Swagger UI 看到的是同一份。
+        run: |
+          SKIP_BUILD=1 bash ../scripts/export-openapi.sh
+          cd ..
+          git diff --exit-code -- docs/api/openapi.json
       - name: 依赖漏洞扫描
         run: |
           dotnet list ExamManager.slnx package --vulnerable --include-transitive --format json > vulnerabilities.json

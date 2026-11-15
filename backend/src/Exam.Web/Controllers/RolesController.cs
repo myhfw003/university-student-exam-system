@@ -68,6 +68,7 @@ public sealed class PermissionsController : ControllerBase
 
     public PermissionsController(IMediator mediator) => _mediator = mediator;
 
+    /// <summary>全部权限点。前端按权限码显示入口——但权限的判定权始终在后端。</summary>
     [HttpGet]
     [Authorize(Policy = PermissionCatalog.RoleRead)]
     [ProducesResponseType(typeof(IReadOnlyList<PermissionDto>), StatusCodes.Status200OK)]

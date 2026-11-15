@@ -17,6 +17,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.OpenApi;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -33,7 +36,28 @@ if (args.Contains("--health-check", StringComparer.OrdinalIgnoreCase))
     Environment.Exit(await HealthCheckProbe.RunAsync(args));
 }
 
+// OpenAPI 导出模式：生成 API 契约文件（docs/api/openapi.json）后退出，不常驻。
+// 契约从运行中的应用里取，保证与 Swagger UI 看到的是同一份。
+var exportOpenApiIndex = Array.FindIndex(
+    args,
+    a => string.Equals(a, "--export-openapi", StringComparison.OrdinalIgnoreCase));
+string? exportOpenApiPath = exportOpenApiIndex >= 0
+    ? (exportOpenApiIndex + 1 < args.Length ? args[exportOpenApiIndex + 1] : "openapi.json")
+    : null;
+
 var builder = WebApplication.CreateBuilder(args);
+
+if (exportOpenApiPath is not null)
+{
+    // 导出模式不连数据库与 Redis，但 JWT 选项在启动时校验，先给上默认值。
+    builder.Configuration["Jwt:Issuer"] ??= "exam";
+    builder.Configuration["Jwt:Audience"] ??= "exam-web";
+    builder.Configuration["Jwt:AccessTokenMinutes"] ??= "15";
+    builder.Configuration["Jwt:RefreshTokenDays"] ??= "7";
+
+    // 固定端口：导出过程要真的起一次应用取契约。
+    builder.WebHost.UseUrls("http://127.0.0.1:5199");
+}
 
 // ---------------------------------------------------------------- 日志
 builder.Host.UseSerilog((context, services, configuration) => configuration
@@ -63,20 +87,31 @@ builder.Services.AddControllers();
 // 多实例部署时靠 Redis Backplane 广播，客户端不必连到同一台机器。
 // 连接复用基础设施已注册的那个 Redis 连接 multiplexer。
 // 监考状态每两秒聚合推送一批。
-builder.Services.AddHostedService<ProctoringBroadcaster>();
+// 导出模式不启动后台服务：它们要连数据库与 Redis，导出契约不需要。
+if (exportOpenApiPath is null)
+{
+    builder.Services.AddHostedService<ProctoringBroadcaster>();
+}
 
 // 依赖探测：时钟偏移与 Redis 可用性。两者都是「不出故障就没有告警」
 // 的指标，所以要自己定时去探，而不是等业务请求带出数据。
-builder.Services.AddHostedService<ClockOffsetProbe>();
-builder.Services.AddHostedService<RedisAvailabilityProbe>();
+if (exportOpenApiPath is null)
+{
+    builder.Services.AddHostedService<ClockOffsetProbe>();
+    builder.Services.AddHostedService<RedisAvailabilityProbe>();
+}
 
 // 考试实时通知走 SignalR。
 builder.Services.AddSingleton<Exam.Application.Common.Interfaces.IExamNotifier, ExamHubNotifier>();
 
 IServiceProvider? rootProvider = null;
-builder.Services
-    .AddSignalR()
-    .AddStackExchangeRedis(options =>
+var signalR = builder.Services.AddSignalR();
+
+// 多实例部署时靠 Redis Backplane 广播，客户端不必连到同一台机器。
+// 导出契约时不连 Redis：背板会在启动时就去连，连不上只会刷一屏错误日志。
+if (exportOpenApiPath is null)
+{
+    signalR.AddStackExchangeRedis(options =>
     {
         options.Configuration.ChannelPrefix = StackExchange.Redis.RedisChannel.Literal("exam-signalr");
         options.ConnectionFactory = _ =>
@@ -85,6 +120,7 @@ builder.Services
             return Task.FromResult(multiplexer);
         };
     });
+}
 
 // ---------------------------------------------------------------- 认证与授权
 var jwtOptions = builder.Configuration.GetSection("Jwt").Get<Exam.Infrastructure.Configuration.JwtOptions>()
@@ -221,6 +257,46 @@ builder.Services.AddOpenTelemetry()
         .AddHttpClientInstrumentation()
         .AddOtlpExporter());
 
+// ---------------------------------------------------------------- API 契约
+// 控制器上的 XML 注释即接口说明：注释写清楚，契约就清楚，
+// 前端拿到的 OpenAPI 与文档里写的不会两套说法。
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "知行测评 · 考试平台 API",
+        Version = "v1",
+        Description = "考试、练习、组卷、阅卷与运维接口的统一契约。"
+            + "鉴权用登录接口返回的 access_token（Bearer）。"
+            + "错误统一为 ProblemDetails，错误码见 docs/api/README.md。",
+    });
+
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "填入登录接口返回的 access_token。",
+    });
+
+    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+    {
+        [new OpenApiSecuritySchemeReference("Bearer", document, null!)] = new List<string>(),
+    });
+
+    // 接口要求的权限码进契约：前端与端到端测试都据此判断「能不能调」。
+    options.OperationFilter<Exam.Web.Api.RequiredPermissionFilter>();
+
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, "Exam.Web.xml");
+
+    if (File.Exists(xmlPath))
+    {
+        options.IncludeXmlComments(xmlPath);
+    }
+});
+
 // ---------------------------------------------------------------- 健康检查
 builder.Services.AddHealthChecks()
     .AddCheck<PostgreSqlReadinessCheck>("postgres", tags: ["ready"])
@@ -250,6 +326,9 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 });
 app.UseCors();
 app.UseRateLimiter();
+// API 契约：不需要鉴权，前端与第三方按文档对接。
+app.UseSwagger();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -267,7 +346,52 @@ app.MapMetrics();
 // 告警表达式才不会因为「指标不存在」而失效。
 _ = app.Services.GetRequiredService<IExamMetrics>();
 
+// OpenAPI 导出：起一次应用，取服务自己吐出来的那份契约落盘。
+if (exportOpenApiPath is not null)
+{
+    await ExportOpenApiAsync(app, exportOpenApiPath);
+
+    return;
+}
+
 app.Run();
+
+// 导出 OpenAPI 契约文件。
+// 取的是运行中的应用经 Swagger 中间件吐出来的那份 JSON，
+// 与 Swagger UI 看到的完全一致——不会出现「文档里是一套、导出的是另一套」。
+static async Task ExportOpenApiAsync(WebApplication app, string outputPath)
+{
+    await app.StartAsync();
+
+    try
+    {
+        var addresses = app.Services.GetRequiredService<IServer>()
+            .Features.Get<IServerAddressesFeature>()?
+            .Addresses;
+
+        var baseAddress = addresses?.FirstOrDefault()
+            ?? "http://127.0.0.1:5199";
+
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        var json = await http.GetStringAsync($"{baseAddress.TrimEnd('/')}/swagger/v1/swagger.json");
+
+        var fullPath = Path.GetFullPath(outputPath);
+        var directory = Path.GetDirectoryName(fullPath);
+
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        await File.WriteAllTextAsync(fullPath, json);
+
+        Console.WriteLine($"OpenAPI 契约已导出：{fullPath}（{json.Length} 字节）");
+    }
+    finally
+    {
+        await app.StopAsync();
+    }
+}
 
 /// <summary>供 WebApplicationFactory 使用的入口标记。</summary>
 public partial class Program;

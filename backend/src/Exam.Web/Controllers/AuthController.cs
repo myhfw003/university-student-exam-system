@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Exam.Web.Controllers;
 
+/// <summary>认证：登录、刷新、登出与当前用户。</summary>
 [ApiController]
 [Route("api/v1/auth")]
 public sealed class AuthController : ControllerBase
@@ -27,6 +28,7 @@ public sealed class AuthController : ControllerBase
         _environment = environment;
     }
 
+    /// <summary>登录。返回访问令牌与当前用户档案（含权限码）。</summary>
     [HttpPost("login")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
@@ -42,6 +44,7 @@ public sealed class AuthController : ControllerBase
         return new LoginResponse(result.AccessToken, result.TokenType, result.ExpiresIn, result.User);
     }
 
+    /// <summary>刷新访问令牌。刷新令牌一次性：用过即失效，重复使用按盗用处理。</summary>
     [HttpPost("refresh")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(RefreshResponse), StatusCodes.Status200OK)]
@@ -61,6 +64,7 @@ public sealed class AuthController : ControllerBase
         return new RefreshResponse(result.AccessToken, result.TokenType, result.ExpiresIn);
     }
 
+    /// <summary>登出。吊销当前刷新令牌，令牌立即失效。</summary>
     [HttpPost("logout")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -75,6 +79,7 @@ public sealed class AuthController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>当前用户档案与权限码。前端据此显示入口，后端仍会独立校验权限。</summary>
     [HttpGet("me")]
     [Authorize]
     [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
