@@ -6,6 +6,9 @@ using Exam.Domain.Grading;
 
 namespace Exam.Application.Delivery.Services;
 
+/// <summary>一道题的判分结果（不落库）。</summary>
+public sealed record ScoredQuestion(long QuestionId, ScoringOutcome Outcome);
+
 /// <summary>
 /// 交卷判分（应用层服务）。
 /// <para>
@@ -32,11 +35,41 @@ public sealed class AttemptScoringService
         DateTimeOffset now,
         CancellationToken cancellationToken = default)
     {
+        var scored = await PreviewAsync(attempt, snapshot, paperItems, cancellationToken);
+        var paperItemByQuestion = paperItems?.ToDictionary(i => i.QuestionId) ?? [];
+
+        var results = new List<ScoreResult>();
+
+        foreach (var item in scored)
+        {
+            paperItemByQuestion.TryGetValue(item.QuestionId, out var sourceItem);
+
+            results.Add(ScoreResult.FromOutcome(
+                attempt.Id,
+                item.QuestionId,
+                sourceItem?.Id,
+                item.Outcome,
+                now));
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// 判分预览：**不落库**，只返回判分结果。
+    /// <para>练习的即时反馈用它——看一眼对错，不产生任何评分记录。</para>
+    /// </summary>
+    public async Task<IReadOnlyList<ScoredQuestion>> PreviewAsync(
+        Attempt attempt,
+        PaperSnapshot snapshot,
+        IReadOnlyList<PaperItem>? paperItems,
+        CancellationToken cancellationToken = default)
+    {
         var answers = await _answers.ListByAttemptAsync(attempt.Id, cancellationToken);
         var answerByQuestion = answers.ToDictionary(a => a.QuestionId);
         var paperItemByQuestion = paperItems?.ToDictionary(i => i.QuestionId) ?? [];
 
-        var results = new List<ScoreResult>();
+        var results = new List<ScoredQuestion>();
 
         foreach (var item in snapshot.Items)
         {
@@ -51,14 +84,7 @@ public sealed class AttemptScoringService
             var paperItem = PaperItem.Create(item.QuestionId, item.Score, item.SortOrder);
             var outcome = strategy.Score(payload, paperItem, item);
 
-            paperItemByQuestion.TryGetValue(item.QuestionId, out var sourceItem);
-
-            results.Add(ScoreResult.FromOutcome(
-                attempt.Id,
-                item.QuestionId,
-                sourceItem?.Id,
-                outcome,
-                now));
+            results.Add(new ScoredQuestion(item.QuestionId, outcome));
         }
 
         return results;

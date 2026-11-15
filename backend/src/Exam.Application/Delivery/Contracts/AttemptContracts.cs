@@ -38,11 +38,35 @@ public sealed record AttemptResponse(
     DateTimeOffset? StartedAt,
     DateTimeOffset DeadlineAt,
     long RemainingSeconds,
+    bool Timed,
     string VariantKey,
     ExamRulesDto Rules,
+    PracticeRulesDto? PracticeRules,
     IReadOnlyList<AttemptQuestionDto> Questions,
     IReadOnlyList<AttemptAnswerDto> Answers,
     int LastClientSeq);
+
+/// <summary>练习即时反馈里的一道题。</summary>
+public sealed record AttemptFeedbackQuestionDto(
+    long QuestionId,
+    string Code,
+    string Type,
+    string TypeLabel,
+    bool Answered,
+    bool? Correct,
+    decimal Score,
+    decimal MaxScore,
+    IReadOnlyList<string> CorrectKeys,
+    string? ReferenceAnswer,
+    string? Analysis,
+    IReadOnlyList<string> Details);
+
+/// <summary>练习即时反馈。</summary>
+public sealed record AttemptFeedbackResponse(
+    long AttemptId,
+    string FeedbackTiming,
+    DateTimeOffset GeneratedAt,
+    IReadOnlyList<AttemptFeedbackQuestionDto> Questions);
 
 /// <summary>会话摘要（我的考试列表）。</summary>
 public sealed record AttemptSummaryDto(
@@ -69,7 +93,8 @@ public static class AttemptResponseFactory
         ExamSession? session,
         Services.AttemptPaperSurface surface,
         IReadOnlyList<Answer> answers,
-        DateTimeOffset serverTime) =>
+        DateTimeOffset serverTime,
+        PracticeRules? practiceRules = null) =>
         new(
             attempt.Id,
             attempt.AttemptNo,
@@ -80,8 +105,10 @@ public static class AttemptResponseFactory
             attempt.StartedAt,
             attempt.DeadlineAt,
             attempt.RemainingSeconds(serverTime),
+            attempt.IsTimed,
             attempt.VariantKey ?? surface.VariantKey,
             ExamRulesDto.From(session?.Rules ?? ExamRules.Default),
+            practiceRules is null ? null : PracticeRulesDto.From(practiceRules),
             surface.Questions,
             answers
                 .Select(a => new AttemptAnswerDto(a.QuestionId, a.Payload, a.ClientSeq))

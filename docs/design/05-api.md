@@ -459,6 +459,39 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 
 **恢复作答**：`POST /attempts` 在该考生已有进行中的会话时返回**同一个会话**（幂等），不新建。
 
+**练习会话与考试会话的差异**
+
+| 行为 | 考试 | 练习 |
+|---|---|---|
+| 计时 | 按场次时长计时，到点按 `time_up` 交卷 | **不计时**，`timed` 为 `false`，不会被超时强制交卷 |
+| 切屏 | 按场次规则的切屏上限处置（警告或强制交卷） | **不限制切屏**，也不会强制交卷 |
+| 次数 | 按场次规则 | 按练习规则的 `maxAttempts`，次数用尽拒绝再开新会话并提示 |
+| 反馈 | 不给反馈 | 按 `feedbackTiming`：`immediate` 边做边看，`after_submit` 交卷后给 |
+| 错题回流 | 回流 | 按练习规则的 `reflowMistakes`，可以关掉 |
+
+`POST /attempts` 的练习入口：`{ "practiceAssignmentId": 5 }`。练习单不在该考生的可见范围内时返回 404。
+
+**`POST /attempts/{id}/feedback`**（练习即时反馈）
+
+```json
+// 200
+{
+  "attemptId": 8802, "feedbackTiming": "immediate", "generatedAt": "2026-11-15T10:00:00Z",
+  "questions": [
+    { "questionId": 501, "code": "Q-2026-00123", "type": "single", "typeLabel": "单选题",
+      "answered": true, "correct": true, "score": 10, "maxScore": 10,
+      "correctKeys": ["A"], "referenceAnswer": null, "analysis": "看选项 B 的说法",
+      "details": ["✓ A"] },
+    { "questionId": 502, "code": "Q-2026-00124", "type": "short", "typeLabel": "简答题",
+      "answered": false, "correct": null, "score": 0, "maxScore": 10,
+      "correctKeys": [], "referenceAnswer": "三次握手…", "analysis": null, "details": [] }
+  ]
+}
+```
+
+> 主观题没有「对错」这一说，`correct` 为 `null`，只给参考分与解析。
+> `feedbackTiming` 为 `after_submit` 时，交卷前调用返回 422。
+
 ### 8.2 `POST /attempts/{id}/answers`（最高频）
 
 ```json

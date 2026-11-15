@@ -25,6 +25,24 @@ public sealed class AttemptRepository : IAttemptRepository
             .OrderByDescending(a => a.AttemptNo)
             .FirstOrDefaultAsync(cancellationToken);
 
+    public Task<Attempt?> GetActivePracticeAsync(
+        long userId,
+        long practiceAssignmentId,
+        CancellationToken cancellationToken = default) =>
+        _db.Set<Attempt>()
+            .Where(a => a.UserId == userId
+                && a.PracticeAssignmentId == practiceAssignmentId
+                && (a.Status == AttemptStatus.InProgress || a.Status == AttemptStatus.NotStarted))
+            .OrderByDescending(a => a.AttemptNo)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public Task<int> CountByPracticeAsync(
+        long userId,
+        long practiceAssignmentId,
+        CancellationToken cancellationToken = default) =>
+        _db.Set<Attempt>()
+            .CountAsync(a => a.UserId == userId && a.PracticeAssignmentId == practiceAssignmentId, cancellationToken);
+
     public async Task<IReadOnlyList<Attempt>> GetByIdsAsync(
         IReadOnlyCollection<long> ids,
         CancellationToken cancellationToken = default)

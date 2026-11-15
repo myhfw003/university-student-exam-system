@@ -24,6 +24,7 @@ public sealed class MistakeWriteBackHandler : IDomainEventHandler<ScoreFinalized
     private readonly IAttemptRepository _attempts;
     private readonly IQuestionRepository _questions;
     private readonly IAnswerRepository _answers;
+    private readonly PracticeRulesResolver _practiceRules;
     private readonly IClock _clock;
 
     public MistakeWriteBackHandler(
@@ -31,12 +32,14 @@ public sealed class MistakeWriteBackHandler : IDomainEventHandler<ScoreFinalized
         IAttemptRepository attempts,
         IQuestionRepository questions,
         IAnswerRepository answers,
+        PracticeRulesResolver practiceRules,
         IClock clock)
     {
         _mistakes = mistakes;
         _attempts = attempts;
         _questions = questions;
         _answers = answers;
+        _practiceRules = practiceRules;
         _clock = clock;
     }
 
@@ -46,6 +49,16 @@ public sealed class MistakeWriteBackHandler : IDomainEventHandler<ScoreFinalized
         if (attempt is null)
         {
             return;
+        }
+
+        // 练习规则说不回流，就不进错题本。
+        if (attempt.TargetType == AttemptTargetType.Practice)
+        {
+            var rules = await _practiceRules.ResolveAsync(attempt.PracticeAssignmentId!.Value, cancellationToken);
+            if (!rules.ReflowMistakes)
+            {
+                return;
+            }
         }
 
         var now = _clock.UtcNow;

@@ -7,6 +7,7 @@ using Exam.Application.Delivery.Services;
 using Exam.Domain.Delivery;
 using Exam.Domain.Identity;
 using Exam.Domain.SharedKernel.Abstractions;
+using Exam.Domain.SharedKernel.Exceptions;
 using MediatR;
 
 namespace Exam.Application.Delivery.Commands;
@@ -36,6 +37,7 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
     private readonly IAuditRecorder _audit;
     private readonly IClock _clock;
     private readonly ICurrentUser _currentUser;
+    private readonly Exam.Application.Learning.Services.PracticeRulesResolver _practiceRules;
 
     public SubmitAttemptHandler(
         IAttemptRepository attempts,
@@ -50,7 +52,8 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
         IUnitOfWork unitOfWork,
         IAuditRecorder audit,
         IClock clock,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        Exam.Application.Learning.Services.PracticeRulesResolver practiceRules)
     {
         _attempts = attempts;
         _answers = answers;
@@ -65,6 +68,7 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
         _audit = audit;
         _clock = clock;
         _currentUser = currentUser;
+        _practiceRules = practiceRules;
     }
 
     public async Task<SubmitAttemptResponse> Handle(
@@ -91,8 +95,19 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
             return await BuildResponseAsync(attempt, cancellationToken);
         }
 
+        // 练习次数用尽：这次提交不算数。
+        if (attempt.TargetType == AttemptTargetType.Practice)
+        {
+            var rules = await _practiceRules.ResolveAsync(attempt.PracticeAssignmentId!.Value, cancellationToken);
+            if (rules.MaxAttempts > 0 && attempt.AttemptNo > rules.MaxAttempts)
+            {
+                throw new BusinessRuleException($"练习次数已用完（最多 {rules.MaxAttempts} 次），本次提交不计。");
+            }
+        }
+
         // 交卷原因由服务端判定：超时就是 time_up，客户端说什么不算数。
-        var reason = now > attempt.DeadlineAt ? SubmitReason.TimeUp : SubmitReason.Manual;
+        // 练习不计时，不会因为超时被当成 time_up。
+        var reason = attempt.IsTimed && now > attempt.DeadlineAt ? SubmitReason.TimeUp : SubmitReason.Manual;
 
         attempt.Submit(reason, now);
         _attempts.Update(attempt);

@@ -83,6 +83,17 @@ public sealed class AttemptsController : ControllerBase
         CancellationToken cancellationToken) =>
         await _mediator.Send(new SubmitAttemptCommand(id, request?.Reason), cancellationToken);
 
+    /// <summary>练习即时反馈。反馈时机由练习规则说了算。</summary>
+    [HttpPost("{id:long}/feedback")]
+    [Authorize(Policy = PermissionCatalog.AttemptReadOwn)]
+    [ProducesResponseType(typeof(AttemptFeedbackResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<AttemptFeedbackResponse> GetFeedback(
+        long id,
+        CancellationToken cancellationToken) =>
+        await _mediator.Send(new GetAttemptFeedbackQuery(id), cancellationToken);
+
     /// <summary>上报焦点事件。切屏计数以服务端为准。</summary>
     [HttpPost("{id:long}/focus-events")]
     [Authorize(Policy = PermissionCatalog.AttemptTake)]

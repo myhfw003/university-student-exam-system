@@ -64,11 +64,13 @@ public sealed class ReportFocusEventsHandler : IRequestHandler<ReportFocusEvents
             throw new AttemptStateInvalidException("会话已交卷，不再接收焦点事件。");
         }
 
-        var session = await _sessions.GetByIdAsync(attempt.ExamSessionId!.Value, cancellationToken)
-            ?? throw new NotFoundException("考试场次不存在。");
+        // 练习没有场次：不限制切屏，也不会强制交卷。
+        var session = attempt.ExamSessionId is { } sessionId
+            ? await _sessions.GetByIdAsync(sessionId, cancellationToken)
+            : null;
 
         var now = _clock.UtcNow;
-        var limit = session.Rules.MaxFocusLoss;
+        var limit = session?.Rules.MaxFocusLoss;
 
         var reported = new List<FocusEvent>();
         var focusLossCount = 0;
@@ -104,7 +106,8 @@ public sealed class ReportFocusEventsHandler : IRequestHandler<ReportFocusEvents
                 limitReached = true;
 
                 // 达到上限：按场次策略处置。
-                if (string.Equals(session.Rules.OnMaxFocusLoss, "force_submit", StringComparison.OrdinalIgnoreCase))
+                if (session is not null
+                    && string.Equals(session.Rules.OnMaxFocusLoss, "force_submit", StringComparison.OrdinalIgnoreCase))
                 {
                     attempt.Submit(SubmitReason.ProctorForce, now);
                     forcedSubmit = true;

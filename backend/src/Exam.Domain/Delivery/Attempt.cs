@@ -52,6 +52,9 @@ public enum SubmitReason
 /// </summary>
 public sealed class Attempt : AuditableEntity, IAuditedEntity
 {
+    /// <summary>练习会话的兜底期限。练习不按它强制交卷，只是列一个非空的截止时间。</summary>
+    private static readonly TimeSpan PracticeFallbackDeadline = TimeSpan.FromDays(3650);
+
     private Attempt()
     {
     }
@@ -130,6 +133,13 @@ public sealed class Attempt : AuditableEntity, IAuditedEntity
     public int? DurationSpentSeconds { get; private set; }
 
     /// <summary>是否已交卷。</summary>
+    /// <summary>
+    /// 是否计时。
+    /// <para>考试计时、到点强制交卷；**练习不计时**——练习没有截止时间，
+    /// 也不会因为超时被强制交卷。</para>
+    /// </summary>
+    public bool IsTimed => TargetType == AttemptTargetType.Exam;
+
     public bool IsSubmitted => Status is AttemptStatus.Submitted
         or AttemptStatus.AutoSubmitted
         or AttemptStatus.ForceSubmitted;
@@ -178,6 +188,23 @@ public sealed class Attempt : AuditableEntity, IAuditedEntity
         Touch(now, UserId);
     }
 
+    /// <summary>
+    /// 开始练习作答。
+    /// <para>练习不计时：截止时间只是一个兜底值，不会真的强制交卷。</para>
+    /// </summary>
+    public void StartPractice(DateTimeOffset now)
+    {
+        if (Status != AttemptStatus.NotStarted)
+        {
+            throw new InvalidStateTransitionException("只有尚未开始的会话才能开始作答。");
+        }
+
+        StartedAt = now;
+        DeadlineAt = now.Add(PracticeFallbackDeadline);
+        Status = AttemptStatus.InProgress;
+        Touch(now, UserId);
+    }
+
     /// <summary>校验此刻还能不能保存答案。</summary>
     public void EnsureAcceptingAnswers(DateTimeOffset now)
     {
@@ -191,7 +218,7 @@ public sealed class Attempt : AuditableEntity, IAuditedEntity
             throw new AttemptStateInvalidException("会话尚未开始，不能保存答案。");
         }
 
-        if (now > DeadlineAt)
+        if (IsTimed && now > DeadlineAt)
         {
             throw new AttemptDeadlineExceededException("已超过截止时间，请立即交卷。");
         }
@@ -335,7 +362,7 @@ public sealed class Attempt : AuditableEntity, IAuditedEntity
             throw new AttemptStateInvalidException("会话已结束，不能继续作答。");
         }
 
-        if (now > DeadlineAt)
+        if (IsTimed && now > DeadlineAt)
         {
             throw new AttemptDeadlineExceededException("已超过截止时间，请立即交卷。");
         }
