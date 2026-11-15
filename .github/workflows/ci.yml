@@ -125,6 +125,97 @@ jobs:
       - name: 依赖漏洞扫描（全部依赖，仅报告不阻断）
         run: pnpm audit --audit-level=low --registry=https://registry.npmjs.org || true
 
+  e2e:
+    name: 端到端测试（真实后端）
+    runs-on: ubuntu-latest
+    # 真实后端：PostgreSQL 17 + Redis。应用账号 exam_app 由初始化脚本创建，
+    # 密码不出现在镜像与仓库里（授权脚本统一设置）。
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: exam
+          POSTGRES_USER: exam_owner
+          POSTGRES_PASSWORD: exam_owner_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U exam_owner -d exam"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: 还原并构建后端
+        working-directory: backend
+        run: |
+          dotnet restore ExamManager.slnx
+          dotnet build ExamManager.slnx -c Release --no-restore
+      - name: 建应用账号
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+          PGPASSWORD=exam_owner_password psql -h 127.0.0.1 -U exam_owner -d exam \
+            -f deploy/db/01-create-roles.sql
+      - name: 应用迁移
+        working-directory: backend
+        run: dotnet run --project src/Exam.Worker -c Release --no-build -- --migrate
+        env:
+          ConnectionStrings__Database: "Host=127.0.0.1;Port=5432;Database=exam;Username=exam_owner;Password=exam_owner_password;Maximum Pool Size=5;Timeout=15;Command Timeout=120"
+      - name: 授权应用账号
+        run: |
+          PGPASSWORD=exam_owner_password psql -h 127.0.0.1 -U exam_owner -d exam \
+            -v app_password=exam_app_password -f deploy/db/02-grant-app-role.sql
+      - name: 种子数据（角色、权限与管理员）
+        working-directory: backend
+        run: dotnet run --project src/Exam.Worker -c Release --no-build -- --seed
+        env:
+          ConnectionStrings__Database: "Host=127.0.0.1;Port=5432;Database=exam;Username=exam_owner;Password=exam_owner_password;Maximum Pool Size=5;Timeout=15;Command Timeout=120"
+          Seed__AdminUsername: admin
+          Seed__AdminPassword: admin-e2e-password
+      - name: 端到端测试（接口全景巡检与越权访问）
+        # 起真实后端再打真实接口：越权与错误结构在 mock 模式下验不出来。
+        # API 与测试放同一个步骤：CI 会在步骤结束时回收后台进程。
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          cd ../backend
+          ASPNETCORE_URLS=http://127.0.0.1:5000 \
+          ConnectionStrings__Database="Host=127.0.0.1;Port=5432;Database=exam;Username=exam_app;Password=exam_app_password;Maximum Pool Size=10;Timeout=15;Command Timeout=30" \
+          ConnectionStrings__Redis="127.0.0.1:6379,abortConnect=false" \
+          Jwt__Issuer=exam Jwt__Audience=exam-web Jwt__RefreshTokenPepper=e2e-pepper \
+          dotnet run --project src/Exam.Web -c Release --no-build > /tmp/api.log 2>&1 &
+          ready=0
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:5000/health/live > /dev/null; then ready=1; break; fi
+            sleep 2
+          done
+          if [ "$ready" != "1" ]; then echo "API 未就绪"; tail -60 /tmp/api.log; exit 1; fi
+          cd ../frontend
+          E2E_API_BASE_URL=http://127.0.0.1:5000 \
+          E2E_ADMIN_USERNAME=admin E2E_ADMIN_PASSWORD=admin-e2e-password \
+            pnpm exec playwright test --project=api
+      - name: 上传失败现场（trace 与截图）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-traces
+          path: frontend/test-results/
+          retention-days: 7
+
   security:
     name: 密钥扫描
     runs-on: ubuntu-latest
