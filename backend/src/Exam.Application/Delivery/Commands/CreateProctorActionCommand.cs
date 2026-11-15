@@ -1,6 +1,7 @@
 using Exam.Application.Common.Attributes;
 using Exam.Application.Common.Exceptions;
 using Exam.Application.Common.Interfaces;
+using Exam.Application.Delivery.Services;
 using Exam.Application.Common.Markers;
 using Exam.Application.Delivery.Contracts;
 using Exam.Domain.Delivery;
@@ -34,6 +35,8 @@ public sealed class CreateProctorActionHandler : IRequestHandler<CreateProctorAc
     private readonly IAuditRecorder _audit;
     private readonly IClock _clock;
     private readonly ICurrentUser _currentUser;
+    private readonly AttemptPaperResolver _resolver;
+    private readonly AttemptFinalizationService _finalization;
 
     public CreateProctorActionHandler(
         IAttemptRepository attempts,
@@ -43,7 +46,9 @@ public sealed class CreateProctorActionHandler : IRequestHandler<CreateProctorAc
         IUnitOfWork unitOfWork,
         IAuditRecorder audit,
         IClock clock,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        AttemptPaperResolver resolver,
+        AttemptFinalizationService finalization)
     {
         _attempts = attempts;
         _actions = actions;
@@ -53,6 +58,8 @@ public sealed class CreateProctorActionHandler : IRequestHandler<CreateProctorAc
         _audit = audit;
         _clock = clock;
         _currentUser = currentUser;
+        _resolver = resolver;
+        _finalization = finalization;
     }
 
     public async Task<ProctorActionDto> Handle(
@@ -88,6 +95,15 @@ public sealed class CreateProctorActionHandler : IRequestHandler<CreateProctorAc
             var fromStatus = attempt.Status.ToStorage();
             attempt.Submit(SubmitReason.ProctorForce, now);
             _attempts.Update(attempt);
+
+            // 监考强制交卷同样要判分：考生的答卷不能因为是被强制结束的就没有成绩。
+            var paper = await _resolver.ResolveAsync(attempt, cancellationToken);
+            await _finalization.FinalizeAsync(
+                attempt,
+                paper,
+                now,
+                "attempt.force_submit_by_proctor",
+                cancellationToken);
             await _notifier.NotifyStateChangedAsync(attempt.Id, fromStatus, attempt.Status.ToStorage(), cancellationToken);
         }
 

@@ -97,6 +97,8 @@ public static class DependencyInjection
         services.AddScoped<Exam.Application.Learning.Services.DashboardService>();
         services.AddScoped<IDomainEventHandler<ScoreFinalized>, AbilityProfileUpdateHandler>();
         services.AddScoped<AttemptPaperResolver>();
+        // 交卷收尾（判分 + 待阅任务 + 审计）：四条交卷路径共用。
+        services.AddScoped<AttemptFinalizationService>();
         services.AddScoped<IOutboxStore, OutboxStore>();
         services.AddScoped<IDomainEventDispatcher, DomainEventDispatcher>();
         services.AddScoped<IDomainEventHandler<ScoreFinalized>, MistakeWriteBackHandler>();

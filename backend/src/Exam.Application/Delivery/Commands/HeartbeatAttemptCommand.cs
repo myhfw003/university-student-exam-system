@@ -1,6 +1,7 @@
 using Exam.Application.Common.Attributes;
 using Exam.Application.Common.Exceptions;
 using Exam.Application.Common.Interfaces;
+using Exam.Application.Delivery.Services;
 using Exam.Application.Common.Markers;
 using Exam.Application.Delivery.Contracts;
 using Exam.Domain.Delivery;
@@ -27,19 +28,25 @@ public sealed class HeartbeatAttemptHandler : IRequestHandler<HeartbeatAttemptCo
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
     private readonly ICurrentUser _currentUser;
+    private readonly AttemptPaperResolver _resolver;
+    private readonly AttemptFinalizationService _finalization;
 
     public HeartbeatAttemptHandler(
         IAttemptRepository attempts,
         IExamSessionRepository sessions,
         IUnitOfWork unitOfWork,
         IClock clock,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        AttemptPaperResolver resolver,
+        AttemptFinalizationService finalization)
     {
         _attempts = attempts;
         _sessions = sessions;
         _unitOfWork = unitOfWork;
         _clock = clock;
         _currentUser = currentUser;
+        _resolver = resolver;
+        _finalization = finalization;
     }
 
     public async Task<HeartbeatResponse> Handle(
@@ -72,6 +79,15 @@ public sealed class HeartbeatAttemptHandler : IRequestHandler<HeartbeatAttemptCo
         if (attempt.DisconnectCount > session.Rules.MaxDisconnect)
         {
             attempt.Submit(SubmitReason.NetworkTimeout, now);
+
+            // 断网超时代交也要判分：否则这份答卷永远没有分数。
+            var paper = await _resolver.ResolveAsync(attempt, cancellationToken);
+            await _finalization.FinalizeAsync(
+                attempt,
+                paper,
+                now,
+                "attempt.submit_by_timeout",
+                cancellationToken);
         }
         else
         {

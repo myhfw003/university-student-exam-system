@@ -27,14 +27,10 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
     private readonly IAttemptRepository _attempts;
     private readonly IAnswerRepository _answers;
     private readonly IScoreResultRepository _scoreResults;
-    private readonly IReviewTaskRepository _reviewTaskRepository;
-    private readonly IExamParticipantRepository _participants;
     private readonly AttemptPaperResolver _resolver;
-    private readonly AttemptScoringService _scoring;
-    private readonly Exam.Application.Grading.Services.ReviewTaskGenerator _reviewTasks;
+    private readonly AttemptFinalizationService _finalization;
     private readonly Exam.Application.Grading.Services.GradeVisibilityResolver _visibility;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IAuditRecorder _audit;
     private readonly IClock _clock;
     private readonly ICurrentUser _currentUser;
     private readonly Exam.Application.Learning.Services.PracticeRulesResolver _practiceRules;
@@ -43,14 +39,10 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
         IAttemptRepository attempts,
         IAnswerRepository answers,
         IScoreResultRepository scoreResults,
-        IReviewTaskRepository reviewTaskRepository,
-        IExamParticipantRepository participants,
         AttemptPaperResolver resolver,
-        AttemptScoringService scoring,
-        Exam.Application.Grading.Services.ReviewTaskGenerator reviewTasks,
+        AttemptFinalizationService finalization,
         Exam.Application.Grading.Services.GradeVisibilityResolver visibility,
         IUnitOfWork unitOfWork,
-        IAuditRecorder audit,
         IClock clock,
         ICurrentUser currentUser,
         Exam.Application.Learning.Services.PracticeRulesResolver practiceRules)
@@ -58,14 +50,10 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
         _attempts = attempts;
         _answers = answers;
         _scoreResults = scoreResults;
-        _reviewTaskRepository = reviewTaskRepository;
-        _participants = participants;
         _resolver = resolver;
-        _scoring = scoring;
-        _reviewTasks = reviewTasks;
+        _finalization = finalization;
         _visibility = visibility;
         _unitOfWork = unitOfWork;
-        _audit = audit;
         _clock = clock;
         _currentUser = currentUser;
         _practiceRules = practiceRules;
@@ -112,46 +100,13 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
         attempt.Submit(reason, now);
         _attempts.Update(attempt);
 
-        // 交卷事务内完成判分：客观题直接定分，主观题给建议分。
-        var scoreResults = await _scoring.ScoreAsync(
+        // 交卷收尾：判分、待阅任务、考生已交卷标记、审计。
+        // 强制交卷的三条路径也走同一个服务——漏一条，被强制交卷的考生就没有成绩。
+        var scoreResults = await _finalization.FinalizeAsync(
             attempt,
-            paper.Snapshot,
-            paper.PaperItems,
+            paper,
             now,
-            cancellationToken);
-
-        await _scoreResults.AddRangeAsync(scoreResults, cancellationToken);
-
-        // 主观题生成待阅任务：综合题按步骤拆开。
-        var reviewTasks = await _reviewTasks.GenerateAsync(
-            attempt,
-            attempt.ExamSessionId,
-            paper.Snapshot,
-            scoreResults,
-            now,
-            cancellationToken);
-        await _reviewTaskRepository.AddRangeAsync(reviewTasks, cancellationToken);
-
-        if (attempt.ExamSessionId is { } sessionId)
-        {
-            var participant = await _participants.GetAsync(sessionId, attempt.UserId, cancellationToken);
-            if (participant is not null)
-            {
-                participant.MarkSubmitted(now);
-                _participants.Update(participant);
-            }
-        }
-
-        await _audit.RecordAsync(
             "attempt.submit",
-            "attempt",
-            attempt.Id.ToString(),
-            new Dictionary<string, object?>
-            {
-                ["sessionId"] = attempt.ExamSessionId,
-                ["submitReason"] = reason.ToStorage(),
-                ["durationSpentSeconds"] = attempt.DurationSpentSeconds,
-            },
             cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);

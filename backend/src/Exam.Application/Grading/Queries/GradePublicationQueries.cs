@@ -51,7 +51,9 @@ public sealed class GetExamSessionGradesHandler
             ?? throw new NotFoundException("考试场次不存在。");
 
         var attempts = (await _attempts.ListBySessionAsync(session.Id, cancellationToken))
-            .Where(a => a.Status == AttemptStatus.Submitted)
+            // 强制交卷与超时自动交卷同样要出现在成绩里：
+            // 只认「主动交卷」的话，被强制交卷的考生会凭空消失。
+            .Where(a => a.IsSubmitted)
             .OrderBy(a => a.UserId)
             .ThenBy(a => a.AttemptNo)
             .ToList();

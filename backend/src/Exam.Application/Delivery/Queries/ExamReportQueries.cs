@@ -187,7 +187,8 @@ public sealed class GetMyResultsHandler : IRequestHandler<GetMyResultsQuery, MyR
             ?? throw new ForbiddenException("请先登录。");
 
         var attempts = (await _attempts.ListByUserAsync(userId, cancellationToken))
-            .Where(a => a.Status == AttemptStatus.Submitted)
+            // 强制交卷与超时自动交卷的成绩也要能被学生看到。
+            .Where(a => a.IsSubmitted)
             .OrderByDescending(a => a.SubmittedAt)
             .ToList();
 

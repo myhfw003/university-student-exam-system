@@ -2,6 +2,7 @@ using Exam.Application.Common.Attributes;
 using Exam.Application.Common.Exceptions;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
+using Exam.Application.Delivery.Services;
 using Exam.Application.Delivery.Contracts;
 using Exam.Domain.Delivery;
 using Exam.Domain.Identity;
@@ -30,6 +31,8 @@ public sealed class ReportFocusEventsHandler : IRequestHandler<ReportFocusEvents
     private readonly IClock _clock;
     private readonly ICurrentUser _currentUser;
     private readonly IExamMetrics _metrics;
+    private readonly AttemptPaperResolver _resolver;
+    private readonly AttemptFinalizationService _finalization;
 
     public ReportFocusEventsHandler(
         IAttemptRepository attempts,
@@ -38,7 +41,9 @@ public sealed class ReportFocusEventsHandler : IRequestHandler<ReportFocusEvents
         IUnitOfWork unitOfWork,
         IClock clock,
         ICurrentUser currentUser,
-        IExamMetrics metrics)
+        IExamMetrics metrics,
+        AttemptPaperResolver resolver,
+        AttemptFinalizationService finalization)
     {
         _attempts = attempts;
         _events = events;
@@ -47,6 +52,8 @@ public sealed class ReportFocusEventsHandler : IRequestHandler<ReportFocusEvents
         _clock = clock;
         _currentUser = currentUser;
         _metrics = metrics;
+        _resolver = resolver;
+        _finalization = finalization;
     }
 
     public async Task<FocusEventsResponse> Handle(
@@ -115,6 +122,15 @@ public sealed class ReportFocusEventsHandler : IRequestHandler<ReportFocusEvents
                 {
                     attempt.Submit(SubmitReason.ProctorForce, now);
                     forcedSubmit = true;
+
+                    // 强制交卷也要判分：答案已经存下来了，不能让考生没有成绩。
+                    var forcedPaper = await _resolver.ResolveAsync(attempt, cancellationToken);
+                    await _finalization.FinalizeAsync(
+                        attempt,
+                        forcedPaper,
+                        now,
+                        "attempt.force_submit_by_focus",
+                        cancellationToken);
                 }
                 else
                 {

@@ -89,7 +89,8 @@ public sealed class PublishExamGradesHandler : IRequestHandler<PublishExamGrades
             : GradePublicationScope.All;
 
         var submitted = (await _attempts.ListBySessionAsync(session.Id, cancellationToken))
-            .Where(a => a.Status == AttemptStatus.Submitted)
+            // 强制交卷与超时自动交卷也要能被发布成绩。
+            .Where(a => a.IsSubmitted)
             .ToList();
 
         IReadOnlyList<long> covered;
