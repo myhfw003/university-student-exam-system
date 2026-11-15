@@ -26,6 +26,22 @@ public sealed class AnswerRepository : IAnswerRepository
             .OrderBy(a => a.QuestionId)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<AnswerSeqFact>> ListSeqByAttemptsAsync(
+        IReadOnlyCollection<long> attemptIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (attemptIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await _db.Set<Answer>()
+            .AsNoTracking()
+            .Where(a => attemptIds.Contains(a.AttemptId))
+            .Select(a => new AnswerSeqFact(a.AttemptId, a.QuestionId, a.ClientSeq))
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<Answer?> GetAsync(long attemptId, long questionId, CancellationToken cancellationToken = default) =>
         _db.Set<Answer>()
             .FirstOrDefaultAsync(a => a.AttemptId == attemptId && a.QuestionId == questionId, cancellationToken);

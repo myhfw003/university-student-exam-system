@@ -18,6 +18,7 @@
 | `import:run` / `import:adopt` | ✓ | ✓ | ✓ | ✗ | ✗ |
 | `paper:read` / `paper:write` / `paper:publish` | ✓ | ✓ | ✓ | 只读 | 只读（自己可见的） |
 | `blueprint:generate` | ✓ | ✓ | ✓ | ✗ | ✗ |
+| `practice:read` / `practice:write`（练习开放单） | ✓ | ✓ | ✓ | ✗ | ✗ |
 | `exam:read` / `exam:write` / `exam:publish` | ✓ | ✓ | ✓ | ✓ | 只读（自己参加的） |
 | `attempt:take` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `attempt:read-own` | ✓ | ✓ | ✓ | ✓ | ✓ |

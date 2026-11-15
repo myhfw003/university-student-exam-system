@@ -22,6 +22,7 @@ builder.Services.AddExamInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<WorkerHeartbeatService>();
 builder.Services.AddHostedService<OutboxDispatchService>();
 builder.Services.AddHostedService<StatisticsRecalculationService>();
+builder.Services.AddHostedService<AnswerReconciliationJob>();
 
 var host = builder.Build();
 

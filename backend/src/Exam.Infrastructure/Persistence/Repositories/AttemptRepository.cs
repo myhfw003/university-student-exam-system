@@ -36,6 +36,17 @@ public sealed class AttemptRepository : IAttemptRepository
             .OrderByDescending(a => a.AttemptNo)
             .FirstOrDefaultAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Attempt>> ListSubmittedSinceAsync(
+        DateTimeOffset since,
+        int take,
+        CancellationToken cancellationToken = default) =>
+        await _db.Set<Attempt>()
+            .AsNoTracking()
+            .Where(a => a.SubmittedAt != null && a.SubmittedAt >= since)
+            .OrderBy(a => a.SubmittedAt)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyDictionary<long, int>> CountByPracticeAssignmentsAsync(
         IReadOnlyCollection<long> practiceAssignmentIds,
         CancellationToken cancellationToken = default)
