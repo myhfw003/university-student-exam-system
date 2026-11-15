@@ -698,6 +698,27 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
   "title": "错题重做：Q-2026-00123", "deadlineAt": "2026-11-15T09:00:00Z" }
 ```
 
+**`GET /practices`**
+
+查询参数 `keyword`（按标题）、`tagId`（按练习对应试卷的标签，父标签连子标签一起算）、`page`、`size`。
+只返回该考生**看得见**的练习：已上架、在开放期内、命中开放范围（组织标签）。
+
+```json
+{
+  "total": 2, "page": 1, "size": 20,
+  "items": [
+    { "id": 5, "title": "高等数学 · 极限与连续专项练习", "paperId": 12, "paperName": "极限与连续专项卷",
+      "questionCount": 10, "totalScore": 50, "tagNames": ["高等数学"],
+      "maxAttempts": 3, "usedAttempts": 1, "remainingAttempts": 2,
+      "feedbackTiming": "immediate", "reflowMistakes": true, "suggestedMinutes": 30,
+      "openAt": "2026-11-01T00:00:00Z", "closeAt": null, "publishedAt": "2026-10-31T08:00:00Z",
+      "canStart": true }
+  ]
+}
+```
+
+**`GET /practices/{id}`**：与列表条目同结构；不在可见范围内的练习返回 404。
+
 **`GET /dashboard/summary`**
 
 ```json
