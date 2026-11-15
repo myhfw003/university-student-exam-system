@@ -1,4 +1,8 @@
+using System.Diagnostics;
+using Exam.Application.Common.Interfaces;
 using Exam.Application.Messaging;
+using Exam.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -38,16 +42,25 @@ public sealed class OutboxDispatchService : BackgroundService
 
     private async Task DispatchAsync(CancellationToken cancellationToken)
     {
+        var stopwatch = Stopwatch.StartNew();
+        var failed = false;
+
         try
         {
             using var scope = _services.CreateScope();
             var dispatcher = scope.ServiceProvider.GetRequiredService<IDomainEventDispatcher>();
+            var metrics = scope.ServiceProvider.GetRequiredService<IWorkerMetrics>();
 
             var dispatched = await dispatcher.DispatchPendingAsync(100, cancellationToken);
             if (dispatched > 0)
             {
                 _logger.LogInformation("已派发领域事件 {Count} 条。", dispatched);
             }
+
+            // 积压数是告警项（Outbox 积压 > 1000）：每轮采一次。
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var pending = await db.OutboxMessages.CountAsync(m => m.DispatchedAt == null, cancellationToken);
+            metrics.SetOutboxPending(pending);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -55,7 +68,14 @@ public sealed class OutboxDispatchService : BackgroundService
         }
         catch (Exception ex)
         {
+            failed = true;
             _logger.LogError(ex, "领域事件派发失败。");
+        }
+        finally
+        {
+            using var scope = _services.CreateScope();
+            var metrics = scope.ServiceProvider.GetRequiredService<IWorkerMetrics>();
+            metrics.RecordBackgroundJob("outbox_dispatch", stopwatch.Elapsed.TotalSeconds, failed);
         }
     }
 }

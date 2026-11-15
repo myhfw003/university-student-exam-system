@@ -5,9 +5,11 @@ using Exam.Application;
 using Exam.Application.Common.Interfaces;
 using Exam.Infrastructure;
 using Exam.Infrastructure.Identity;
+using Exam.Infrastructure.Observability;
 using Exam.Web.HealthChecks;
 using Exam.Web.Hubs;
 using Exam.Web.Monitoring;
+using Exam.Web.Observability;
 using Exam.Web.Middleware;
 using Exam.Web.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -45,6 +47,10 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
 builder.Services.AddExamApplication();
 builder.Services.AddExamInfrastructure(builder.Configuration);
 
+// 业务指标只在 API 进程采集。Worker 侧的指标在 Worker 进程独立注册：
+// 同一个指标名被两个进程各报一次，告警里的比例就凭空翻倍。
+builder.Services.AddSingleton<IExamMetrics>(_ => new ExamMetrics(Metrics.DefaultFactory));
+
 // ---------------------------------------------------------------- Web 层抽象
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
@@ -58,6 +64,11 @@ builder.Services.AddControllers();
 // 连接复用基础设施已注册的那个 Redis 连接 multiplexer。
 // 监考状态每两秒聚合推送一批。
 builder.Services.AddHostedService<ProctoringBroadcaster>();
+
+// 依赖探测：时钟偏移与 Redis 可用性。两者都是「不出故障就没有告警」
+// 的指标，所以要自己定时去探，而不是等业务请求带出数据。
+builder.Services.AddHostedService<ClockOffsetProbe>();
+builder.Services.AddHostedService<RedisAvailabilityProbe>();
 
 // 考试实时通知走 SignalR。
 builder.Services.AddSingleton<Exam.Application.Common.Interfaces.IExamNotifier, ExamHubNotifier>();
@@ -231,6 +242,8 @@ app.UseSerilogRequestLogging(options =>
 });
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+// 请求指标：路由标签取路由模板，原始路径不进指标。
+app.UseMiddleware<HttpMetricsMiddleware>();
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
@@ -248,8 +261,11 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => fa
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });
 app.MapHealthChecks("/health/startup", new HealthCheckOptions { Predicate = _ => false });
 
-app.UseHttpMetrics();
 app.MapMetrics();
+
+// 业务指标要先建好：即使还没发生过保存答案，/metrics 也要把指标名列出来，
+// 告警表达式才不会因为「指标不存在」而失效。
+_ = app.Services.GetRequiredService<IExamMetrics>();
 
 app.Run();
 

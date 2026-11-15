@@ -1,0 +1,43 @@
+# Prometheus 采集配置。
+#
+# 抓四处：
+#   api        —— Web 端的 /metrics（作答链路、HTTP、时钟偏移、Redis）
+#   worker     —— Worker 的 /metrics（Outbox 积压、后台作业、活跃会话、数据库连接）
+#   node       —— 宿主机磁盘（磁盘告警靠它）
+#   prometheus —— 自身（用于自监控与规则调试）
+#
+# API 侧与 Worker 侧的指标各在各的进程里报：同一个指标名不会被抓两遍，
+# 告警里的比例不会凭空翻倍。
+global:
+  scrape_interval: 15s
+  evaluation_interval: 30s
+  external_labels:
+    cluster: exam
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: exam-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:8080"]
+
+  - job_name: exam-worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["worker:9090"]
+
+  - job_name: node
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

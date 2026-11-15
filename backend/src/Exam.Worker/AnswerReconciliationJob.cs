@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Delivery.Services;
 using Exam.Domain.SharedKernel.Abstractions;
@@ -74,6 +75,28 @@ public sealed class AnswerReconciliationJob : BackgroundService
 
     private async Task RunAsync(TimeSpan lookback, CancellationToken stoppingToken)
     {
+        var stopwatch = Stopwatch.StartNew();
+        var failed = false;
+
+        try
+        {
+            await RunCoreAsync(lookback, stoppingToken);
+        }
+        catch (Exception)
+        {
+            failed = true;
+            throw;
+        }
+        finally
+        {
+            using var scope = _scopeFactory.CreateScope();
+            scope.ServiceProvider.GetRequiredService<IWorkerMetrics>()
+                .RecordBackgroundJob("answer_reconciliation", stopwatch.Elapsed.TotalSeconds, failed);
+        }
+    }
+
+    private async Task RunCoreAsync(TimeSpan lookback, CancellationToken stoppingToken)
+    {
         using var scope = _scopeFactory.CreateScope();
 
         var reconciler = scope.ServiceProvider.GetRequiredService<AnswerReconciler>();
@@ -82,6 +105,9 @@ public sealed class AnswerReconciliationJob : BackgroundService
 
         var since = clock.UtcNow - lookback;
         var report = await reconciler.ReconcileAsync(since, cancellationToken: stoppingToken);
+
+        scope.ServiceProvider.GetRequiredService<IWorkerMetrics>()
+            .RecordReconciliationFindings(report.FindingCount);
 
         if (report.IsClean)
         {

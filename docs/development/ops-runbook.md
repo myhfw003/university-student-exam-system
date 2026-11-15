@@ -309,15 +309,116 @@ docker compose up -d --force-recreate api
 
 ## 9. 告警清单与首响
 
-| 告警 | 级别 | 首响时限 | 处置入口 |
+下表与 `deploy/monitoring/prometheus-rules.yml` 一一对应；规则改了，这里也要改。
+
+| 告警 | 规则名 | 级别 | 首响时限 | 处置入口 |
+|---|---|---|---|---|
+| 答卷丢失疑似（对账差异 > 0） | `ExamAnswerLostSuspected` | P1 | 立即 | §4.1 + §5 |
+| 备份失败 / 备份过期 | `ExamBackupFailed` / `ExamBackupStale` | P1 | 立即 | §6 + 重跑备份 |
+| 答卷保存错误率 > 1% | `ExamAnswerSaveErrorRateHigh` | P1 | 15 分钟 | §4.2 |
+| 活跃会话数骤降 > 30% | `ExamActiveSessionsDropped` | P1 | 15 分钟 | §4.2 + 网关 |
+| 数据库连接耗尽 | `ExamDatabaseConnectionsExhausted` | P1 | 15 分钟 | §4.6 |
+| Redis 不可用 | `ExamRedisUnavailable` | P1 | 30 分钟 | §4.3 |
+| HTTP 5xx 比例 > 0.1% | `ExamHttpErrorRateHigh` | P1 | 30 分钟 | §4.2 |
+| 答卷保存 p95 > 500 ms | `ExamAnswerSaveP95High` | P2 | 1 小时 | §4.2 |
+| 时钟偏移 > 50 ms | `ExamClockOffsetHigh` | P2 | 1 小时 | §4.7（考试中升级为 P1） |
+| Outbox 积压 > 1000 | `ExamOutboxBacklog` | P2 | 1 小时 | 检查 Worker 状态 |
+| 后台作业失败 / 变慢 | `ExamBackgroundJobFailed` / `ExamBackgroundJobSlow` | P2 | 1 小时 | 检查 Worker 日志 |
+| Redis 命令 p95 > 50 ms | `ExamRedisCommandSlow` | P2 | 1 小时 | §4.3 |
+| 切屏事件激增 | `ExamFocusEventsSpiking` | P2 | 1 小时 | §4.5 |
+| 磁盘使用 > 80% | `ExamDiskUsageHigh` | P2 | 4 小时 | 清理 / 扩容 |
+
+## 10. 值班手册
+
+### 10.1 分级与首响
+
+| 级别 | 含义 | 首响 | 处置目标 |
 |---|---|---|---|
-| 答卷丢失疑似（对账差异 > 0） | P1 | 立即 | §4.1 + §5 |
-| 答卷保存错误率 > 1% | P1 | 15 分钟 | §4.2 |
-| 活跃会话数骤降 > 30% | P1 | 15 分钟 | §4.2 + 网关 |
-| 数据库连接耗尽 | P1 | 15 分钟 | §4.6 |
-| Redis 不可用 | P1 | 30 分钟 | §4.3 |
-| 可用会话 p95 > 500 ms | P2 | 1 小时 | §4.2 |
-| 时钟偏移 > 50 ms | P2 | 1 小时 | §4.7（考试中升级为 P1） |
-| Outbox 积压 > 1000 | P2 | 1 小时 | 检查 Worker 状态 |
-| 磁盘使用 > 80% | P2 | 4 小时 | 清理 / 扩容 |
-| 备份失败 | P1 | 立即 | 重跑并排查 |
+| P1 | 影响正在进行的考试或可能丢答 | 立即（5 分钟内确认） | 先止损，再定位 |
+| P2 | 影响容量或体验，考试仍能进行 | 1 小时内 | 定位并安排修复窗口 |
+| P3 | 观察项 | 下一个工作日 | 记入待办 |
+
+**首响时限是「确认」不是「修好」**：5 分钟内至少回一句「已知悉，正在查」。
+
+### 10.2 值班安排
+
+- 考试日：开考前 30 分钟进入值班，监考教师与技术值班同时在线，考试结束后 30 分钟退出。
+- 平日：工作日 9:00–18:00 有人值班，夜间只保留 P1 呼叫。
+- 考试日 P1 一律电话直呼，不走工单流转。
+
+### 10.3 处置原则
+
+1. **先止损，后定位**。答卷丢失疑似、数据库连接耗尽这两条先保数据与可用性，再查根因。
+2. **考试进行中，P1 优先于一切 P2**。P2 可以先记下来，等考完再处理。
+3. **不要在考试进行中重启 Worker**。Worker 停了 Outbox 会积压，统计与对账全部推后；
+   确实要停，先确认没有正在进行的场次。
+4. **恢复后要确认告警自己消警**。指标回到正常值，告警要在一段时间后自动 resolved；
+   消不掉的告警说明指标口径有问题，别手工关单了事。
+5. **每次处置都要留痕**：告警名、开始时间、处置动作、恢复时间、影响范围。
+
+### 10.4 升级路径
+
+值班人 → 技术负责人（15 分钟未定位）→ 教研/考试负责人（涉及场次暂停或数据补录）。
+涉及考生成绩、申诉、成绩发布的任何决定，必须由考试负责人拍板，技术值班只提供事实。
+
+### 10.5 值班交接
+
+交接时说清楚四件事：当前在跑的考试场次、最近一次故障与是否闭环、已知未修复的问题、
+下一次计划中的变更（发布、扩容、数据库迁移）。考试日交接必须当面或电话，不留文字。
+
+## 11. 告警演练
+
+演练的目的很具体：**确认人为制造的异常能触发预期告警**。
+没演练过的告警，等于没有告警——规则写对了不代表表达式里的指标真的存在、真的有值。
+
+### 11.1 规则级演练（每次改动告警规则后必做）
+
+在 `deploy/monitoring` 目录下：
+
+```bash
+# 造出越界的指标序列，断言告警按预期 firing；一切正常时断言不 firing。
+docker run --rm --entrypoint /bin/promtool -v "$PWD:/w" -w /w \
+  prom/prometheus:v2.54.1 test rules prometheus-rules.test.yml
+
+# 规则引用的指标必须真的被应用导出，对不上即失败。
+python3 ../../scripts/check-metric-names.py
+```
+
+CI 里跑的就是这两条。
+
+### 11.2 环境级演练（每季度一次，考试前必做）
+
+启用监控栈：`docker compose --profile monitoring up -d`。
+在 Grafana（默认 3000 端口）与 Alertmanager（9093 端口，只在容器网络内可达）里确认告警真的 firing。
+
+Redis 那一档已经脚本化了（`deploy/monitoring/drill-alerts.sh`）：停 Redis → 等
+`ExamRedisUnavailable` firing → 恢复 Redis → 等它自己消警。脚本以非零码退出即演练失败。
+
+```bash
+cd deploy/monitoring
+./drill-alerts.sh redis        # 完整演练（停 Redis、验 firing、恢复、验消警）
+./drill-alerts.sh redis-check  # 只看当前有哪些告警在 firing
+```
+
+| 告警 | 怎么造 | 怎么确认 |
+|---|---|---|
+| Redis 不可用 | `docker compose stop redis` | 一分钟后 `redis_up` 为 0，Alertmanager 收到 firing；`docker compose start redis` 后自动 resolved |
+| 数据库连接耗尽 | 把 `max_connections` 调小到当前连接数附近，重启 PG | `db_pool_available_connections` 低于上限 10%，告警 firing |
+| 答卷保存错误率 | 对已交卷的会话继续调用保存答案接口 | `attempt_answers_saved_total{result="rejected"}` 上升，错误率超过 1% 后 firing |
+| 活跃会话数骤降 | 开一场考试，等考生进场后停掉 API 容器 | `attempt_active_sessions` 掉下去（心跳断了），告警 firing；注意恢复后要确认序列被撤掉 |
+| Outbox 积压 | `docker compose stop worker` 后产生领域事件 | `outbox_pending_messages` 持续上涨，超过 1000 后 firing |
+| 后台作业失败 | 停 Worker 或破坏它依赖的表 | `background_job_failures_total` 上涨，告警 firing |
+| 答卷丢失疑似 | 用 owner 账号手工删掉一条已交卷的 answer 行 | 对账作业发现差异，`answer_reconciliation_findings_total` 上涨，P1 firing |
+| 时钟偏移 | 改宿主机时间或容器时区 | `clock_offset_ms` 超过 50 后 firing |
+| HTTP 5xx | 制造一个必然抛异常的请求 | `http_requests_total{status="500"}` 上涨，5xx 比例超过 0.1% 后 firing |
+| 切屏事件激增 | 脚本循环调用焦点事件上报接口 | `attempt_focus_events_total` 速率超过 50/秒后 firing |
+| 备份失败 | 改坏 pgbackrest 配置后跑一次备份 | 备份任务写出 `pgbackup_last_run_success 0`，告警 firing |
+| 磁盘使用 > 80% | 在宿主机上造一个大文件 | `node_filesystem_avail_bytes / node_filesystem_size_bytes` 低于 0.2 后 firing |
+
+**演练纪律**：造完异常必须等它自己恢复（或者手工造恢复），确认告警能自动 resolved；
+只看到 firing 不算演练完成。
+
+### 11.3 演练记录
+
+每次演练记一行：日期、演练人、告警名、造异常的方式、是否 firing、消警耗时、发现的问题。
+发现问题的当场修，别攒着。

@@ -1,0 +1,65 @@
+# Alertmanager 路由。
+#
+# 分级处置：P1 立即电话（首响 15 分钟内），P2 值班群（1 小时），P3 工单（次日）。
+# 接收器地址按学校实际渠道替换——这里给的是占位地址。
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default
+  group_by: [alertname, examSessionId]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - severity = "P1"
+      receiver: oncall-p1
+      group_wait: 10s
+      repeat_interval: 30m
+      continue: false
+    - matchers:
+        - severity = "P2"
+      receiver: oncall-p2
+      repeat_interval: 2h
+    - matchers:
+        - severity = "P3"
+      receiver: ticket
+      repeat_interval: 24h
+
+# 同一条告警同时存在 P1 与 P2 实例时只通知 P1：值班的人只需要接一个电话。
+# （规则的级别是固定的，所以这条平时不触发；留着是为了防止有人临时改级别
+#   或把级别做成可配置时出现重复通知。）
+inhibit_rules:
+  - source_matchers:
+      - severity = "P1"
+    target_matchers:
+      - severity = "P2"
+    equal: [alertname]
+
+receivers:
+  - name: default
+    webhook_configs:
+      - url: http://alert-webhook.internal/default
+        send_resolved: true
+
+  - name: oncall-p1
+    webhook_configs:
+      - url: http://alert-webhook.internal/p1
+        send_resolved: true
+    # 电话与短信按学校值班平台接入：
+    # pagerduty_configs / sns_configs / 微信机器人 webhook
+
+  - name: oncall-p2
+    webhook_configs:
+      - url: http://alert-webhook.internal/p2
+        send_resolved: true
+
+  - name: ticket
+    webhook_configs:
+      - url: http://alert-webhook.internal/tickets
+        send_resolved: true
+
+# 模板：告警里带上处置入口，别让值班的人自己找文档。
+templates:
+  - /etc/alertmanager/templates/*.tmpl

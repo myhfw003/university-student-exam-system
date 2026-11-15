@@ -20,6 +20,7 @@
     <PackageReference Include="ClosedXML" />
     <PackageReference Include="CsvHelper" />
     <PackageReference Include="Minio" />
+    <PackageReference Include="prometheus-net" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Exam.Application\Exam.Application.csproj" />

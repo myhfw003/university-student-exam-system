@@ -29,6 +29,7 @@ public sealed class ReportFocusEventsHandler : IRequestHandler<ReportFocusEvents
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
     private readonly ICurrentUser _currentUser;
+    private readonly IExamMetrics _metrics;
 
     public ReportFocusEventsHandler(
         IAttemptRepository attempts,
@@ -36,7 +37,8 @@ public sealed class ReportFocusEventsHandler : IRequestHandler<ReportFocusEvents
         IExamSessionRepository sessions,
         IUnitOfWork unitOfWork,
         IClock clock,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        IExamMetrics metrics)
     {
         _attempts = attempts;
         _events = events;
@@ -44,6 +46,7 @@ public sealed class ReportFocusEventsHandler : IRequestHandler<ReportFocusEvents
         _unitOfWork = unitOfWork;
         _clock = clock;
         _currentUser = currentUser;
+        _metrics = metrics;
     }
 
     public async Task<FocusEventsResponse> Handle(
@@ -81,6 +84,7 @@ public sealed class ReportFocusEventsHandler : IRequestHandler<ReportFocusEvents
                 ?? throw new BusinessRuleException($"未知的焦点事件类型「{item.Type}」。");
 
             reported.Add(FocusEvent.Create(attempt.Id, type, item.QuestionId, item.ClientAt, now));
+            _metrics.RecordFocusEvent(type.ToStorage());
 
             if (type.IsFocusLoss())
             {

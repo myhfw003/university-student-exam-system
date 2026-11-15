@@ -1,0 +1,208 @@
+# 告警规则。
+#
+# 指标名与后端埋点一一对应：
+#   API 进程    backend/src/Exam.Infrastructure/Observability/ExamMetrics.cs
+#   Worker 进程 backend/src/Exam.Infrastructure/Observability/WorkerMetrics.cs
+# 与《08-deployment-operations.md》§5.4 的清单同源。
+#
+# 两套指标各在各的进程里报：同一个指标名不会被两个进程各报一次，
+# 告警里的比例不会凭空翻倍。改规则前先确认指标真的存在。
+#
+# 阈值口径：
+#   答卷保存错误率  > 1%        → P1
+#   答卷保存 p95    > 500ms      → P2
+#   对账发现差异    > 0          → P1
+#   活跃会话相对峰值下降 > 30%   → P1
+#   时钟偏移        > 50ms       → P2
+#   数据库可用连接  < 上限 10%   → P1
+#   Outbox 积压     > 1000       → P2
+#   Redis 不可用    持续 1 分钟  → P1
+#   磁盘使用        > 80%        → P2
+#   备份失败或 26 小时无成功备份 → P1
+groups:
+  - name: exam-answer-chain
+    interval: 30s
+    rules:
+      - alert: ExamAnswerSaveErrorRateHigh
+        # 分子分母都是「批次」口径：整批被拒才算失败，单题被拒另计。
+        expr: |
+          sum(rate(attempt_answers_saved_total{result="rejected"}[5m]))
+          /
+          clamp_min(sum(rate(attempt_answers_saved_total[5m])), 0.0001)
+          > 0.01
+        for: 5m
+        labels:
+          severity: P1
+        annotations:
+          summary: 答卷保存错误率超过 1%
+          description: 最近 5 分钟整批保存被拒占比 {{ $value | humanizePercentage }}，先查数据库连接池、限流与 PG 负载。
+
+      - alert: ExamAnswerSaveP95High
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(attempt_answers_saved_duration_seconds_bucket[5m]))) > 0.5
+        for: 5m
+        labels:
+          severity: P2
+        annotations:
+          summary: 答卷保存 p95 超过 500ms
+          description: 当前 p95 {{ $value | humanizeDuration }}，处置入口见《ops-runbook.md》§4.2。
+
+      - alert: ExamAnswerLostSuspected
+        expr: increase(answer_reconciliation_findings_total[10m]) > 0
+        labels:
+          severity: P1
+        annotations:
+          summary: 答卷丢失疑似（对账发现序列号缺口）
+          description: 对账作业发现 {{ $value }} 处差异：会话说收到了、库里没有。立即人工核查，必要时暂停相关场次。
+
+      - alert: ExamActiveSessionsDropped
+        # 掉线是持续状态：拿当前值和近 15 分钟的峰值比，才不会在掉线 5 分钟后自己消警。
+        # 用「均值」作基线的话，掉线后均值会跟着掉下来，告警 5 分钟后自行消失。
+        # 逐场次比：某个场次整体掉线才是故障，全部场次一起降是考试结束。
+        expr: |
+          attempt_active_sessions
+          <
+          0.7 * max_over_time(attempt_active_sessions[15m])
+        for: 5m
+        labels:
+          severity: P1
+        annotations:
+          summary: 活跃会话数骤降
+          description: 场次 {{ $labels.examSessionId }} 的活跃会话数相对 15 分钟峰值下降超过 30%，先查网关、负载均衡与前端报错。
+
+      - alert: ExamFocusEventsSpiking
+        expr: sum(rate(attempt_focus_events_total[5m])) > 50
+        for: 10m
+        labels:
+          severity: P2
+        annotations:
+          summary: 切屏事件激增
+          description: 平均每秒超过 50 次切屏，可能是监考处置或客户端异常。
+
+  - name: exam-capacity
+    interval: 30s
+    rules:
+      - alert: ExamOutboxBacklog
+        expr: outbox_pending_messages > 1000
+        for: 5m
+        labels:
+          severity: P2
+        annotations:
+          summary: Outbox 积压超过 1000 条
+          description: 待派发 {{ $value }} 条，检查 Worker 进程是否存活。
+
+      - alert: ExamBackgroundJobFailed
+        expr: increase(background_job_failures_total[30m]) > 0
+        for: 5m
+        labels:
+          severity: P2
+        annotations:
+          summary: 后台作业失败
+          description: 最近 30 分钟有后台作业失败，查 Worker 日志。
+
+      - alert: ExamBackgroundJobSlow
+        expr: |
+          histogram_quantile(0.95, sum by (le, job) (rate(background_job_duration_seconds_bucket[30m]))) > 300
+        for: 10m
+        labels:
+          severity: P2
+        annotations:
+          summary: 后台作业耗时过长
+          description: 作业 {{ $labels.job }} 的 p95 超过 300 秒。
+
+      - alert: ExamDatabaseConnectionsExhausted
+        # 服务端连接数（pg_stat_activity）对比 max_connections。
+        # Npgsql 没有公开客户端连接池的统计接口，客户端池水位拿不到；
+        # 真正会把数据库压垮的是服务端连接数，这个拿得到。
+        expr: |
+          db_pool_available_connections
+          <
+          0.1 * db_pool_max_connections
+        for: 5m
+        labels:
+          severity: P1
+        annotations:
+          summary: 数据库连接接近耗尽
+          description: 可用连接 {{ $value }} 条，低于上限的 10%，查连接泄漏与慢查询，处置入口见《ops-runbook.md》§4.6。
+
+      - alert: ExamDiskUsageHigh
+        # 按挂载点聚合：同一块盘上的多个挂载点只出一条告警。
+        # 容器自己的 overlay/tmpfs 不算宿主机磁盘。
+        expr: |
+          min by (mountpoint) (
+            node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs|ramfs"}
+            /
+            node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs|ramfs"}
+          ) < 0.2
+        for: 5m
+        labels:
+          severity: P2
+        annotations:
+          summary: 磁盘使用超过 80%
+          description: 挂载点 {{ $labels.mountpoint }} 剩余不足 20%，清理或扩容。
+
+      - alert: ExamBackupFailed
+        # 备份任务自己报自己的状态（node_exporter 的 textfile 采集器）。
+        # 指标整个不存在 = 备份任务从来没跑过，同样要报。
+        expr: |
+          pgbackup_last_run_success == 0
+          or
+          absent(pgbackup_last_run_success)
+        labels:
+          severity: P1
+        annotations:
+          summary: 备份失败或从未执行
+          description: 最近一次备份失败，或备份任务从未留下成功记录；立即人工核查并重跑。
+
+      - alert: ExamBackupStale
+        expr: time() - pgbackup_last_success_timestamp_seconds > 93600
+        labels:
+          severity: P1
+        annotations:
+          summary: 超过 26 小时没有成功备份
+          description: 最近一次成功备份距今已超过 26 小时；查备份任务、归档目录与 WAL 归档链路。
+
+      - alert: ExamClockOffsetHigh
+        # instance 标签由 Prometheus 采集时自动加上：哪个实例偏了就看哪个。
+        expr: clock_offset_ms > 50
+        for: 5m
+        labels:
+          severity: P2
+        annotations:
+          summary: 应用时钟与数据库时钟偏差超过 50ms
+          description: 实例 {{ $labels.instance }} 偏差 {{ $value }} 毫秒，查宿主机 NTP 与容器时区。
+
+      - alert: ExamRedisUnavailable
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: P1
+        annotations:
+          summary: Redis 不可用
+          description: Redis 探测失败持续 1 分钟以上：权限缓存与令牌吊销名单降级为进程内，作答路径仍可用。
+
+  - name: exam-application
+    interval: 30s
+    rules:
+      - alert: ExamHttpErrorRateHigh
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(http_requests_total[5m])), 0.0001)
+          > 0.001
+        for: 5m
+        labels:
+          severity: P1
+        annotations:
+          summary: HTTP 5xx 比例超过 0.1%
+          description: 最近 5 分钟 5xx 占比 {{ $value | humanizePercentage }}，先查最近的发布与数据库负载。
+
+      - alert: ExamRedisCommandSlow
+        expr: |
+          histogram_quantile(0.95, sum by (le, op) (rate(redis_command_duration_seconds_bucket[10m]))) > 0.05
+        for: 10m
+        labels:
+          severity: P2
+        annotations:
+          summary: Redis 命令 p95 超过 50ms
+          description: 操作 {{ $labels.op }} 的 p95 超过 50 毫秒，查 Redis 自身负载与网络。

@@ -264,22 +264,77 @@ EF 的 Design 包只在「生成迁移」时需要；运行时直接调用 `Migr
 
 ### 5.1 指标（Prometheus）
 
+指标分两拨：API 进程报的（业务链路）与 Worker 进程报的（后台作业与数据库水位）。
+**同一个指标名只在一个进程里出现**——两个进程各报一次，告警里的比例就凭空翻倍。
+
+#### API 进程（`/metrics`）
+
 | 指标 | 类型 | 标签 | 用途 |
 |---|---|---|---|
 | `http_requests_total` | Counter | method, route, status | 请求量 |
 | `http_request_duration_seconds` | Histogram | method, route | 延迟分位 |
-| `attempt_answers_saved_total` | Counter | result | 保存成功/失败/去重 |
-| `attempt_answers_saved_duration_seconds` | Histogram | — | 保存延迟（关键 SLO） |
-| `attempt_active_sessions` | Gauge | examSessionId | 活跃会话数 |
+| `attempt_answers_saved_total` | Counter | result | 保存批次（saved / duplicate / rejected） |
+| `attempt_answers_saved_duration_seconds` | Histogram | — | 落库延迟（关键 SLO） |
+| `attempt_answer_items_rejected_total` | Counter | — | 单题被拒数 |
 | `attempt_focus_events_total` | Counter | type | 焦点事件分布 |
-| `exam_sessions_published` | Gauge | — | 已发布场次 |
-| `db_pool_active_connections` | Gauge | — | 连接池占用 |
-| `db_pool_available_connections` | Gauge | — | 连接池余量 |
-| `redis_command_duration_seconds` | Histogram | op | Redis 延迟 |
+| `exam_sessions_published_total` | Counter | — | 场次发布次数 |
 | `signalr_connections` | Gauge | — | SignalR 连接数 |
 | `clock_offset_ms` | Gauge | instance | 时钟偏移（P-06） |
+| `redis_up` | Gauge | — | Redis 可用性（1 可用 / 0 不可用） |
+| `redis_command_duration_seconds` | Histogram | op | Redis 命令延迟 |
+
+#### Worker 进程（`:9090/metrics`）
+
+| 指标 | 类型 | 标签 | 用途 |
+|---|---|---|---|
+| `attempt_active_sessions` | Gauge | examSessionId | 活跃作答会话数 |
 | `outbox_pending_messages` | Gauge | — | Outbox 积压 |
 | `background_job_duration_seconds` | Histogram | job | 后台作业耗时 |
+| `background_job_failures_total` | Counter | job | 后台作业失败次数 |
+| `answer_reconciliation_findings_total` | Counter | — | 答卷对账发现的差异数 |
+| `db_pool_active_connections` | Gauge | — | 数据库服务端连接数 |
+| `db_pool_max_connections` | Gauge | — | 数据库服务端连接上限 |
+| `db_pool_available_connections` | Gauge | — | 数据库服务端剩余连接 |
+
+#### 外部来源
+
+| 指标 | 来源 | 用途 |
+|---|---|---|
+| `node_filesystem_avail_bytes` / `node_filesystem_size_bytes` | node_exporter | 宿主机磁盘水位 |
+| `pgbackup_last_run_success` | 备份任务写 textfile，node_exporter 采集 | 最近一次备份是否成功 |
+| `pgbackup_last_success_timestamp_seconds` | 同上 | 最近一次成功备份的时刻 |
+| `pgbackup_last_run_timestamp_seconds` | 同上 | 最近一次备份任务的执行时刻 |
+
+**口径说明**（都是踩过坑才定下来的）：
+
+- `attempt_answers_saved_total` 是**批次**口径：`saved` 整批落库、`duplicate` 重放整批忽略、
+  `rejected` 整批被拒（场次取消、超时、已交卷）。分子分母同为批次，错误率才有意义。
+- 单题被拒（题不在卷面、载荷不合法）另计 `attempt_answer_items_rejected_total`：**一题一次**，
+  不混进批次口径——一题一次混进批次口径，错误率的分母就被悄悄改小了。
+- `attempt_answers_saved_duration_seconds` 只观测真正落库的批次。被拒批次的 0 秒混进直方图，
+  p95 会被拉低，掩盖真实延迟。
+- `attempt_active_sessions` 由 Worker 从 `delivery.attempt` 采样，判据是**心跳新鲜度**
+  （在场的 `in_progress` 会话且心跳未超时），不靠进程内加减：进程内加减在多实例与重启后必然失真，
+  而心跳一停就能立刻看出掉线。场次不在进行中时序列被撤掉——留着 0 值序列，
+  考完之后告警还会拿 0 去比考中的峰值。
+- `db_pool_*` 是 **PostgreSQL 服务端**连接数，不是 Npgsql 客户端池：Npgsql 没有公开客户端池的统计接口，
+  但真正会把数据库压垮的是服务端连接数，而 `pg_stat_activity` 与 `max_connections` 应用账号都读得到。
+- `clock_offset_ms` 是应用时钟与数据库时钟的**绝对偏差**（毫秒）；`instance` 标签由 Prometheus 采集时
+  自动附加，哪个实例偏了就看哪个。
+- `http_requests_total` 的 `route` 标签取路由模板（`api/v1/attempts/{id}`），不取原始路径——
+  原始路径由客户端控制，拿它当标签等于把标签基数交给攻击者。
+
+**采集路径**：API 进程的 `/metrics`（prometheus-net 注册表）与 Worker 的 `:9090/metrics`
+（独立注册表，只读端口）。两处都由 Prometheus 直接抓——配置见 `deploy/monitoring/prometheus.yml`，
+告警规则见 `deploy/monitoring/prometheus-rules.yml`，路由见 `deploy/monitoring/alertmanager.yml`，
+看板见 `deploy/monitoring/grafana/dashboard-exam.json`。
+
+**指标要先建好**：即使还没发生过保存答案，`/metrics` 也要列出指标名——
+告警表达式不能因为「指标不存在」而失效。
+
+**规则引用的指标必须真的存在**：`scripts/check-metric-names.py` 在 CI 里核对
+「规则与看板引用的指标名」与「应用导出的指标名」，对不上即失败。
+引一个不存在的指标，规则永远不触发，而且没有任何报错。
 
 ### 5.2 日志
 
@@ -293,18 +348,34 @@ OpenTelemetry + OTLP 导出。每条请求生成 Trace，Span 划分：HTTP → 
 
 ### 5.4 告警规则
 
-| 告警 | 条件 | 级别 | 处置 |
-|---|---|---|---|
-| 答卷保存错误率升高 | 5 分钟内错误率 > 1% | P1 | 查 DB 连接池、限流、PG 负载 |
-| 答卷保存 p95 超标 | 5 分钟 p95 > 500 ms | P2 | 同上 |
-| **答卷丢失疑似** | 对账作业发现序列号差异 > 0 | **P1** | 立即人工核查，暂停相关场次 |
-| 可用会话数骤降 | 活跃会话数 5 分钟内下降 > 30% | P1 | 查网关/负载均衡/前端报错 |
-| 时钟偏移 | `clock_offset_ms > 50` 持续 5 分钟 | P2 | 检查 NTP |
-| 数据库连接耗尽 | 可用连接 < 10% | P1 | 查连接泄漏与慢查询 |
-| Outbox 积压 | 待派发 > 1000 持续 5 分钟 | P2 | 查 worker 状态 |
-| Redis 不可用 | 探测失败 1 分钟 | P1 | 查 Redis；作答路径应仍可用 |
-| 磁盘使用 > 80% | 5 分钟 | P2 | 清理/扩容 |
-| 备份失败 | 每日备份任务失败 | P1 | 立即重跑 |
+规则的唯一事实来源是 `deploy/monitoring/prometheus-rules.yml`，下表是它的人读版。
+值班时按**规则名**检索（Prometheus、Alertmanager、Grafana 里都用这个名字）。
+
+| 告警 | 规则名 | 条件 | 级别 | 处置 |
+|---|---|---|---|---|
+| 答卷保存错误率升高 | `ExamAnswerSaveErrorRateHigh` | 5 分钟内整批被拒占比 > 1% | P1 | 查 DB 连接池、限流、PG 负载 |
+| 答卷保存 p95 超标 | `ExamAnswerSaveP95High` | 5 分钟 p95 > 500 ms | P2 | 同上 |
+| **答卷丢失疑似** | `ExamAnswerLostSuspected` | 对账作业发现序列号差异 > 0 | **P1** | 立即人工核查，暂停相关场次 |
+| 可用会话数骤降 | `ExamActiveSessionsDropped` | 单场次活跃会话数相对 15 分钟峰值下降 > 30% | P1 | 查网关/负载均衡/前端报错 |
+| 切屏事件激增 | `ExamFocusEventsSpiking` | 平均每秒 > 50 次，持续 10 分钟 | P2 | 查监考处置与客户端异常 |
+| 时钟偏移 | `ExamClockOffsetHigh` | `clock_offset_ms > 50` 持续 5 分钟 | P2 | 检查 NTP |
+| 数据库连接耗尽 | `ExamDatabaseConnectionsExhausted` | 可用连接 < 上限的 10% | P1 | 查连接泄漏与慢查询 |
+| Outbox 积压 | `ExamOutboxBacklog` | 待派发 > 1000 持续 5 分钟 | P2 | 查 worker 状态 |
+| 后台作业失败 | `ExamBackgroundJobFailed` | 30 分钟内有作业失败 | P2 | 查 Worker 日志 |
+| 后台作业变慢 | `ExamBackgroundJobSlow` | 作业 p95 > 300 秒 | P2 | 查 Worker 日志与数据库负载 |
+| Redis 不可用 | `ExamRedisUnavailable` | `redis_up == 0` 持续 1 分钟 | P1 | 查 Redis；作答路径应仍可用 |
+| Redis 命令变慢 | `ExamRedisCommandSlow` | p95 > 50 ms | P2 | 查 Redis 负载与网络 |
+| 磁盘使用 > 80% | `ExamDiskUsageHigh` | 5 分钟 | P2 | 清理/扩容 |
+| 备份失败 | `ExamBackupFailed` | 最近一次备份失败，或备份任务从未执行 | P1 | 立即重跑 |
+| 备份过期 | `ExamBackupStale` | 26 小时没有成功备份 | P1 | 查备份任务、归档目录与 WAL 归档链路 |
+| HTTP 5xx 比例 | `ExamHttpErrorRateHigh` | 5 分钟内 > 0.1% | P1 | 查最近的发布与数据库负载 |
+
+**每条规则都有单元测试**：`deploy/monitoring/prometheus-rules.test.yml` 用 promtool
+造出越界的指标序列，断言告警按预期 firing，正常时断言不 firing。
+改规则必须同步改用例，CI 里 `promtool test rules` 不过即失败。
+
+**规则引用的指标必须真的存在**：`scripts/check-metric-names.py` 在 CI 里核对
+「规则与看板引用的指标名」与「应用导出的指标名」，对不上即失败。
 
 ### 5.5 健康检查
 

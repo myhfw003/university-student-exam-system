@@ -13,6 +13,37 @@ set -eu
 
 STANZA="${STANZA:-db}"
 
+# 备份状态指标目录。node_exporter 的 textfile 采集器会读这里的 *.prom，
+# 备份任务自己报自己的状态：备份失败了不能等人工去看日志才发现。
+METRICS_DIR="${METRICS_DIR:-/backup-metrics}"
+METRICS_FILE="${METRICS_DIR}/backup.prom"
+STATE_FILE="${METRICS_DIR}/last_success_timestamp"
+
+publish_metrics() {
+    # $1：本次备份是否成功（1/0）
+    run_success="$1"
+    now="$(date +%s)"
+    last_success="$(cat "${STATE_FILE}" 2>/dev/null || echo 0)"
+
+    {
+        echo "# HELP pgbackup_last_run_timestamp_seconds 最近一次备份任务的执行时刻（Unix 秒）"
+        echo "# TYPE pgbackup_last_run_timestamp_seconds gauge"
+        echo "pgbackup_last_run_timestamp_seconds ${now}"
+        echo "# HELP pgbackup_last_run_success 最近一次备份任务是否成功（1 成功 / 0 失败）"
+        echo "# TYPE pgbackup_last_run_success gauge"
+        echo "pgbackup_last_run_success ${run_success}"
+        echo "# HELP pgbackup_last_success_timestamp_seconds 最近一次成功备份的时刻（Unix 秒）"
+        echo "# TYPE pgbackup_last_success_timestamp_seconds gauge"
+        echo "pgbackup_last_success_timestamp_seconds ${last_success}"
+    } > "${METRICS_FILE}.tmp"
+
+    mv "${METRICS_FILE}.tmp" "${METRICS_FILE}"
+}
+
+save_success() {
+    date +%s > "${STATE_FILE}"
+}
+
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
 }
@@ -24,8 +55,15 @@ until pg_isready -h "${PGHOST:-postgres}" -p "${PGPORT:-5432}" -U "${PGUSER:-exa
 done
 
 log "开始基线全量备份。"
-pgbackrest --stanza="$STANZA" --type=backup backup
-log "基线全量备份完成。"
+if pgbackrest --stanza="$STANZA" --type=backup backup; then
+    save_success
+    publish_metrics 1
+    log "基线全量备份完成。"
+else
+    publish_metrics 0
+    log "基线全量备份失败。"
+    exit 1
+fi
 
 while true; do
     now="$(date '+%H%M')"
@@ -33,13 +71,30 @@ while true; do
 
     if [ "$now" = "0200" ]; then
         log "每日全量备份。"
-        pgbackrest --stanza="$STANZA" --type=backup backup || log "全量备份失败，下一轮重试。"
+        if pgbackrest --stanza="$STANZA" --type=backup backup; then
+            save_success
+            publish_metrics 1
+        else
+            publish_metrics 0
+            log "全量备份失败，下一轮重试。"
+        fi
     elif [ "$now" = "0300" ]; then
         log "每日差异备份。"
-        pgbackrest --stanza="$STANZA" --type=diff backup || log "差异备份失败，下一轮重试。"
+        if pgbackrest --stanza="$STANZA" --type=diff backup; then
+            save_success
+            publish_metrics 1
+        else
+            publish_metrics 0
+            log "差异备份失败，下一轮重试。"
+        fi
     elif [ "$now" = "0400" ] && [ "$weekday" = "1" ]; then
         log "过期清理。"
-        pgbackrest --stanza="$STANZA" expire || log "过期清理失败，下一轮重试。"
+        if pgbackrest --stanza="$STANZA" expire; then
+            publish_metrics 1
+        else
+            publish_metrics 0
+            log "过期清理失败，下一轮重试。"
+        fi
     fi
 
     sleep 60

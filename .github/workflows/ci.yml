@@ -44,6 +44,31 @@ jobs:
             echo "检测到高危漏洞"; cat vulnerabilities.json; exit 1
           fi
 
+  monitoring:
+    name: 监控配置校验
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 指标名核对
+        # 规则引用的指标必须真的被应用导出。引一个不存在的指标，
+        # 规则永远不触发，等于没有这条告警——而且没有任何报错。
+        run: python3 scripts/check-metric-names.py
+      - name: promtool 校验告警规则
+        run: |
+          docker run --rm --entrypoint /bin/promtool \
+            -v "$PWD/deploy/monitoring:/w" -w /w \
+            prom/prometheus:v2.54.1 check rules prometheus-rules.yml
+      - name: promtool 单元测试（人为造异常必须触发预期告警）
+        # 每条规则都有正反两组用例：造出越界的指标序列，断言告警按预期 firing。
+        run: |
+          docker run --rm --entrypoint /bin/promtool \
+            -v "$PWD/deploy/monitoring:/w" -w /w \
+            prom/prometheus:v2.54.1 test rules prometheus-rules.test.yml
+      - name: 监控栈配置渲染
+        run: |
+          cd deploy
+          GRAFANA_ADMIN_PASSWORD=ci-only docker compose --profile monitoring config > /dev/null
+
   frontend:
     name: 前端构建与测试
     runs-on: ubuntu-latest

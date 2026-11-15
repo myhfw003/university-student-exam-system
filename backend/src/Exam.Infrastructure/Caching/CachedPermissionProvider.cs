@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Exam.Application.Common.Interfaces;
 using StackExchange.Redis;
@@ -30,17 +31,20 @@ public sealed class CachedPermissionProvider : IPermissionProvider
     private readonly IConnectionMultiplexer? _redis;
     private readonly RedisCacheNamespace _namespace;
     private readonly ILogger<CachedPermissionProvider> _logger;
+    private readonly IExamMetrics? _metrics;
 
     public CachedPermissionProvider(
         IServiceScopeFactory scopeFactory,
         RedisCacheNamespace redisNamespace,
         ILogger<CachedPermissionProvider> logger,
-        IConnectionMultiplexer? redis = null)
+        IConnectionMultiplexer? redis = null,
+        IExamMetrics? metrics = null)
     {
         _scopeFactory = scopeFactory;
         _namespace = redisNamespace;
         _logger = logger;
         _redis = redis;
+        _metrics = metrics;
     }
 
     public async Task<IReadOnlySet<string>> GetPermissionsAsync(
@@ -82,6 +86,8 @@ public sealed class CachedPermissionProvider : IPermissionProvider
             return;
         }
 
+        var stopwatch = Stopwatch.StartNew();
+
         try
         {
             await _redis.GetDatabase().KeyDeleteAsync(_namespace.Key($"perm:{userId}"));
@@ -89,6 +95,10 @@ public sealed class CachedPermissionProvider : IPermissionProvider
         catch (Exception ex)
         {
             _logger.LogError(ex, "失效用户权限缓存失败，已清除进程内缓存。");
+        }
+        finally
+        {
+            _metrics?.RecordRedisCommand("permission_delete", stopwatch.Elapsed.TotalSeconds);
         }
     }
 
@@ -98,6 +108,8 @@ public sealed class CachedPermissionProvider : IPermissionProvider
         {
             return null;
         }
+
+        var stopwatch = Stopwatch.StartNew();
 
         try
         {
@@ -115,6 +127,10 @@ public sealed class CachedPermissionProvider : IPermissionProvider
             _logger.LogError(ex, "读取用户权限缓存失败，回落到数据库。");
             return null;
         }
+        finally
+        {
+            _metrics?.RecordRedisCommand("permission_get", stopwatch.Elapsed.TotalSeconds);
+        }
     }
 
     private async Task TryWriteRedisAsync(long userId, HashSet<string> permissions, DateTimeOffset now)
@@ -123,6 +139,8 @@ public sealed class CachedPermissionProvider : IPermissionProvider
         {
             return;
         }
+
+        var stopwatch = Stopwatch.StartNew();
 
         try
         {
@@ -134,6 +152,10 @@ public sealed class CachedPermissionProvider : IPermissionProvider
         catch (Exception ex)
         {
             _logger.LogError(ex, "写入用户权限缓存失败，本次仅使用进程内缓存。");
+        }
+        finally
+        {
+            _metrics?.RecordRedisCommand("permission_set", stopwatch.Elapsed.TotalSeconds);
         }
     }
 

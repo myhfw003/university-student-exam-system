@@ -1060,7 +1060,7 @@ P0 基础设施
 | T-P9-03 性能调优与容量验证 | ✅ 完成 | 快照缓存 + 只读查询免跟踪 + 连接池调优 + 索引评审 |
 | T-P9-04 安全加固 | ✅ 完成 | 15 项清单逐条复核 + SQL 注入架构测试 + 探针豁免限流 + 全站 HTTPS 配置 |
 | T-P9-05 备份与恢复 | ✅ 完成 | pgBackRest 配置与定时任务 + 恢复脚本 + 季度演练脚本 + 首轮演练记录 |
-| T-P9-06 监控与告警完善 | ⬜ 未开始 | |
+| T-P9-06 监控与告警完善 | ✅ 完成 | 16 条告警规则 + 32 例 promtool 用例 + 23 面板看板 + 值班手册 + 指标名 CI 闸门 + 两层演练记录 |
 | T-P9-07 文档交付 | ⬜ 未开始 | |
 
 ### T-P9-01 端到端测试
@@ -1132,6 +1132,62 @@ P0 基础设施
 - **依赖**：T-P9-02
 - **产出**：完整 Grafana 看板（作答链路、监考、容量）、告警规则与路由、值班手册。
 - **验收**：人为制造异常能触发预期告警。
+
+**T-P9-06 交付说明**
+
+- **先说结论**：上一轮的告警规则**一条都触发不了**。不是配置写错，是指标对不上——
+  规则引用的指标应用根本没导出，或者导出了但从来没被赋值。本轮把这件事从根上修掉，
+  并加了 CI 闸门防止复发。
+- **查出并修掉的六类缺陷**：
+  1. `attempt_active_sessions` 从来没被 +1（`AttemptStarted` 根本没人调用），
+     `AttemptFinished` 还在给练习作答减数（练习没有场次 ID）。
+     → 改为 Worker 从 `delivery.attempt` 采样，按**心跳新鲜度**判定；场次不在进行中时序列自动撤掉；
+     进程内的加减法删除。多实例与重启后进程内计数必然失真，心跳一停才能立刻看出掉线。
+  2. 规则写的是 `http_server_requests_total{status=...}`，prometheus-net 实际导出的是
+     `http_requests_received_total{code=...}`。→ 自己写了 `HttpMetricsMiddleware`，
+     导出 `http_requests_total{method,route,status}`；route 取路由模板不取原始路径
+     （原始路径由客户端控制，拿它当标签等于把标签基数交给攻击者）。
+  3. `ExamDatabaseConnectionsExhausted` 依赖 `npgsql_connections_closed_total` 与 `db_pool_*`——
+     **Npgsql 没有公开的连接池统计接口**（Npgsql 10.0.3 的 XML 文档里 "Statistics" 零命中）。
+     → 改用 `pg_stat_activity` + `max_connections`，已实测 `exam_app` 账号都读得到。
+  4. 设计文档 §5.1 承诺的 `clock_offset_ms`、`redis_command_duration_seconds{op}`、
+     `signalr_connections`、`exam_sessions_published` **一个都没实现**；§5.4 列的
+     「时钟偏移」「Redis 不可用」「备份失败」三条告警**没有任何指标支撑**。
+     → 全部补齐：时钟偏移探针（应用时钟对数据库时钟）、Redis 探针 + 各命令耗时、
+     SignalR 连接计数、备份任务把状态写成 textfile 指标由 node_exporter 采集。
+  5. `attempt_answers_saved_total{result}` 把「单题被拒」和「整批」混在一个计数器里，
+     错误率的分母被悄悄改小。→ 拆成批次口径（saved/duplicate/rejected）
+     与单题口径 `attempt_answer_items_rejected_total`。
+  6. 延迟直方图带 `result` 标签，被拒批次的 0 秒混进去，p95 被拉低、掩盖真实延迟。
+     → 直方图不带标签，只观测真正落库的批次。
+- **指标按进程隔离**：API 侧与 Worker 侧拆成两个接口、两个实现、两个注册表，
+  `IExamMetrics` 只在 API 进程解析、`IWorkerMetrics` 只在 Worker 进程解析。
+  同一个指标名被两个进程各报一次，告警里的比例就翻倍——这比「指标不存在」更隐蔽。
+  `MetricRegistryTests` 断言两套注册表互不污染。
+- **告警规则 16 条**：覆盖设计文档 §5.4 的全部条目，另加切屏激增、HTTP 5xx、
+  后台作业失败/变慢、Redis 命令变慢。每条都有 promtool 单元用例（正反两组，共 32 例），CI 里跑。
+- **CI 新增 `monitoring` job**：
+  - `scripts/check-metric-names.py`：核对「规则与看板引用的指标名」与「应用导出的指标名」，
+    对不上即失败——**这正是当初放过上面六类缺陷的那道闸**；
+  - `promtool check rules` 与 `promtool test rules`；
+  - `docker compose --profile monitoring config` 渲染校验。
+- **看板 23 个面板**，分 3 行（作答链路 / 监考与会话 / 容量与后台作业），全部用真实存在的指标名。
+- **值班手册**：《ops-runbook.md》§10（分级与首响、值班安排、处置原则、升级路径、交接）
+  与 §11 告警演练（规则级 + 环境级逐条「怎么造异常、怎么确认 firing、怎么确认自动 resolved」）。
+- **验收做实了**（记录见《07-alert-drill.md》）：规则级 32 例 promtool 用例全绿；
+  环境级在真实监控栈上跑了 Redis 不可用（firing → 恢复后自动 resolved）与
+  活跃会话骤降（pending 5 分钟后 firing → 恢复心跳后消警）两条，
+  外加备份任务缺失触发的 ExamBackupFailed 真阳性。
+  **演练当场抓出四个真问题**：Worker 解析不了 ICurrentUser / IRequestContext（后台进程没有 HTTP 上下文）、
+  HttpListener 前缀写错导致 Worker 起不来就死、PostgreSQL 的 count() 是 bigint 而代码按 int32 读。
+  这四个都在本轮修掉了。
+- **说清楚没做到的**：
+  - 环境级演练只跑了三条（Redis、活跃会话、备份缺失），其余告警（数据库连接耗尽、Outbox 积压、
+    答卷丢失疑似、时钟偏移、HTTP 5xx、磁盘水位、切屏激增）**本轮没有逐条跑**，
+    按《ops-runbook.md》§11.2 的手法随季度演练补齐。
+  - `db_pool_*` 是 PostgreSQL **服务端**连接数，不是 Npgsql 客户端池水位
+    （客户端池没有公开接口），文档已写明口径。
+  - Grafana 看板未做带数据的截图核对（Grafana 容器未在本机拉起）。
 
 ### T-P9-07 文档交付
 - **依赖**：全部

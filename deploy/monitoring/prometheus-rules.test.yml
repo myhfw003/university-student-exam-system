@@ -1,0 +1,458 @@
+# 告警规则的单元测试（promtool test rules）。
+#
+# 验收口径（对应 T-P9-06 的「人为制造异常能触发预期告警」）：
+# 每条规则都有正反两组用例——造出越界的指标序列，断言告警按预期 firing；
+# 一切正常时，断言不 firing。
+#
+# 跑法（在 deploy/monitoring 目录下）：
+#   docker run --rm --entrypoint /bin/promtool -v "$PWD:/w" -w /w \
+#     prom/prometheus:v2.54.1 test rules prometheus-rules.test.yml
+#
+# 本文件由 gen-rules-test.py 维护，改规则时同步改这里的期望值。
+rule_files:
+  - prometheus-rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: 答卷保存错误率超标应触发
+    interval: 1m
+    input_series:
+      - series: 'attempt_answers_saved_total{result="saved"}'
+        values: '0+100x20'
+      - series: 'attempt_answers_saved_total{result="rejected"}'
+        values: '0+5x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamAnswerSaveErrorRateHigh
+        exp_alerts:
+          - exp_labels:
+              alertname: ExamAnswerSaveErrorRateHigh
+              severity: P1
+            exp_annotations:
+              summary: 答卷保存错误率超过 1%
+              description: 最近 5 分钟整批保存被拒占比 4.762%，先查数据库连接池、限流与 PG 负载。
+  - name: 答卷保存错误率正常不应触发
+    interval: 1m
+    input_series:
+      - series: 'attempt_answers_saved_total{result="saved"}'
+        values: '0+100x20'
+      - series: 'attempt_answers_saved_total{result="rejected"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamAnswerSaveErrorRateHigh
+        exp_alerts: []
+  - name: 答卷保存变慢应触发
+    interval: 1m
+    input_series:
+      - series: 'attempt_answers_saved_duration_seconds_bucket{le="0.1"}'
+        values: '0+1x20'
+      - series: 'attempt_answers_saved_duration_seconds_bucket{le="0.5"}'
+        values: '0+1x20'
+      - series: 'attempt_answers_saved_duration_seconds_bucket{le="1"}'
+        values: '0+1x20'
+      - series: 'attempt_answers_saved_duration_seconds_bucket{le="+Inf"}'
+        values: '0+100x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamAnswerSaveP95High
+        exp_alerts:
+          - exp_labels:
+              alertname: ExamAnswerSaveP95High
+              severity: P2
+            exp_annotations:
+              summary: 答卷保存 p95 超过 500ms
+              description: 当前 p95 1s，处置入口见《ops-runbook.md》§4.2。
+  - name: 答卷保存速度正常不应触发
+    interval: 1m
+    input_series:
+      - series: 'attempt_answers_saved_duration_seconds_bucket{le="0.1"}'
+        values: '0+100x20'
+      - series: 'attempt_answers_saved_duration_seconds_bucket{le="0.5"}'
+        values: '0+100x20'
+      - series: 'attempt_answers_saved_duration_seconds_bucket{le="1"}'
+        values: '0+100x20'
+      - series: 'attempt_answers_saved_duration_seconds_bucket{le="+Inf"}'
+        values: '0+100x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamAnswerSaveP95High
+        exp_alerts: []
+  - name: 对账发现答卷差异应触发
+    interval: 1m
+    input_series:
+      - series: 'answer_reconciliation_findings_total'
+        values: '0+2x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamAnswerLostSuspected
+        exp_alerts:
+          - exp_labels:
+              alertname: ExamAnswerLostSuspected
+              severity: P1
+            exp_annotations:
+              summary: 答卷丢失疑似（对账发现序列号缺口）
+              description: 对账作业发现 20 处差异：会话说收到了、库里没有。立即人工核查，必要时暂停相关场次。
+  - name: 对账无差异不应触发
+    interval: 1m
+    input_series:
+      - series: 'answer_reconciliation_findings_total'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamAnswerLostSuspected
+        exp_alerts: []
+  - name: 活跃会话骤降应触发
+    interval: 1m
+    input_series:
+      - series: 'attempt_active_sessions{examSessionId="1"}'
+        values: '100x12 10x20'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ExamActiveSessionsDropped
+        exp_alerts:
+          - exp_labels:
+              alertname: ExamActiveSessionsDropped
+              severity: P1
+              examSessionId: 1
+            exp_annotations:
+              summary: 活跃会话数骤降
+              description: 场次 1 的活跃会话数相对 15 分钟峰值下降超过 30%，先查网关、负载均衡与前端报错。
+  - name: 活跃会话平稳不应触发
+    interval: 1m
+    input_series:
+      - series: 'attempt_active_sessions{examSessionId="1"}'
+        values: '100x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ExamActiveSessionsDropped
+        exp_alerts: []
+  - name: 切屏激增应触发
+    interval: 1m
+    input_series:
+      - series: 'attempt_focus_events_total{type="blur"}'
+        values: '0+4000x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ExamFocusEventsSpiking
+        exp_alerts:
+          - exp_labels:
+              alertname: ExamFocusEventsSpiking
+              severity: P2
+            exp_annotations:
+              summary: 切屏事件激增
+              description: 平均每秒超过 50 次切屏，可能是监考处置或客户端异常。
+  - name: 切屏正常不应触发
+    interval: 1m
+    input_series:
+      - series: 'attempt_focus_events_total{type="blur"}'
+        values: '0+10x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ExamFocusEventsSpiking
+        exp_alerts: []
+  - name: Outbox 积压应触发
+    interval: 1m
+    input_series:
+      - series: 'outbox_pending_messages'
+        values: '1500x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamOutboxBacklog
+        exp_alerts:
+          - exp_labels:
+              alertname: ExamOutboxBacklog
+              severity: P2
+            exp_annotations:
+              summary: Outbox 积压超过 1000 条
+              description: 待派发 1500 条，检查 Worker 进程是否存活。
+  - name: Outbox 无积压不应触发
+    interval: 1m
+    input_series:
+      - series: 'outbox_pending_messages'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamOutboxBacklog
+        exp_alerts: []
+  - name: 后台作业失败应触发
+    interval: 1m
+    input_series:
+      - series: 'background_job_failures_total{job="statistics"}'
+        values: '0+1x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamBackgroundJobFailed
+        exp_alerts:
+          - exp_labels:
+              alertname: ExamBackgroundJobFailed
+              severity: P2
+              job: statistics
+            exp_annotations:
+              summary: 后台作业失败
+              description: 最近 30 分钟有后台作业失败，查 Worker 日志。
+  - name: 后台作业无失败不应触发
+    interval: 1m
+    input_series:
+      - series: 'background_job_failures_total{job="statistics"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamBackgroundJobFailed
+        exp_alerts: []
+  - name: 后台作业变慢应触发
+    interval: 1m
+    input_series:
+      - series: 'background_job_duration_seconds_bucket{job="statistics",le="10"}'
+        values: '0+1x40'
+      - series: 'background_job_duration_seconds_bucket{job="statistics",le="300"}'
+        values: '0+1x40'
+      - series: 'background_job_duration_seconds_bucket{job="statistics",le="600"}'
+        values: '0+1x40'
+      - series: 'background_job_duration_seconds_bucket{job="statistics",le="+Inf"}'
+        values: '0+10x40'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: ExamBackgroundJobSlow
+        exp_alerts:
+          - exp_labels:
+              alertname: ExamBackgroundJobSlow
+              severity: P2
+              job: statistics
+            exp_annotations:
+              summary: 后台作业耗时过长
+              description: 作业 statistics 的 p95 超过 300 秒。
+  - name: 数据库可用连接不足应触发
+    interval: 1m
+    input_series:
+      - series: 'db_pool_active_connections'
+        values: '198x20'
+      - series: 'db_pool_max_connections'
+        values: '200x20'
+      - series: 'db_pool_available_connections'
+        values: '2x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamDatabaseConnectionsExhausted
+        exp_alerts:
+          - exp_labels:
+              alertname: ExamDatabaseConnectionsExhausted
+              severity: P1
+            exp_annotations:
+              summary: 数据库连接接近耗尽
+              description: 可用连接 2 条，低于上限的 10%，查连接泄漏与慢查询，处置入口见《ops-runbook.md》§4.6。
+  - name: 数据库可用连接充足不应触发
+    interval: 1m
+    input_series:
+      - series: 'db_pool_active_connections'
+        values: '20x20'
+      - series: 'db_pool_max_connections'
+        values: '200x20'
+      - series: 'db_pool_available_connections'
+        values: '60x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamDatabaseConnectionsExhausted
+        exp_alerts: []
+  - name: 磁盘使用率过高应触发
+    interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{device="/dev/sda1",fstype="ext4",mountpoint="/"}'
+        values: '10x20'
+      - series: 'node_filesystem_size_bytes{device="/dev/sda1",fstype="ext4",mountpoint="/"}'
+        values: '100x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamDiskUsageHigh
+        exp_alerts:
+          - exp_labels:
+              alertname: ExamDiskUsageHigh
+              severity: P2
+              mountpoint: /
+            exp_annotations:
+              summary: 磁盘使用超过 80%
+              description: 挂载点 / 剩余不足 20%，清理或扩容。
+  - name: 磁盘充足不应触发
+    interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{device="/dev/sda1",fstype="ext4",mountpoint="/"}'
+        values: '50x20'
+      - series: 'node_filesystem_size_bytes{device="/dev/sda1",fstype="ext4",mountpoint="/"}'
+        values: '100x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamDiskUsageHigh
+        exp_alerts: []
+  - name: 备份失败应触发
+    interval: 1m
+    input_series:
+      - series: 'pgbackup_last_run_success'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamBackupFailed
+        exp_alerts:
+          - exp_labels:
+              alertname: ExamBackupFailed
+              severity: P1
+            exp_annotations:
+              summary: 备份失败或从未执行
+              description: 最近一次备份失败，或备份任务从未留下成功记录；立即人工核查并重跑。
+  - name: 备份成功不应触发
+    interval: 1m
+    input_series:
+      - series: 'pgbackup_last_run_success'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamBackupFailed
+        exp_alerts: []
+  - name: 备份任务从未跑过应触发
+    interval: 1m
+    input_series:
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamBackupFailed
+        exp_alerts:
+          - exp_labels:
+              alertname: ExamBackupFailed
+              severity: P1
+            exp_annotations:
+              summary: 备份失败或从未执行
+              description: 最近一次备份失败，或备份任务从未留下成功记录；立即人工核查并重跑。
+  - name: 超过 26 小时没有成功备份应触发
+    interval: 1m
+    input_series:
+      - series: 'pgbackup_last_success_timestamp_seconds'
+        values: '-93700x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamBackupStale
+        exp_alerts:
+          - exp_labels:
+              alertname: ExamBackupStale
+              severity: P1
+            exp_annotations:
+              summary: 超过 26 小时没有成功备份
+              description: 最近一次成功备份距今已超过 26 小时；查备份任务、归档目录与 WAL 归档链路。
+  - name: 刚成功备份过不应触发
+    interval: 1m
+    input_series:
+      - series: 'pgbackup_last_success_timestamp_seconds'
+        values: '600x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamBackupStale
+        exp_alerts: []
+  - name: 时钟偏移超限应触发
+    interval: 1m
+    input_series:
+      - series: 'clock_offset_ms'
+        values: '120x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamClockOffsetHigh
+        exp_alerts:
+          - exp_labels:
+              alertname: ExamClockOffsetHigh
+              severity: P2
+            exp_annotations:
+              summary: 应用时钟与数据库时钟偏差超过 50ms
+              description: 实例  偏差 120 毫秒，查宿主机 NTP 与容器时区。
+  - name: 时钟偏移正常不应触发
+    interval: 1m
+    input_series:
+      - series: 'clock_offset_ms'
+        values: '10x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamClockOffsetHigh
+        exp_alerts: []
+  - name: Redis 不可用应触发
+    interval: 1m
+    input_series:
+      - series: 'redis_up'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamRedisUnavailable
+        exp_alerts:
+          - exp_labels:
+              alertname: ExamRedisUnavailable
+              severity: P1
+            exp_annotations:
+              summary: Redis 不可用
+              description: Redis 探测失败持续 1 分钟以上：权限缓存与令牌吊销名单降级为进程内，作答路径仍可用。
+  - name: Redis 可用不应触发
+    interval: 1m
+    input_series:
+      - series: 'redis_up'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamRedisUnavailable
+        exp_alerts: []
+  - name: Redis 命令变慢应触发
+    interval: 1m
+    input_series:
+      - series: 'redis_command_duration_seconds_bucket{op="permission_get",le="0.01"}'
+        values: '0+1x30'
+      - series: 'redis_command_duration_seconds_bucket{op="permission_get",le="0.05"}'
+        values: '0+1x30'
+      - series: 'redis_command_duration_seconds_bucket{op="permission_get",le="0.1"}'
+        values: '0+10x30'
+      - series: 'redis_command_duration_seconds_bucket{op="permission_get",le="+Inf"}'
+        values: '0+20x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ExamRedisCommandSlow
+        exp_alerts:
+          - exp_labels:
+              alertname: ExamRedisCommandSlow
+              severity: P2
+              op: permission_get
+            exp_annotations:
+              summary: Redis 命令 p95 超过 50ms
+              description: 操作 permission_get 的 p95 超过 50 毫秒，查 Redis 自身负载与网络。
+  - name: Redis 命令正常不应触发
+    interval: 1m
+    input_series:
+      - series: 'redis_command_duration_seconds_bucket{op="permission_get",le="0.01"}'
+        values: '0+100x30'
+      - series: 'redis_command_duration_seconds_bucket{op="permission_get",le="0.05"}'
+        values: '0+100x30'
+      - series: 'redis_command_duration_seconds_bucket{op="permission_get",le="0.1"}'
+        values: '0+100x30'
+      - series: 'redis_command_duration_seconds_bucket{op="permission_get",le="+Inf"}'
+        values: '0+100x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ExamRedisCommandSlow
+        exp_alerts: []
+  - name: HTTP 5xx 比例超标应触发
+    interval: 1m
+    input_series:
+      - series: 'http_requests_total{status="200"}'
+        values: '0+900x20'
+      - series: 'http_requests_total{status="500"}'
+        values: '0+10x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamHttpErrorRateHigh
+        exp_alerts:
+          - exp_labels:
+              alertname: ExamHttpErrorRateHigh
+              severity: P1
+            exp_annotations:
+              summary: HTTP 5xx 比例超过 0.1%
+              description: 最近 5 分钟 5xx 占比 1.099%，先查最近的发布与数据库负载。
+  - name: HTTP 无 5xx 不应触发
+    interval: 1m
+    input_series:
+      - series: 'http_requests_total{status="200"}'
+        values: '0+900x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ExamHttpErrorRateHigh
+        exp_alerts: []

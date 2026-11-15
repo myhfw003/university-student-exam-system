@@ -235,6 +235,7 @@ public sealed class PublishExamSessionHandler : IRequestHandler<PublishExamSessi
     private readonly IAuditRecorder _audit;
     private readonly IClock _clock;
     private readonly ICurrentUser _currentUser;
+    private readonly IExamMetrics _metrics;
 
     public PublishExamSessionHandler(
         IExamSessionRepository sessions,
@@ -243,7 +244,8 @@ public sealed class PublishExamSessionHandler : IRequestHandler<PublishExamSessi
         ExamRosterBuilder roster,
         IAuditRecorder audit,
         IClock clock,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        IExamMetrics metrics)
     {
         _sessions = sessions;
         _participants = participants;
@@ -252,6 +254,7 @@ public sealed class PublishExamSessionHandler : IRequestHandler<PublishExamSessi
         _audit = audit;
         _clock = clock;
         _currentUser = currentUser;
+        _metrics = metrics;
     }
 
     public async Task<ExamSessionDetailDto> Handle(
@@ -293,6 +296,8 @@ public sealed class PublishExamSessionHandler : IRequestHandler<PublishExamSessi
                 ["participantCount"] = rosterUserIds.Count,
             },
             cancellationToken);
+
+        _metrics.RecordExamSessionPublished();
 
         return ExamSessionDtoFactory.ToDetail(session, paper.Name);
     }

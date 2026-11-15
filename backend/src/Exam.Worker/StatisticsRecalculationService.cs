@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Exam.Application.Analytics.Services;
 using Exam.Application.Common.Interfaces;
 using Microsoft.Extensions.Configuration;
@@ -122,6 +123,29 @@ public sealed class StatisticsRecalculationService : BackgroundService
 
     /// <summary>全部场次重算一遍。</summary>
     private async Task RunFullAsync(CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var failed = false;
+
+        try
+        {
+            await RunFullCoreAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            failed = true;
+            _logger.LogError(ex, "全量统计重算失败。");
+            throw;
+        }
+        finally
+        {
+            using var scope = _scopeFactory.CreateScope();
+            scope.ServiceProvider.GetRequiredService<IWorkerMetrics>()
+                .RecordBackgroundJob("statistics_recompute", stopwatch.Elapsed.TotalSeconds, failed);
+        }
+    }
+
+    private async Task RunFullCoreAsync(CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
         var source = scope.ServiceProvider.GetRequiredService<IExamStatisticSource>();

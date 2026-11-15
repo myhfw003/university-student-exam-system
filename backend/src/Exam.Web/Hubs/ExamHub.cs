@@ -13,11 +13,28 @@ public sealed class ExamHub : Hub
 {
     private readonly IAttemptRepository _attempts;
     private readonly ICurrentUser _currentUser;
+    private readonly IExamMetrics _metrics;
 
-    public ExamHub(IAttemptRepository attempts, ICurrentUser currentUser)
+    public ExamHub(IAttemptRepository attempts, ICurrentUser currentUser, IExamMetrics metrics)
     {
         _attempts = attempts;
         _currentUser = currentUser;
+        _metrics = metrics;
+    }
+
+    /// <summary>连接数是容量指标：连上来就 +1，断开就 -1。</summary>
+    public override Task OnConnectedAsync()
+    {
+        _metrics.SignalRConnected();
+
+        return base.OnConnectedAsync();
+    }
+
+    public override Task OnDisconnectedAsync(Exception? exception)
+    {
+        _metrics.SignalRDisconnected();
+
+        return base.OnDisconnectedAsync(exception);
     }
 
     /// <summary>作答会话分组名。</summary>

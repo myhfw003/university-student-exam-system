@@ -80,11 +80,14 @@ services:
       PGUSER: ${POSTGRES_OWNER_USER:-exam_owner}
       PGPASSWORD: ${POSTGRES_OWNER_PASSWORD}
       STANZA: db
+      METRICS_DIR: /backup-metrics
     volumes:
       - pgdata:/var/lib/postgresql/data:ro
       - pgbackrest:/var/lib/pgbackrest
       - ./backup/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
       - ./backup/entrypoint.sh:/backup/entrypoint.sh:ro
+      # 备份状态指标：node_exporter 的 textfile 采集器读这个目录。
+      - backup-metrics:/backup-metrics
     entrypoint: ["/bin/sh", "/backup/entrypoint.sh"]
 
   redis:
@@ -201,6 +204,10 @@ services:
       context: ../backend
       target: worker
     restart: unless-stopped
+    # Worker 的指标端口（Outbox 积压、后台作业耗时、答卷对账差异）。
+    # 只在容器网络内可达，不对宿主机发布端口。
+    expose:
+      - "9090"
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__Database: "Host=${DB_HOST:-postgres};Port=${DB_PORT:-5432};Database=${POSTGRES_DB:-exam};Username=${POSTGRES_APP_USER:-exam_app};Password=${POSTGRES_APP_PASSWORD};Maximum Pool Size=${DB_WORKER_MAX_POOL_SIZE:-20};Minimum Pool Size=2;Timeout=15;Command Timeout=30;Keepalive=30"
@@ -221,6 +228,81 @@ services:
     restart: unless-stopped
     # 前端只由 nginx 内部反代访问，不对宿主机发布端口
 
+  # ---------- 监控栈（可选 profile）----------
+  # 启用：docker compose --profile monitoring up -d
+  # 告警规则：deploy/monitoring/prometheus-rules.yml
+  # 路由：deploy/monitoring/alertmanager.yml
+  # 看板：deploy/monitoring/grafana/dashboard-exam.json
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus-rules.yml:/etc/prometheus/rules/prometheus-rules.yml:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      - api
+      - worker
+    # 指标端口不对宿主机发布：只在容器网络内可达。
+    expose:
+      - "9090"
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./monitoring/templates:/etc/alertmanager/templates:ro
+      - alertmanager-data:/alertmanager
+    expose:
+      - "9093"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?必须设置 GRAFANA_ADMIN_PASSWORD}
+      # 无外部署：看板与数据源都由 compose 里的文件提供。
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboard-exam.json:/var/lib/grafana/dashboards/dashboard-exam.json:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+
+  # 主机层面的指标（磁盘、CPU）——磁盘告警靠它。
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+      # 备份任务把状态写成 textfile，这里采集：备份失败要能被告警发现。
+      - --collector.textfile.directory=/textfile
+    volumes:
+      - /:/host:ro,rslave
+      - backup-metrics:/textfile:ro
+    expose:
+      - "9100"
+
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
@@ -239,3 +321,7 @@ volumes:
   pgbackrest:
   redisdata:
   miniodata:
+  prometheus-data:
+  alertmanager-data:
+  grafana-data:
+  backup-metrics:

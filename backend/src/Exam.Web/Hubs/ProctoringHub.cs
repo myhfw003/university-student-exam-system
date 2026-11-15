@@ -1,3 +1,4 @@
+using Exam.Application.Common.Interfaces;
 using Exam.Domain.Identity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
@@ -10,6 +11,28 @@ namespace Exam.Web.Hubs;
 [Authorize(Policy = PermissionCatalog.ProctorMonitor)]
 public sealed class ProctoringHub : Hub
 {
+    private readonly IExamMetrics _metrics;
+
+    public ProctoringHub(IExamMetrics metrics)
+    {
+        _metrics = metrics;
+    }
+
+    /// <summary>连接数是容量指标：连上来就 +1，断开就 -1。</summary>
+    public override Task OnConnectedAsync()
+    {
+        _metrics.SignalRConnected();
+
+        return base.OnConnectedAsync();
+    }
+
+    public override Task OnDisconnectedAsync(Exception? exception)
+    {
+        _metrics.SignalRDisconnected();
+
+        return base.OnDisconnectedAsync(exception);
+    }
+
     /// <summary>场次分组名。</summary>
     public static string ExamGroup(long examSessionId) => $"exam:{examSessionId}";
 

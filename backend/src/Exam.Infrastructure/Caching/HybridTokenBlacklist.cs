@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Exam.Application.Common.Interfaces;
 using StackExchange.Redis;
 using Microsoft.Extensions.Logging;
@@ -21,15 +22,18 @@ public sealed class HybridTokenBlacklist : ITokenBlacklist
     private readonly IConnectionMultiplexer? _redis;
     private readonly RedisCacheNamespace _namespace;
     private readonly ILogger<HybridTokenBlacklist> _logger;
+    private readonly IExamMetrics? _metrics;
 
     public HybridTokenBlacklist(
         RedisCacheNamespace redisNamespace,
         ILogger<HybridTokenBlacklist> logger,
-        IConnectionMultiplexer? redis = null)
+        IConnectionMultiplexer? redis = null,
+        IExamMetrics? metrics = null)
     {
         _namespace = redisNamespace;
         _logger = logger;
         _redis = redis;
+        _metrics = metrics;
     }
 
     public async Task RevokeAsync(string jti, DateTimeOffset expiresAt, CancellationToken cancellationToken = default)
@@ -40,6 +44,8 @@ public sealed class HybridTokenBlacklist : ITokenBlacklist
         {
             return;
         }
+
+        var stopwatch = Stopwatch.StartNew();
 
         try
         {
@@ -53,6 +59,10 @@ public sealed class HybridTokenBlacklist : ITokenBlacklist
         catch (Exception ex)
         {
             _logger.LogError(ex, "写入令牌吊销名单失败，已降级为内存名单。");
+        }
+        finally
+        {
+            _metrics?.RecordRedisCommand("blacklist_write", stopwatch.Elapsed.TotalSeconds);
         }
     }
 
@@ -73,6 +83,8 @@ public sealed class HybridTokenBlacklist : ITokenBlacklist
             return false;
         }
 
+        var stopwatch = Stopwatch.StartNew();
+
         try
         {
             var db = _redis.GetDatabase();
@@ -82,6 +94,10 @@ public sealed class HybridTokenBlacklist : ITokenBlacklist
         {
             _logger.LogError(ex, "查询令牌吊销名单失败，本次按未吊销处理。");
             return false;
+        }
+        finally
+        {
+            _metrics?.RecordRedisCommand("blacklist_check", stopwatch.Elapsed.TotalSeconds);
         }
     }
 
@@ -101,6 +117,8 @@ public sealed class HybridTokenBlacklist : ITokenBlacklist
             return;
         }
 
+        var stopwatch = Stopwatch.StartNew();
+
         try
         {
             var db = _redis.GetDatabase();
@@ -112,6 +130,10 @@ public sealed class HybridTokenBlacklist : ITokenBlacklist
         catch (Exception ex)
         {
             _logger.LogError(ex, "写入用户级令牌吊销记录失败，已降级为内存名单。");
+        }
+        finally
+        {
+            _metrics?.RecordRedisCommand("blacklist_user_write", stopwatch.Elapsed.TotalSeconds);
         }
     }
 
@@ -129,6 +151,8 @@ public sealed class HybridTokenBlacklist : ITokenBlacklist
         {
             return false;
         }
+
+        var stopwatch = Stopwatch.StartNew();
 
         try
         {
@@ -150,6 +174,10 @@ public sealed class HybridTokenBlacklist : ITokenBlacklist
         {
             _logger.LogError(ex, "查询用户级令牌吊销记录失败，本次按未吊销处理。");
             return false;
+        }
+        finally
+        {
+            _metrics?.RecordRedisCommand("blacklist_user_check", stopwatch.Elapsed.TotalSeconds);
         }
     }
 }

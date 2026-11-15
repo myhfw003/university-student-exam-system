@@ -1,0 +1,38 @@
+{{ define "exam.title" -}}
+[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ else }}{{ end }}] {{ .CommonLabels.alertname }}
+{{- end }}
+
+{{ define "exam.message" -}}
+{{ range .Alerts.Firing }}
+{{ .Annotations.summary }}
+{{ .Annotations.description }}
+处置入口：docs/development/ops-runbook.md
+---
+{{- end }}
+{{- end }}
+
+{{ define "oncall-p1.title" -}}
+{{ template "exam.title" . }}
+{{- end }}
+
+{{ define "oncall-p1.message" -}}
+【P1 立即处置】
+{{ template "exam.message" . }}
+{{- end }}
+
+{{ define "oncall-p2.title" -}}
+{{ template "exam.title" . }}
+{{- end }}
+
+{{ define "oncall-p2.message" -}}
+【P2 值班处理】
+{{ template "exam.message" . }}
+{{- end }}
+
+{{ define "ticket.title" -}}
+{{ template "exam.title" . }}
+{{- end }}
+
+{{ define "ticket.message" -}}
+{{ template "exam.message" . }}
+{{- end }}

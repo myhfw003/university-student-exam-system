@@ -1,5 +1,6 @@
 using Exam.Application.Common.Attributes;
 using Exam.Application.Common.Exceptions;
+using System.Diagnostics;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
 using Exam.Application.Delivery.Contracts;
@@ -52,6 +53,7 @@ public sealed class SaveAnswersHandler : IRequestHandler<SaveAnswersCommand, Sav
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
     private readonly ICurrentUser _currentUser;
+    private readonly IExamMetrics _metrics;
 
     public SaveAnswersHandler(
         IAttemptRepository attempts,
@@ -60,7 +62,8 @@ public sealed class SaveAnswersHandler : IRequestHandler<SaveAnswersCommand, Sav
         AttemptPaperResolver resolver,
         IUnitOfWork unitOfWork,
         IClock clock,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        IExamMetrics metrics)
     {
         _attempts = attempts;
         _answers = answers;
@@ -69,6 +72,7 @@ public sealed class SaveAnswersHandler : IRequestHandler<SaveAnswersCommand, Sav
         _unitOfWork = unitOfWork;
         _clock = clock;
         _currentUser = currentUser;
+        _metrics = metrics;
     }
 
     public async Task<SaveAnswersResponse> Handle(
@@ -84,22 +88,39 @@ public sealed class SaveAnswersHandler : IRequestHandler<SaveAnswersCommand, Sav
             throw new ForbiddenException("只能保存自己的作答。");
         }
 
+        // 保存耗时是容量与告警的第一手数据：从这里开始计时。
+        var stopwatch = Stopwatch.StartNew();
+
         var paper = await _resolver.ResolveAsync(attempt, cancellationToken);
 
         // 场次被取消才停；练习没有场次，不受这一条约束。
         if (paper.Session is { Status: ExamSessionStatus.Cancelled })
         {
+            // 整批被拒：按批次记一次，错误率才和成功批次可比。
+            _metrics.RecordAnswerSave("rejected");
+
             throw new BusinessRuleException("场次已取消，不能继续作答。");
         }
 
         var now = _clock.UtcNow;
 
         // 超时或已交卷都会在这里被拒；超时的错误码 25002，HTTP 409。
-        attempt.EnsureAcceptingAnswers(now);
+        try
+        {
+            attempt.EnsureAcceptingAnswers(now);
+        }
+        catch (DomainException)
+        {
+            _metrics.RecordAnswerSave("rejected");
+
+            throw;
+        }
 
         // 幂等：序列号没有前进就整批忽略。
         if (request.Input.ClientSeq <= attempt.LastClientSeq)
         {
+            _metrics.RecordAnswerSave("duplicate");
+
             return new SaveAnswersResponse(
                 attempt.LastClientSeq,
                 now,
@@ -164,6 +185,8 @@ public sealed class SaveAnswersHandler : IRequestHandler<SaveAnswersCommand, Sav
         if (!attempt.AcceptSave(request.Input.ClientSeq, now))
         {
             // 期间有别的请求推进了序列号，这批直接忽略。
+            _metrics.RecordAnswerSave("duplicate");
+
             return new SaveAnswersResponse(
                 attempt.LastClientSeq,
                 now,
@@ -173,6 +196,12 @@ public sealed class SaveAnswersHandler : IRequestHandler<SaveAnswersCommand, Sav
 
         _attempts.Update(attempt);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // 题不在卷面或载荷不合法：单题计数，批次仍算保存成功。
+        // 单题与批次分开计数：一批里被拒 3 题是 3 次，不是 3 批。
+        _metrics.RecordAnswerItemsRejected(rejected.Count);
+
+        _metrics.RecordAnswerSave("saved", stopwatch.Elapsed.TotalSeconds);
 
         return new SaveAnswersResponse(
             attempt.LastClientSeq,
