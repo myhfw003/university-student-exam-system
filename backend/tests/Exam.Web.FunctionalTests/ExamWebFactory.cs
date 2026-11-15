@@ -21,11 +21,16 @@ public sealed class ExamWebFactory : WebApplicationFactory<Program>
 {
     private readonly string _connectionString;
     private readonly string _redisConnectionString;
+    private readonly int _globalPerMinute;
 
-    public ExamWebFactory(string connectionString, string? redisConnectionString = null)
+    public ExamWebFactory(
+        string connectionString,
+        string? redisConnectionString = null,
+        int globalPerMinute = 100000)
     {
         _connectionString = connectionString;
         _redisConnectionString = redisConnectionString ?? "localhost:6379,abortConnect=false";
+        _globalPerMinute = globalPerMinute;
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -41,7 +46,7 @@ public sealed class ExamWebFactory : WebApplicationFactory<Program>
                 ["Jwt:Issuer"] = "exam",
                 ["Jwt:Audience"] = "exam-web",
                 ["Jwt:RefreshTokenPepper"] = "test-pepper",
-                ["RateLimiting:GlobalPerMinute"] = "100000",
+                ["RateLimiting:GlobalPerMinute"] = _globalPerMinute.ToString(),
             });
         });
 

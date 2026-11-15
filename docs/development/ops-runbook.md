@@ -33,6 +33,28 @@ docker compose up -d --build api        # 滚动更新 API
 
 ---
 
+### 1.1 全站 HTTPS（生产）
+
+默认 compose 栈的 nginx 只监听 80，**适合内网试跑**。生产必须启用 TLS：
+
+```bash
+# 1. 放证书（不进版本库）
+mkdir -p deploy/certs
+cp /path/to/fullchain.pem deploy/certs/fullchain.pem
+cp /path/to/privkey.pem   deploy/certs/privkey.pem
+chmod 600 deploy/certs/privkey.pem
+
+# 2. 用 TLS 覆盖层启动
+cd deploy
+docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d
+```
+
+- `nginx.tls.conf`：80 端口只做 301 跳转，业务全部挂在 443，并下发 HSTS。
+- 宿主机发布 443（`TLS_PORT` 可改）；8088 默认不再对外，必要时留作内部排障。
+- 证书续期：到期前用新证书覆盖 `deploy/certs/` 再 `docker compose exec nginx nginx -s reload`，无需重启其余服务。
+
+---
+
 ## 2. 启动顺序与依赖
 
 ```

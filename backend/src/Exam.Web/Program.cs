@@ -154,19 +154,33 @@ builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProv
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
 // ---------------------------------------------------------------- 限流
-var globalPerMinute = builder.Configuration.GetValue("RateLimiting:GlobalPerMinute", 6000);
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-        RateLimitPartition.GetFixedWindowLimiter(
+    {
+        // 健康检查与指标不参与限流：探针被限流，容器会被判成不健康。
+        var path = context.Request.Path.Value ?? string.Empty;
+        if (path.StartsWith("/health", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/metrics", StringComparison.OrdinalIgnoreCase))
+        {
+            return RateLimitPartition.GetNoLimiter("probe");
+        }
+
+        // 阈值在请求时读配置：配置改完立刻生效，不用重启。
+        var permitLimit = context.RequestServices
+            .GetRequiredService<IConfiguration>()
+            .GetValue("RateLimiting:GlobalPerMinute", 6000);
+
+        return RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = globalPerMinute,
+                PermitLimit = permitLimit,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
-            }));
+            });
+    });
 });
 
 // ---------------------------------------------------------------- CORS
