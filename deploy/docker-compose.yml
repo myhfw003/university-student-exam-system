@@ -2,12 +2,19 @@ name: exam
 
 services:
   postgres:
-    image: postgres:17-alpine
+    # 自定义镜像只多装了 pgBackRest：WAL 归档命令在数据库侧执行，
+    # 备份与归档要用同一套工具、同一份配置。
+    build:
+      context: .
+      dockerfile: backup/postgres.Dockerfile
+    image: exam-postgres:17-pgbackrest
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-exam}
       POSTGRES_USER: ${POSTGRES_OWNER_USER:-exam_owner}
       POSTGRES_PASSWORD: ${POSTGRES_OWNER_PASSWORD:?必须设置 POSTGRES_OWNER_PASSWORD}
+      # WAL 归档命令要连回本库，用拥有者口令。
+      PGPASSWORD: ${POSTGRES_OWNER_PASSWORD}
     command:
       - postgres
       - -c
@@ -16,8 +23,17 @@ services:
       - shared_buffers=256MB
       - -c
       - log_min_duration_statement=500
+      # WAL 连续归档：RPO ≤ 5 分钟靠它。
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=pgbackrest --stanza=db archive-push
+      - -c
+      - archive_timeout=300
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - pgbackrest:/var/lib/pgbackrest
+      - ./backup/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
       - ./db/01-create-roles.sql:/docker-entrypoint-initdb.d/01-create-roles.sql:ro
     # 不发布宿主机端口：数据库只在容器网络内可达。需要直连排查时用
     # docker compose exec postgres psql -U exam_owner -d exam
@@ -49,6 +65,27 @@ services:
       RESERVE_POOL_SIZE: 10
       RESERVE_POOL_TIMEOUT: 3
       SERVER_IDLE_TIMEOUT: 600
+
+  # 备份定时任务：基线全量 → 每日全量/差异 → 每周过期清理。
+  # WAL 由数据库侧的 archive_command 连续推送，这里不重复推。
+  backup:
+    image: exam-postgres:17-pgbackrest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_OWNER_USER:-exam_owner}
+      PGPASSWORD: ${POSTGRES_OWNER_PASSWORD}
+      STANZA: db
+    volumes:
+      - pgdata:/var/lib/postgresql/data:ro
+      - pgbackrest:/var/lib/pgbackrest
+      - ./backup/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      - ./backup/entrypoint.sh:/backup/entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/backup/entrypoint.sh"]
 
   redis:
     image: redis:7-alpine
@@ -199,5 +236,6 @@ services:
 
 volumes:
   pgdata:
+  pgbackrest:
   redisdata:
   miniodata:
