@@ -30,6 +30,16 @@ public sealed class ExamParticipantRepository : IExamParticipantRepository
     public Task<int> CountBySessionAsync(long examSessionId, CancellationToken cancellationToken = default) =>
         _db.Set<ExamParticipant>().CountAsync(p => p.ExamSessionId == examSessionId, cancellationToken);
 
+    public async Task<IReadOnlyList<long>> ListSessionIdsByUserAsync(
+        long userId,
+        CancellationToken cancellationToken = default) =>
+        await _db.Set<ExamParticipant>()
+            .AsNoTracking()
+            .Where(p => p.UserId == userId)
+            .Select(p => p.ExamSessionId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
     public async Task AddRangeAsync(
         IReadOnlyCollection<ExamParticipant> participants,
         CancellationToken cancellationToken = default)

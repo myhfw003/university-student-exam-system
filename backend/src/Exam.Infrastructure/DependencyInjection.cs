@@ -88,6 +88,8 @@ public static class DependencyInjection
         services.AddScoped<IExamStatisticRepository, ExamStatisticRepository>();
         services.AddScoped<IExamStatisticSource, ExamStatisticSource>();
         services.AddScoped<Exam.Application.Analytics.Services.ExamStatisticsService>();
+        services.AddScoped<Exam.Application.Learning.Services.PracticeVisibilityResolver>();
+        services.AddScoped<Exam.Application.Learning.Services.DashboardService>();
         services.AddScoped<IDomainEventHandler<ScoreFinalized>, AbilityProfileUpdateHandler>();
         services.AddScoped<AttemptPaperResolver>();
         services.AddScoped<IOutboxStore, OutboxStore>();

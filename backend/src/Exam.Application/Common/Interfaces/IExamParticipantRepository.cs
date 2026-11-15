@@ -14,6 +14,11 @@ public interface IExamParticipantRepository
 
     Task<int> CountBySessionAsync(long examSessionId, CancellationToken cancellationToken = default);
 
+    /// <summary>列出某位考生被纳入的全部场次 ID。</summary>
+    Task<IReadOnlyList<long>> ListSessionIdsByUserAsync(
+        long userId,
+        CancellationToken cancellationToken = default);
+
     Task AddRangeAsync(IReadOnlyCollection<ExamParticipant> participants, CancellationToken cancellationToken = default);
 
     void Update(ExamParticipant participant);

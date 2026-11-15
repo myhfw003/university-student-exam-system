@@ -706,13 +706,25 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
   "ongoingExams": 1,
   "termAverageScore": 82.5,
   "pendingMistakes": 12,
-  "ongoingExam": { "examSessionId": 30, "name": "计算机网络期中考试", "openAt": "...", "closeAt": "...", "note": "..." },
+  "ongoingExam": { "examSessionId": 30, "name": "计算机网络期中考试",
+                   "openAt": "2026-06-18T08:00:00Z", "closeAt": "2026-06-18T10:00:00Z",
+                   "note": null, "started": false },
   "recommendedPractices": [ { "id": 5, "title": "高等数学 · 极限与连续专项练习", "tagNames": ["高等数学"] } ],
-  "recentResults": [ { "attemptId": 8801, "name": "高等数学期末考试", "date": "2026-06-18", "score": 76, "total": 100, "status": "done" } ],
+  "recentResults": [ { "attemptId": 8801, "kind": "exam", "name": "高等数学期末考试",
+                       "date": "2026-06-18", "score": 76, "total": 100, "status": "done" } ],
   "scoreTrend": [ { "date": "2026-03-01", "score": 71, "total": 100 } ],
-  "mistakeDistribution": [ { "tagName": "极限", "count": 5 } ]
+  "mistakeDistribution": [ { "tagName": "极限", "group": "知识点", "count": 5 } ],
+  "generatedAt": "2026-11-15T10:00:00Z"
 }
 ```
+
+> 工作台口径：
+>
+> - `termAverageScore` 是全部成绩记录的**得分率平均值（百分制）**，没有记录时为 `null`；
+> - `score` 与 `total` 跟成绩报告同一套可见性规则——**成绩没发布之前，主观题的分不露出来**；
+> - `ongoingExams` 只算该考生看得见（全员开放 / 在名单里 / 名单已物化）的进行中场次，`ongoingExam` 取其中最先结束的一场；
+> - `mistakeDistribution` 按**知识点标签**分组，没有知识点标签时回退到领域标签，都没有算「未归类」；
+> - 空数据时计数为 0、列表为空，`termAverageScore` 为 `null`——前端据此显示空态与引导入口。
 
 **`GET /statistics/exam-sessions/{id}`**
 
