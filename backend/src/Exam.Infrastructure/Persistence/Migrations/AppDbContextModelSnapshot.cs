@@ -23,6 +23,204 @@ namespace Exam.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Exam.Domain.Analytics.ExamStatistic", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AbsentCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("absent_count");
+
+                    b.Property<decimal?>("AverageScore")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("numeric(8,2)")
+                        .HasColumnName("average_score");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long>("ExamSessionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("exam_session_id");
+
+                    b.Property<decimal?>("ExcellentRate")
+                        .HasPrecision(6, 4)
+                        .HasColumnType("numeric(6,4)")
+                        .HasColumnName("excellent_rate");
+
+                    b.Property<decimal?>("MaxScore")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("numeric(8,2)")
+                        .HasColumnName("max_score");
+
+                    b.Property<decimal?>("MinScore")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("numeric(8,2)")
+                        .HasColumnName("min_score");
+
+                    b.Property<int>("ParticipantCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("participant_count");
+
+                    b.Property<decimal?>("PassRate")
+                        .HasPrecision(6, 4)
+                        .HasColumnType("numeric(6,4)")
+                        .HasColumnName("pass_rate");
+
+                    b.Property<string>("ScoreBuckets")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("score_buckets");
+
+                    b.Property<int>("SubmittedCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("submitted_count");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_exam_statistic");
+
+                    b.HasIndex("ExamSessionId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_exam_statistic_session");
+
+                    b.ToTable("exam_statistic", "analytics");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Analytics.QuestionStatistic", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AnsweredCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("answered_count");
+
+                    b.Property<decimal?>("AverageScore")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("numeric(8,2)")
+                        .HasColumnName("average_score");
+
+                    b.Property<int>("CorrectCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("correct_count");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long>("ExamSessionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("exam_session_id");
+
+                    b.Property<decimal?>("MasteryRate")
+                        .HasPrecision(6, 4)
+                        .HasColumnType("numeric(6,4)")
+                        .HasColumnName("mastery_rate");
+
+                    b.Property<long>("QuestionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("question_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_question_statistic");
+
+                    b.HasIndex("QuestionId")
+                        .HasDatabaseName("ix_question_statistic_question_id");
+
+                    b.HasIndex("ExamSessionId", "QuestionId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_question_statistic_session_question");
+
+                    b.ToTable("question_statistic", "analytics");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Analytics.TypeStatistic", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AnsweredCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("answered_count");
+
+                    b.Property<decimal?>("AverageScore")
+                        .HasPrecision(8, 2)
+                        .HasColumnType("numeric(8,2)")
+                        .HasColumnName("average_score");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long>("ExamSessionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("exam_session_id");
+
+                    b.Property<string>("QuestionType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("question_type");
+
+                    b.Property<decimal?>("ScoreRate")
+                        .HasPrecision(6, 4)
+                        .HasColumnType("numeric(6,4)")
+                        .HasColumnName("score_rate");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_type_statistic");
+
+                    b.HasIndex("ExamSessionId", "QuestionType")
+                        .IsUnique()
+                        .HasDatabaseName("uq_type_statistic_session_type");
+
+                    b.ToTable("type_statistic", "analytics");
+                });
+
             modelBuilder.Entity("Exam.Domain.Audit.AuditLog", b =>
                 {
                     b.Property<long>("Id")
@@ -3004,6 +3202,43 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .HasName("pk_seed_markers");
 
                     b.ToTable("seed_markers", "iam");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Analytics.ExamStatistic", b =>
+                {
+                    b.HasOne("Exam.Domain.Delivery.ExamSession", null)
+                        .WithMany()
+                        .HasForeignKey("ExamSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_exam_statistic_exam_session_exam_session_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Analytics.QuestionStatistic", b =>
+                {
+                    b.HasOne("Exam.Domain.Delivery.ExamSession", null)
+                        .WithMany()
+                        .HasForeignKey("ExamSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_question_statistic_exam_session_exam_session_id");
+
+                    b.HasOne("Exam.Domain.Catalog.Question", null)
+                        .WithMany()
+                        .HasForeignKey("QuestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_question_statistic_question_question_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Analytics.TypeStatistic", b =>
+                {
+                    b.HasOne("Exam.Domain.Delivery.ExamSession", null)
+                        .WithMany()
+                        .HasForeignKey("ExamSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_type_statistic_exam_session_exam_session_id");
                 });
 
             modelBuilder.Entity("Exam.Domain.Authoring.Blueprint", b =>

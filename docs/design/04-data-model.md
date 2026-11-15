@@ -846,8 +846,12 @@ CREATE TABLE learning.practice_result (
 CREATE INDEX ix_practice_result_user ON learning.practice_result(user_id, submitted_at DESC);
 
 -- Analytics 读模型
+-- 统计读模型：派生数据，重算时整体替换。
+-- 主键沿用 §1.2 通用列（id + created_at + updated_at + xmin），
+-- 自然键（场次、题目、题型）用唯一索引表达。
 CREATE TABLE analytics.exam_statistic (
-    exam_session_id bigint NOT NULL REFERENCES delivery.exam_session(id),
+    id               bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    exam_session_id  bigint NOT NULL REFERENCES delivery.exam_session(id) ON DELETE CASCADE,
     participant_count integer NOT NULL DEFAULT 0,
     submitted_count  integer NOT NULL DEFAULT 0,
     absent_count     integer NOT NULL DEFAULT 0,
@@ -857,29 +861,40 @@ CREATE TABLE analytics.exam_statistic (
     pass_rate        numeric(6,4) NULL,
     excellent_rate   numeric(6,4) NULL,
     score_buckets    jsonb NOT NULL DEFAULT '{}'::jsonb,
+    created_at       timestamptz NOT NULL DEFAULT now(),
     updated_at       timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (exam_session_id)
+    xmin             xid NOT NULL DEFAULT xmin
 );
+CREATE UNIQUE INDEX uq_exam_statistic_session ON analytics.exam_statistic(exam_session_id);
 
 CREATE TABLE analytics.question_statistic (
-    exam_session_id bigint NOT NULL REFERENCES delivery.exam_session(id),
-    question_id     bigint NOT NULL,
-    answered_count  integer NOT NULL DEFAULT 0,
-    correct_count   integer NOT NULL DEFAULT 0,
-    average_score   numeric(8,2) NULL,
-    mastery_rate    numeric(6,4) NULL,
-    updated_at      timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (exam_session_id, question_id)
+    id               bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    exam_session_id  bigint NOT NULL REFERENCES delivery.exam_session(id) ON DELETE CASCADE,
+    question_id      bigint NOT NULL REFERENCES catalog.question(id) ON DELETE CASCADE,
+    answered_count   integer NOT NULL DEFAULT 0,
+    correct_count    integer NOT NULL DEFAULT 0,
+    average_score    numeric(8,2) NULL,
+    mastery_rate     numeric(6,4) NULL,
+    created_at       timestamptz NOT NULL DEFAULT now(),
+    updated_at       timestamptz NOT NULL DEFAULT now(),
+    xmin             xid NOT NULL DEFAULT xmin
 );
+CREATE UNIQUE INDEX uq_question_statistic_session_question
+    ON analytics.question_statistic(exam_session_id, question_id);
 
 CREATE TABLE analytics.type_statistic (
-    exam_session_id bigint NOT NULL REFERENCES delivery.exam_session(id),
-    question_type   text NOT NULL,
-    answered_count  integer NOT NULL DEFAULT 0,
-    average_score   numeric(8,2) NULL,
-    score_rate      numeric(6,4) NULL,
-    PRIMARY KEY (exam_session_id, question_type)
+    id               bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    exam_session_id  bigint NOT NULL REFERENCES delivery.exam_session(id) ON DELETE CASCADE,
+    question_type    varchar(32) NOT NULL,
+    answered_count   integer NOT NULL DEFAULT 0,
+    average_score    numeric(8,2) NULL,
+    score_rate       numeric(6,4) NULL,
+    created_at       timestamptz NOT NULL DEFAULT now(),
+    updated_at       timestamptz NOT NULL DEFAULT now(),
+    xmin             xid NOT NULL DEFAULT xmin
 );
+CREATE UNIQUE INDEX uq_type_statistic_session_type
+    ON analytics.type_statistic(exam_session_id, question_type);
 ```
 
 ---

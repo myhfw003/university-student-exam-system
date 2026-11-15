@@ -718,16 +718,38 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 
 ```json
 {
+  "examSessionId": 30, "examSessionName": "计算机网络期中考试",
+  "participantCount": 120, "submittedCount": 118, "absentCount": 2,
   "averageScore": 76.4, "maxScore": 98, "minScore": 52, "scoreRange": 46,
   "passRate": 0.82, "excellentRate": 0.31,
   "scoreBuckets": [ { "label": "90 分以上", "count": 12 }, { "label": "80–90", "count": 19 } ],
-  "typeStatistics": [ { "type": "single", "answeredCount": 120, "averageScore": 8.2, "scoreRate": 0.82 } ],
-  "questionStatistics": [ { "questionId": 501, "code": "Q-2026-00123", "type": "multi", "maxScore": 10,
-                            "answeredCount": 118, "correctRate": 0.63, "averageScore": 6.3, "mastery": 0.63,
-                            "suggestion": "正确率低于 60%，建议安排讲评" } ],
-  "roster": [ { "userId": 30012, "displayName": "林知远", "objectiveScore": 60, "subjectiveScore": 14, "totalScore": 74, "scoreRate": 0.74 } ]
+  "typeStatistics": [ { "type": "single", "typeLabel": "单选题", "answeredCount": 120,
+                        "averageScore": 8.2, "scoreRate": 0.82 } ],
+  "questionStatistics": [ { "questionId": 501, "code": "Q-2026-00123", "type": "multi", "typeLabel": "多选题",
+                            "maxScore": 10, "answeredCount": 118, "correctCount": 74,
+                            "correctRate": 0.63, "averageScore": 6.3, "mastery": 0.63 } ],
+  "updatedAt": "2026-11-15T10:00:00Z"
 }
 ```
+
+> 逐人成绩明细（`roster`）与逐题讲评建议（`suggestion`）随 T-P7-05「管理端成绩分析」一起提供。
+
+**统计口径**
+
+| 指标 | 口径 |
+|---|---|
+| 统计对象 | **已交卷**的作答；重考按最后一次取一份（试卷设了「重考取最好」则取分数最高的一次） |
+| 应考 / 缺考 | 应考 = 名单上的考生 ∪ 进过考场的考生；缺考 = 应考 − 交卷 |
+| 及格率 | 总分 ≥ 及格分即及格。及格分优先取**试卷设置的及格分**，未设置时按 60% 得分率兜底 |
+| 优秀率 | 得分率 ≥ 85% 即优秀 |
+| 分数段 | 按**得分率**分档：90 分以上 / 80–90 / 70–80 / 60–70 / 60 分以下（满分是该场考试的试卷总分） |
+| 作答应数 | 该题**真正作答（非空白）**的人次；空白答案不进分母 |
+| 正确率 | 拿到该题**满分**的人次 ÷ 作答应数 |
+| 掌握度 | 该题总得分 ÷ 总满分 |
+| 题型得分率 | 该题型总得分 ÷ 该题型总满分 |
+
+统计读模型是派生数据：查询时若读模型落后于原始作答数据会当场重算，保证统计与作答数据始终一致；
+`Exam.Worker` 另有定时作业，每隔几分钟增量重算落后的场次、每天一次全量重算。
 
 ---
 

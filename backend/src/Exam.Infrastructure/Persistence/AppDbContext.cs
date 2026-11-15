@@ -5,6 +5,7 @@ using Exam.Application.Common.Exceptions;
 using Exam.Domain.Grading;
 using Exam.Domain.Catalog;
 using Exam.Domain.Learning;
+using Exam.Domain.Analytics;
 using Exam.Domain.Identity;
 using Exam.Domain.SharedKernel.Abstractions;
 using Exam.Domain.SharedKernel.Entities;
@@ -37,6 +38,9 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
 
     /// <summary>学习与分析上下文所在 Schema。</summary>
     public const string LearningSchema = "learning";
+
+    /// <summary>统计读模型所在 Schema。</summary>
+    public const string AnalyticsSchema = "analytics";
 
     /// <summary>领域事件出站箱所在 Schema。</summary>
     public const string OutboxSchema = "outbox";
@@ -121,6 +125,12 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
     public DbSet<PracticeAssignment> PracticeAssignments => Set<PracticeAssignment>();
 
     public DbSet<AbilityProfile> AbilityProfiles => Set<AbilityProfile>();
+
+    public DbSet<ExamStatistic> ExamStatistics => Set<ExamStatistic>();
+
+    public DbSet<QuestionStatistic> QuestionStatistics => Set<QuestionStatistic>();
+
+    public DbSet<TypeStatistic> TypeStatistics => Set<TypeStatistic>();
 
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
