@@ -429,6 +429,8 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
   "startedAt": "2026-11-09T02:00:00.100Z",
   "deadlineAt": "2026-11-09T03:30:00.100Z",
   "remainingSeconds": 5400,
+  "elapsedSeconds": 12,
+  "timed": true,
   "variantKey": "STD",
   "rules": { "maxFocusLoss": 3, "onMaxFocusLoss": "force_submit", "requireFullScreen": true,
              "blockCopyPaste": true, "showWatermark": true, "heartbeatIntervalSeconds": 15 },
@@ -456,6 +458,7 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 ```
 
 > `options` 已按**该考生的置换顺序**返回；`correctKeys` **不返回**（考试进行中绝不泄露答案）。
+> `timed` 标明是否计时；`elapsedSeconds` 是**真实用时**（练习也统计用时，只是不倒计时）。
 
 **恢复作答**：`POST /attempts` 在该考生已有进行中的会话时返回**同一个会话**（幂等），不新建。
 

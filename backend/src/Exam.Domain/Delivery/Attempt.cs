@@ -368,6 +368,13 @@ public sealed class Attempt : AuditableEntity, IAuditedEntity
         }
     }
 
+    /// <summary>
+    /// 已用时（秒）。未开始时为零。
+    /// <para>练习也会统计用时——只是不倒计时、不强制交卷。</para>
+    /// </summary>
+    public long ElapsedSeconds(DateTimeOffset now) =>
+        StartedAt is null ? 0 : (long)Math.Max(0, Math.Round((now - StartedAt.Value).TotalSeconds));
+
     /// <summary>剩余秒数。</summary>
     public long RemainingSeconds(DateTimeOffset now)
     {

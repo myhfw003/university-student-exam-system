@@ -262,6 +262,78 @@ public sealed class PracticeSessionTests : IAsyncLifetime
         (await db.Mistakes.CountAsync()).ShouldBe(0);
     }
 
+    [Fact]
+    public async Task 练习交卷后能看到逐题解析()
+    {
+        var assignmentId = await CreatePracticeAsync(maxAttempts: 0, feedbackTiming: "after_submit", reflowMistakes: true);
+        await LoginAsync(StudentUsername, StudentPassword);
+
+        var start = await _client.PostAsJsonAsync("/api/v1/attempts", new { practiceAssignmentId = assignmentId });
+        start.StatusCode.ShouldBe(HttpStatusCode.OK, await start.Content.ReadAsStringAsync());
+
+        var body = await start.Content.ReadFromJsonAsync<JsonElement>();
+        var attemptId = body.GetProperty("attemptId").GetInt64();
+
+        // 用时是真实统计的：开始之后不是零。
+        body.GetProperty("elapsedSeconds").GetInt32().ShouldBeGreaterThanOrEqualTo(0);
+
+        var save = await _client.PostAsJsonAsync(
+            $"/api/v1/attempts/{attemptId}/answers",
+            new
+            {
+                clientSeq = 1,
+                items = new[]
+                {
+                    new { questionId = _firstQuestionId, payload = new { selectedOptionKeys = new[] { "A" } } },
+                },
+            });
+        save.StatusCode.ShouldBe(HttpStatusCode.OK, await save.Content.ReadAsStringAsync());
+
+        var submit = await _client.PostAsJsonAsync($"/api/v1/attempts/{attemptId}/submit", new { reason = "manual" });
+        submit.StatusCode.ShouldBe(HttpStatusCode.OK, await submit.Content.ReadAsStringAsync());
+
+        // 练习的报告同样逐题给答案与解析。
+        var report = await _client.GetAsync($"/api/v1/attempts/{attemptId}/report");
+        report.StatusCode.ShouldBe(HttpStatusCode.OK, await report.Content.ReadAsStringAsync());
+
+        var reportBody = await report.Content.ReadFromJsonAsync<JsonElement>();
+        reportBody.GetProperty("examName").GetString().ShouldBe("练习规则测试");
+        reportBody.GetProperty("totalScore").GetDecimal().ShouldBe(10m);
+        reportBody.GetProperty("totalMax").GetDecimal().ShouldBe(20m);
+        reportBody.GetProperty("answersRevealed").GetBoolean().ShouldBeTrue();
+
+        var details = reportBody.GetProperty("details").EnumerateArray().ToList();
+        details.Count.ShouldBe(2);
+
+        var first = details.Single(d => d.GetProperty("questionId").GetInt64() == _firstQuestionId);
+        first.GetProperty("correctKeys").EnumerateArray().Select(k => k.GetString()).ShouldContain("A");
+        first.GetProperty("score").GetDecimal().ShouldBe(10m);
+        first.GetProperty("revealed").GetBoolean().ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task 重新练习能再开一次()
+    {
+        var assignmentId = await CreatePracticeAsync(maxAttempts: 2, feedbackTiming: "after_submit", reflowMistakes: true);
+        await LoginAsync(StudentUsername, StudentPassword);
+
+        var first = await _client.PostAsJsonAsync("/api/v1/attempts", new { practiceAssignmentId = assignmentId });
+        first.StatusCode.ShouldBe(HttpStatusCode.OK, await first.Content.ReadAsStringAsync());
+
+        var firstBody = await first.Content.ReadFromJsonAsync<JsonElement>();
+        var firstAttemptId = firstBody.GetProperty("attemptId").GetInt64();
+
+        var submit = await _client.PostAsJsonAsync($"/api/v1/attempts/{firstAttemptId}/submit", new { reason = "manual" });
+        submit.StatusCode.ShouldBe(HttpStatusCode.OK, await submit.Content.ReadAsStringAsync());
+
+        // 还有次数：能再开一次，序号接着排。
+        var second = await _client.PostAsJsonAsync("/api/v1/attempts", new { practiceAssignmentId = assignmentId });
+        second.StatusCode.ShouldBe(HttpStatusCode.OK, await second.Content.ReadAsStringAsync());
+
+        var secondBody = await second.Content.ReadFromJsonAsync<JsonElement>();
+        secondBody.GetProperty("attemptNo").GetInt32().ShouldBe(2);
+    }
+
     /// <summary>建一份练习：试卷（带规则）+ 开放单。</summary>
     private async Task<long> CreatePracticeAsync(int maxAttempts, string feedbackTiming, bool reflowMistakes)
     {

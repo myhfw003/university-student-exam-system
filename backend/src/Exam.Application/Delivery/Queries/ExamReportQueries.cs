@@ -3,6 +3,7 @@ using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
 using Exam.Application.Delivery.Contracts;
 using Exam.Application.Grading.Services;
+using Exam.Application.Delivery.Services;
 using Exam.Domain.Authoring;
 using Exam.Domain.Catalog;
 using Exam.Domain.Delivery;
@@ -28,26 +29,29 @@ public sealed class GetAttemptReportHandler : IRequestHandler<GetAttemptReportQu
 {
     private readonly IAttemptRepository _attempts;
     private readonly IExamSessionRepository _sessions;
-    private readonly IPaperSnapshotRepository _snapshots;
+    private readonly IPracticeAssignmentRepository _practiceAssignments;
     private readonly IAnswerRepository _answers;
     private readonly IScoreResultRepository _scoreResults;
+    private readonly AttemptPaperResolver _resolver;
     private readonly GradeVisibilityResolver _visibility;
     private readonly ICurrentUser _currentUser;
 
     public GetAttemptReportHandler(
         IAttemptRepository attempts,
         IExamSessionRepository sessions,
-        IPaperSnapshotRepository snapshots,
+        IPracticeAssignmentRepository practiceAssignments,
         IAnswerRepository answers,
         IScoreResultRepository scoreResults,
+        AttemptPaperResolver resolver,
         GradeVisibilityResolver visibility,
         ICurrentUser currentUser)
     {
         _attempts = attempts;
         _sessions = sessions;
-        _snapshots = snapshots;
+        _practiceAssignments = practiceAssignments;
         _answers = answers;
         _scoreResults = scoreResults;
+        _resolver = resolver;
         _visibility = visibility;
         _currentUser = currentUser;
     }
@@ -65,13 +69,10 @@ public sealed class GetAttemptReportHandler : IRequestHandler<GetAttemptReportQu
             throw new ForbiddenException("只能查看自己的成绩报告。");
         }
 
-        var session = attempt.ExamSessionId is { } sessionId
-            ? await _sessions.GetByIdAsync(sessionId, cancellationToken)
-            : null;
-
-        var snapshot = session?.SnapshotId is { } snapshotId
-            ? await _snapshots.GetByIdAsync(snapshotId, cancellationToken)
-            : null;
+        // 考试走场次快照，练习走练习开放单挂的试卷——练习的报告同样要逐题解析。
+        var paper = await _resolver.ResolveAsync(attempt, cancellationToken);
+        var session = paper.Session;
+        var snapshot = paper.Snapshot;
 
         var results = await _scoreResults.ListByAttemptAsync(attempt.Id, cancellationToken);
         var answers = await _answers.ListByAttemptAsync(attempt.Id, cancellationToken);
@@ -129,7 +130,7 @@ public sealed class GetAttemptReportHandler : IRequestHandler<GetAttemptReportQu
         return new ExamReportDto(
             attempt.Id,
             attempt.AttemptNo,
-            session?.Name,
+            session?.Name ?? paper.PracticeAssignment?.Title,
             attempt.SubmittedAt,
             summary.ObjectiveScore,
             summary.ObjectiveMax,
@@ -154,6 +155,7 @@ public sealed class GetMyResultsHandler : IRequestHandler<GetMyResultsQuery, MyR
 {
     private readonly IAttemptRepository _attempts;
     private readonly IExamSessionRepository _sessions;
+    private readonly IPracticeAssignmentRepository _practiceAssignments;
     private readonly IScoreResultRepository _scoreResults;
     private readonly IGradePublicationRepository _publications;
     private readonly GradeVisibilityResolver _visibility;
@@ -162,6 +164,7 @@ public sealed class GetMyResultsHandler : IRequestHandler<GetMyResultsQuery, MyR
     public GetMyResultsHandler(
         IAttemptRepository attempts,
         IExamSessionRepository sessions,
+        IPracticeAssignmentRepository practiceAssignments,
         IScoreResultRepository scoreResults,
         IGradePublicationRepository publications,
         GradeVisibilityResolver visibility,
@@ -169,6 +172,7 @@ public sealed class GetMyResultsHandler : IRequestHandler<GetMyResultsQuery, MyR
     {
         _attempts = attempts;
         _sessions = sessions;
+        _practiceAssignments = practiceAssignments;
         _scoreResults = scoreResults;
         _publications = publications;
         _visibility = visibility;
@@ -220,6 +224,23 @@ public sealed class GetMyResultsHandler : IRequestHandler<GetMyResultsQuery, MyR
             }
         }
 
+        // 练习的成绩也要有名字：练习开放单的标题。
+        var practiceIds = attempts
+            .Where(a => a.PracticeAssignmentId != null)
+            .Select(a => a.PracticeAssignmentId!.Value)
+            .Distinct()
+            .ToList();
+
+        var practiceNames = new Dictionary<long, string>();
+        if (practiceIds.Count > 0)
+        {
+            var assignments = await _practiceAssignments.GetByIdsAsync(practiceIds, cancellationToken);
+            foreach (var assignment in assignments)
+            {
+                practiceNames[assignment.Id] = assignment.Title;
+            }
+        }
+
         var items = new List<MyResultDto>();
 
         foreach (var attempt in attempts)
@@ -245,7 +266,9 @@ public sealed class GetMyResultsHandler : IRequestHandler<GetMyResultsQuery, MyR
                 attempt.Id,
                 attempt.ExamSessionId is { } sessionId
                     ? sessionNames.GetValueOrDefault(sessionId)
-                    : null,
+                    : attempt.PracticeAssignmentId is { } assignmentId
+                        ? practiceNames.GetValueOrDefault(assignmentId)
+                        : null,
                 attempt.AttemptNo,
                 attempt.SubmittedAt,
                 summary.TotalScore,
