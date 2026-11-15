@@ -29,6 +29,11 @@ public interface IExamStatisticSource
         long examSessionId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>列出考过某道题的全部场次（逐题正确率跨场次汇总用）。</summary>
+    Task<IReadOnlyList<long>> ListSessionIdsByQuestionAsync(
+        long questionId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>列出有作答记录的全部场次（供全量重算用）。</summary>
     Task<IReadOnlyList<long>> ListSessionIdsWithAttemptsAsync(
         CancellationToken cancellationToken = default);

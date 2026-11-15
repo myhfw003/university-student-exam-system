@@ -212,6 +212,70 @@ public sealed class ExamStatisticsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task 分析结果带逐人成绩明细()
+    {
+        await SubmitBothStudentsAsync();
+
+        await LoginAsync(StudentOneUsername, StudentPassword);
+        var firstStudentId = await CurrentUserIdAsync();
+
+        await LoginAsync(StudentTwoUsername, StudentPassword);
+        var secondStudentId = await CurrentUserIdAsync();
+
+        var body = await GetStatisticsAsync();
+        var roster = body.GetProperty("roster").EnumerateArray()
+            .ToDictionary(r => r.GetProperty("userId").GetInt64());
+
+        roster.Count.ShouldBe(2);
+
+        // 学生一：两道单选全对（20 分），简答 0 分。
+        var first = roster[firstStudentId];
+        first.GetProperty("username").GetString().ShouldBe(StudentOneUsername);
+        first.GetProperty("displayName").GetString().ShouldBe(StudentOneUsername);
+        first.GetProperty("objectiveScore").GetDecimal().ShouldBe(20m);
+        first.GetProperty("subjectiveScore").GetDecimal().ShouldBe(0m);
+        first.GetProperty("totalScore").GetDecimal().ShouldBe(20m);
+        first.GetProperty("totalMax").GetDecimal().ShouldBe(30m);
+        first.GetProperty("scoreRate").GetDecimal().ShouldBe(0.6667m);
+
+        // 学生二：第一题答错，其余留白。
+        var second = roster[secondStudentId];
+        second.GetProperty("objectiveScore").GetDecimal().ShouldBe(0m);
+        second.GetProperty("totalScore").GetDecimal().ShouldBe(0m);
+        second.GetProperty("scoreRate").GetDecimal().ShouldBe(0m);
+    }
+
+    [Fact]
+    public async Task 逐题正确率能跨场次汇总()
+    {
+        await SubmitBothStudentsAsync();
+
+        await LoginAsync(TeacherUsername, TeacherPassword);
+        var response = await _client.GetAsync($"/api/v1/statistics/questions/{_firstSingleQuestionId}");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        body.GetProperty("questionId").GetInt64().ShouldBe(_firstSingleQuestionId);
+        body.GetProperty("code").GetString().ShouldBe("Q-STAT-001");
+        body.GetProperty("type").GetString().ShouldBe("single");
+        body.GetProperty("maxScore").GetDecimal().ShouldBe(10m);
+        body.GetProperty("sessionCount").GetInt32().ShouldBe(1);
+        body.GetProperty("answeredCount").GetInt32().ShouldBe(2);
+        body.GetProperty("correctCount").GetInt32().ShouldBe(1);
+        body.GetProperty("correctRate").GetDecimal().ShouldBe(0.5m);
+        body.GetProperty("averageScore").GetDecimal().ShouldBe(5m);
+        body.GetProperty("mastery").GetDecimal().ShouldBe(0.5m);
+        body.GetProperty("suggestion").GetString().ShouldBe("正确率低于 60%，建议安排讲评。");
+
+        var sessions = body.GetProperty("sessions").EnumerateArray().ToList();
+        sessions.Count.ShouldBe(1);
+        sessions[0].GetProperty("examSessionId").GetInt64().ShouldBe(_sessionId);
+        sessions[0].GetProperty("answeredCount").GetInt32().ShouldBe(2);
+        sessions[0].GetProperty("correctRate").GetDecimal().ShouldBe(0.5m);
+    }
+
+    [Fact]
     public async Task 学生没有分析权限时拿不到统计()
     {
         await SubmitBothStudentsAsync();
@@ -220,6 +284,15 @@ public sealed class ExamStatisticsTests : IAsyncLifetime
         var response = await _client.GetAsync($"/api/v1/statistics/exam-sessions/{_sessionId}");
 
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    private async Task<long> CurrentUserIdAsync()
+    {
+        var me = await _client.GetAsync("/api/v1/auth/me");
+        me.StatusCode.ShouldBe(HttpStatusCode.OK, await me.Content.ReadAsStringAsync());
+
+        var body = await me.Content.ReadFromJsonAsync<JsonElement>();
+        return body.GetProperty("id").GetInt64();
     }
 
     private async Task<JsonElement> GetStatisticsAsync()

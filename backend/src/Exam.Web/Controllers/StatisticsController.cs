@@ -29,4 +29,16 @@ public sealed class StatisticsController : ControllerBase
         long examSessionId,
         CancellationToken cancellationToken = default) =>
         await _mediator.Send(new GetExamSessionStatisticsQuery(examSessionId), cancellationToken);
+
+    /// <summary>
+    /// 一道题在全部场次里的逐题正确率：总体正确率、掌握度、讲评建议与逐场次明细。
+    /// </summary>
+    [HttpGet("questions/{questionId:long}")]
+    [Authorize(Policy = PermissionCatalog.AnalyticsRead)]
+    [ProducesResponseType(typeof(QuestionStatisticsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<QuestionStatisticsResponse> GetQuestion(
+        long questionId,
+        CancellationToken cancellationToken = default) =>
+        await _mediator.Send(new GetQuestionStatisticsQuery(questionId), cancellationToken);
 }

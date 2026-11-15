@@ -41,12 +41,53 @@ public sealed record QuestionStatisticDto(
     string Code,
     string Type,
     string TypeLabel,
+    string Stem,
     decimal MaxScore,
     int AnsweredCount,
     int CorrectCount,
     decimal? CorrectRate,
     decimal? AverageScore,
+    decimal? Mastery,
+    string Suggestion);
+
+/// <summary>逐人成绩明细。</summary>
+public sealed record StudentStatisticDto(
+    long UserId,
+    string Username,
+    string DisplayName,
+    decimal ObjectiveScore,
+    decimal SubjectiveScore,
+    decimal TotalScore,
+    decimal TotalMax,
+    decimal ScoreRate,
+    DateTimeOffset? SubmittedAt);
+
+/// <summary>某场考试里一道题的逐题统计。</summary>
+public sealed record QuestionSessionStatisticDto(
+    long ExamSessionId,
+    string ExamSessionName,
+    int AnsweredCount,
+    int CorrectCount,
+    decimal? CorrectRate,
+    decimal? AverageScore,
     decimal? Mastery);
+
+/// <summary>一道题在全部场次里的逐题正确率。</summary>
+public sealed record QuestionStatisticsResponse(
+    long QuestionId,
+    string Code,
+    string Type,
+    string TypeLabel,
+    string Stem,
+    decimal? MaxScore,
+    int SessionCount,
+    int AnsweredCount,
+    int CorrectCount,
+    decimal? CorrectRate,
+    decimal? AverageScore,
+    decimal? Mastery,
+    string Suggestion,
+    IReadOnlyList<QuestionSessionStatisticDto> Sessions);
 
 /// <summary>一场考试的成绩分析。</summary>
 public sealed record ExamSessionStatisticsResponse(
@@ -64,4 +105,5 @@ public sealed record ExamSessionStatisticsResponse(
     IReadOnlyList<ScoreBucketDto> ScoreBuckets,
     IReadOnlyList<TypeStatisticDto> TypeStatistics,
     IReadOnlyList<QuestionStatisticDto> QuestionStatistics,
+    IReadOnlyList<StudentStatisticDto> Roster,
     DateTimeOffset UpdatedAt);

@@ -17,6 +17,7 @@ public sealed class QuestionStatisticConfiguration : IEntityTypeConfiguration<Qu
         builder.Property(x => x.QuestionId).HasColumnName("question_id").IsRequired();
         builder.Property(x => x.AnsweredCount).HasColumnName("answered_count").IsRequired();
         builder.Property(x => x.CorrectCount).HasColumnName("correct_count").IsRequired();
+        builder.Property(x => x.ScoreSum).HasColumnName("score_sum").HasPrecision(10, 2).IsRequired();
         builder.Property(x => x.AverageScore).HasColumnName("average_score").HasPrecision(8, 2);
         builder.Property(x => x.MasteryRate).HasColumnName("mastery_rate").HasPrecision(6, 4);
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();

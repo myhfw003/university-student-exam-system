@@ -104,6 +104,22 @@ public sealed class ExamStatisticSource : IExamStatisticSource
         return scoreChange is null ? attemptChange : (attemptChange > scoreChange ? attemptChange : scoreChange);
     }
 
+    public async Task<IReadOnlyList<long>> ListSessionIdsByQuestionAsync(
+        long questionId,
+        CancellationToken cancellationToken = default) =>
+        await _db.Set<ScoreResult>()
+            .AsNoTracking()
+            .Where(r => r.QuestionId == questionId)
+            .Join(
+                _db.Set<Attempt>().AsNoTracking(),
+                r => r.AttemptId,
+                a => a.Id,
+                (r, a) => a.ExamSessionId)
+            .Where(sessionId => sessionId != null)
+            .Select(sessionId => sessionId!.Value)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<long>> ListSessionIdsWithAttemptsAsync(
         CancellationToken cancellationToken = default) =>
         await _db.Set<Attempt>()

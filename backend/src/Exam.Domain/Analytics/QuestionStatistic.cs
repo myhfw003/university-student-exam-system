@@ -16,6 +16,7 @@ public sealed class QuestionStatistic : StatisticEntity
         long questionId,
         int answeredCount,
         int correctCount,
+        decimal scoreSum,
         decimal? averageScore,
         decimal? masteryRate,
         DateTimeOffset now)
@@ -25,6 +26,7 @@ public sealed class QuestionStatistic : StatisticEntity
         QuestionId = questionId;
         AnsweredCount = answeredCount;
         CorrectCount = correctCount;
+        ScoreSum = scoreSum;
         AverageScore = averageScore;
         MasteryRate = masteryRate;
     }
@@ -41,6 +43,12 @@ public sealed class QuestionStatistic : StatisticEntity
     /// <summary>满分人次：拿到这道题满分的人次。</summary>
     public int CorrectCount { get; private set; }
 
+    /// <summary>
+    /// 总得分：作答人次的得分之和。
+    /// <para>留着它，跨场次汇总才不会因为平均分被四舍五入而算不准。</para>
+    /// </summary>
+    public decimal ScoreSum { get; private set; }
+
     /// <summary>平均得分。</summary>
     public decimal? AverageScore { get; private set; }
 
@@ -53,6 +61,7 @@ public sealed class QuestionStatistic : StatisticEntity
         long questionId,
         int answeredCount,
         int correctCount,
+        decimal scoreSum,
         decimal? averageScore,
         decimal? masteryRate,
         DateTimeOffset now) =>
@@ -61,6 +70,7 @@ public sealed class QuestionStatistic : StatisticEntity
             questionId,
             answeredCount,
             correctCount,
+            scoreSum,
             averageScore,
             masteryRate,
             now);

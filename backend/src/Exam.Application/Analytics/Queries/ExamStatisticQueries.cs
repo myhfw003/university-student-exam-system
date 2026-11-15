@@ -3,6 +3,7 @@ using Exam.Application.Analytics.Services;
 using Exam.Application.Common.Exceptions;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
+using Exam.Domain.Analytics;
 using Exam.Domain.Catalog;
 using Exam.Domain.Identity;
 using MediatR;
@@ -73,18 +74,23 @@ public sealed class GetExamSessionStatisticsHandler
             {
                 items.TryGetValue(q.QuestionId, out var item);
                 var type = item is null ? string.Empty : item.QuestionType;
+                decimal? correctRate = q.AnsweredCount > 0
+                    ? Round((decimal)q.CorrectCount / q.AnsweredCount)
+                    : null;
 
                 return new QuestionStatisticDto(
                     q.QuestionId,
                     item?.QuestionCode ?? string.Empty,
                     type,
                     TypeLabel(type),
+                    item?.Stem ?? string.Empty,
                     item?.Score.Value ?? 0m,
                     q.AnsweredCount,
                     q.CorrectCount,
-                    q.AnsweredCount > 0 ? Round((decimal)q.CorrectCount / q.AnsweredCount) : null,
+                    correctRate,
                     q.AverageScore,
-                    q.MasteryRate);
+                    q.MasteryRate,
+                    AnalyticsRules.ReviewSuggestion(correctRate, q.MasteryRate, q.AnsweredCount));
             })
             .ToList();
 
@@ -100,6 +106,8 @@ public sealed class GetExamSessionStatisticsHandler
         var buckets = statistic.ScoreBuckets
             .Select(kv => new ScoreBucketDto(kv.Key, kv.Value))
             .ToList();
+
+        var roster = await _service.BuildRosterAsync(session.Id, cancellationToken);
 
         return new ExamSessionStatisticsResponse(
             session.Id,
@@ -118,6 +126,7 @@ public sealed class GetExamSessionStatisticsHandler
             buckets,
             typeDtos,
             questionDtos,
+            roster,
             statistic.UpdatedAt);
     }
 
@@ -125,4 +134,32 @@ public sealed class GetExamSessionStatisticsHandler
         QuestionTypes.FromStorage(storage)?.Label() ?? storage;
 
     private static decimal Round(decimal value) => Math.Round(value, 4, MidpointRounding.AwayFromZero);
+}
+
+/// <summary>
+/// 一道题在全部场次里的逐题正确率。
+/// <para>跨场次汇总：答了哪些场次、每场次的作答数与正确率，以及总体正确率与讲评建议。</para>
+/// </summary>
+public sealed record GetQuestionStatisticsQuery(long QuestionId)
+    : IAppQuery<QuestionStatisticsResponse>, IAuthorizableRequest
+{
+    public IReadOnlyCollection<string> RequiredPermissions { get; init; } = [PermissionCatalog.AnalyticsRead];
+}
+
+public sealed class GetQuestionStatisticsHandler
+    : IRequestHandler<GetQuestionStatisticsQuery, QuestionStatisticsResponse>
+{
+    private readonly ExamStatisticsService _service;
+
+    public GetQuestionStatisticsHandler(ExamStatisticsService service) => _service = service;
+
+    public async Task<QuestionStatisticsResponse> Handle(
+        GetQuestionStatisticsQuery request,
+        CancellationToken cancellationToken)
+    {
+        var summary = await _service.BuildQuestionSummaryAsync(request.QuestionId, cancellationToken)
+            ?? throw new NotFoundException("题目不存在。");
+
+        return summary;
+    }
 }

@@ -141,6 +141,11 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("question_id");
 
+                    b.Property<decimal>("ScoreSum")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("score_sum");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");

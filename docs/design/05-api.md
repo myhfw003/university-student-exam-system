@@ -726,13 +726,34 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
   "typeStatistics": [ { "type": "single", "typeLabel": "单选题", "answeredCount": 120,
                         "averageScore": 8.2, "scoreRate": 0.82 } ],
   "questionStatistics": [ { "questionId": 501, "code": "Q-2026-00123", "type": "multi", "typeLabel": "多选题",
-                            "maxScore": 10, "answeredCount": 118, "correctCount": 74,
-                            "correctRate": 0.63, "averageScore": 6.3, "mastery": 0.63 } ],
+                            "stem": "以下哪些协议可以建立可靠传输？", "maxScore": 10,
+                            "answeredCount": 118, "correctCount": 74,
+                            "correctRate": 0.63, "averageScore": 6.3, "mastery": 0.63,
+                            "suggestion": "正确率低于 60%，建议安排讲评。" } ],
+  "roster": [ { "userId": 30012, "username": "linzhiyuan", "displayName": "林知远",
+                "objectiveScore": 60, "subjectiveScore": 14, "totalScore": 74, "totalMax": 100,
+                "scoreRate": 0.74, "submittedAt": "2026-06-18T09:20:00Z" } ],
   "updatedAt": "2026-11-15T10:00:00Z"
 }
 ```
 
-> 逐人成绩明细（`roster`）与逐题讲评建议（`suggestion`）随 T-P7-05「管理端成绩分析」一起提供。
+> `roster` 是逐人成绩明细：每位考生的客观分、主观分、总分与得分率，按总分从高到低排。
+> `suggestion` 是逐题讲评建议：正确率或得分率低于 60% 就提示安排讲评，没人作答的题不给建议。
+
+**`GET /statistics/questions/{id}`**
+
+```json
+{
+  "questionId": 501, "code": "Q-2026-00123", "type": "multi", "typeLabel": "多选题",
+  "stem": "以下哪些协议可以建立可靠传输？", "maxScore": 10,
+  "sessionCount": 3, "answeredCount": 354, "correctCount": 220,
+  "correctRate": 0.6215, "averageScore": 6.2, "mastery": 0.62,
+  "suggestion": "正确率低于 60%，建议安排讲评。",
+  "sessions": [ { "examSessionId": 30, "examSessionName": "计算机网络期中考试",
+                  "answeredCount": 118, "correctCount": 74,
+                  "correctRate": 0.6271, "averageScore": 6.3, "mastery": 0.63 } ]
+}
+```
 
 **统计口径**
 

@@ -64,6 +64,30 @@ public static class AnalyticsRules
         return Bands[^1].Label;
     }
 
+    /// <summary>
+    /// 讲评建议：正确率或得分率低于阈值就值得安排讲评。
+    /// <para>没人作答的题不给建议——没有数据可依据。</para>
+    /// </summary>
+    public static string ReviewSuggestion(decimal? correctRate, decimal? masteryRate, int answeredCount)
+    {
+        if (answeredCount <= 0)
+        {
+            return "本题无人作答，暂不给出讲评建议。";
+        }
+
+        if (correctRate is not null && correctRate < ReviewSuggestionRate)
+        {
+            return "正确率低于 60%，建议安排讲评。";
+        }
+
+        if (masteryRate is not null && masteryRate < ReviewSuggestionRate)
+        {
+            return "得分率低于 60%，建议安排讲评。";
+        }
+
+        return "正确率良好，暂无专门讲评的必要。";
+    }
+
     /// <summary>按得分率分档计数。分档顺序固定，输出顺序与 <see cref="Bands"/> 一致。</summary>
     public static IReadOnlyDictionary<string, int> CountByBucket(IEnumerable<decimal> scoreRates)
     {
