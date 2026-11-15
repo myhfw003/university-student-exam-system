@@ -29,6 +29,30 @@ public sealed class PracticeAssignmentRepository : IPracticeAssignmentRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<PracticeAssignment>> ListAsync(
+        PracticeAssignmentStatus? status,
+        string? keyword,
+        CancellationToken cancellationToken = default)
+    {
+        IQueryable<PracticeAssignment> query = _db.Set<PracticeAssignment>().AsNoTracking();
+
+        if (status is not null)
+        {
+            query = query.Where(a => a.Status == status.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var pattern = $"%{keyword.Trim()}%";
+            query = query.Where(a => EF.Functions.ILike(a.Title, pattern));
+        }
+
+        return await query
+            .OrderByDescending(a => a.CreatedAt)
+            .ThenBy(a => a.Id)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<PracticeAssignment>> ListPublishedOpenAsync(
         DateTimeOffset now,
         CancellationToken cancellationToken = default) =>
@@ -40,6 +64,8 @@ public sealed class PracticeAssignmentRepository : IPracticeAssignmentRepository
             .OrderBy(a => a.PublishedAt)
             .ThenBy(a => a.Id)
             .ToListAsync(cancellationToken);
+
+    public void Update(PracticeAssignment assignment) => _db.Set<PracticeAssignment>().Update(assignment);
 
     public async Task AddAsync(PracticeAssignment assignment, CancellationToken cancellationToken = default) =>
         await _db.Set<PracticeAssignment>().AddAsync(assignment, cancellationToken);

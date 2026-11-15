@@ -102,17 +102,61 @@ public sealed class PracticeAssignment : AuditableEntity, IAuditedEntity
             actorId);
     }
 
-    /// <summary>上架。</summary>
+    /// <summary>
+    /// 改设置：标题、开放范围与开放期。
+    /// <para>改的是「接下来谁能看到、什么时候能练」，已上架的练习改了立即生效。</para>
+    /// </summary>
+    public void UpdateSettings(
+        string title,
+        IReadOnlyCollection<long>? scopeTagIds,
+        DateTimeOffset? openAt,
+        DateTimeOffset? closeAt,
+        DateTimeOffset now,
+        long? actorId = null)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            throw new BusinessRuleException("练习标题不能为空。");
+        }
+
+        if (scopeTagIds?.Any(id => id <= 0) == true)
+        {
+            throw new BusinessRuleException("开放范围里的标签不合法。");
+        }
+
+        if (openAt is not null && closeAt is not null && closeAt <= openAt)
+        {
+            throw new BusinessRuleException("关闭时间必须晚于开放时间。");
+        }
+
+        Title = title.Trim();
+        ScopeTagIds = scopeTagIds?.Distinct().OrderBy(id => id).ToList() ?? [];
+        OpenAt = openAt;
+        CloseAt = closeAt;
+        Touch(now, actorId);
+    }
+
+    /// <summary>上架。草稿与已下架的练习都能重新上架。</summary>
     public void Publish(DateTimeOffset now, long? actorId = null)
     {
+        if (Status == PracticeAssignmentStatus.Published)
+        {
+            throw new InvalidStateTransitionException("练习已经上架了。");
+        }
+
         Status = PracticeAssignmentStatus.Published;
         PublishedAt = now;
         Touch(now, actorId);
     }
 
-    /// <summary>下架。</summary>
+    /// <summary>下架。下架之后学生就看不到这个练习了。</summary>
     public void Archive(DateTimeOffset now, long? actorId = null)
     {
+        if (Status != PracticeAssignmentStatus.Published)
+        {
+            throw new InvalidStateTransitionException("只有已上架的练习才能下架。");
+        }
+
         Status = PracticeAssignmentStatus.Archived;
         Touch(now, actorId);
     }

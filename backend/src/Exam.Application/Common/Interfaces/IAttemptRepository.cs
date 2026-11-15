@@ -12,6 +12,11 @@ public interface IAttemptRepository
     /// <summary>取回某人在某份练习下尚未结束的会话（幂等恢复用）。</summary>
     Task<Attempt?> GetActivePracticeAsync(long userId, long practiceAssignmentId, CancellationToken cancellationToken = default);
 
+    /// <summary>按练习开放单统计做题次数（管理端列表用）。</summary>
+    Task<IReadOnlyDictionary<long, int>> CountByPracticeAssignmentsAsync(
+        IReadOnlyCollection<long> practiceAssignmentIds,
+        CancellationToken cancellationToken = default);
+
     /// <summary>某人在某份练习下已用的尝试次数。</summary>
     Task<int> CountByPracticeAsync(long userId, long practiceAssignmentId, CancellationToken cancellationToken = default);
 

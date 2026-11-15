@@ -706,6 +706,11 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 | POST | `/mistakes/{questionId}/redo` | 登录 | 生成单题重做练习 |
 | GET | `/abilities/profile` | 登录 | 能力画像（样本不足的不参与排序） |
 | GET | `/practices` | 登录 | 可见练习列表 |
+| GET | `/practice-assignments` | `practice:read` | 管理端练习列表 |
+| POST | `/practice-assignments` | `practice:write` | 新建练习开放单 |
+| PUT | `/practice-assignments/{id}` | `practice:write` | 改练习设置（标题、开放范围、开放期） |
+| POST | `/practice-assignments/{id}/publish` | `practice:write` | 上架 |
+| POST | `/practice-assignments/{id}/archive` | `practice:write` | 下架（`archived` 状态的写入路径） |
 | GET | `/dashboard/summary` | 登录 | 工作台汇总 |
 | GET | `/statistics/exam-sessions/{id}` | `analytics:read` | 成绩分析 |
 | GET | `/statistics/questions/{id}` | `analytics:read` | 逐题正确率 |
@@ -754,6 +759,27 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 ```
 
 **`GET /practices/{id}`**：与列表条目同结构；不在可见范围内的练习返回 404。
+
+**管理端练习管理**
+
+```json
+// GET /practice-assignments?status=draft&keyword=冲刺
+{
+  "total": 1, "page": 1, "size": 20,
+  "items": [
+    { "id": 5, "title": "期末冲刺练习", "paperId": 12, "paperName": "冲刺卷",
+      "questionCount": 10, "totalScore": 50,
+      "status": "draft", "statusLabel": "草稿",
+      "scopeTagIds": [3], "scopeTagNames": ["计科 2301 班"],
+      "openAt": "2026-11-01T00:00:00Z", "closeAt": "2026-11-30T00:00:00Z",
+      "publishedAt": null, "createdAt": "2026-10-31T08:00:00Z", "attemptCount": 0 }
+  ]
+}
+```
+
+> 练习的生命周期：**草稿 → 已上架 → 已下架**。草稿与已下架的练习都能重新上架；
+> 只有已上架的练习能下架。开放范围**只能是组织维度的标签**，否则返回 422。
+> 下架之后学生立刻看不到这个练习——`archived` 不再只是一个只读状态。
 
 **`GET /dashboard/summary`**
 

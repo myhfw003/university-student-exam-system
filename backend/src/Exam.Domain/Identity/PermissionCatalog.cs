@@ -24,6 +24,9 @@ public static class PermissionCatalog
 
     public const string BlueprintGenerate = "blueprint:generate";
 
+    public const string PracticeRead = "practice:read";
+    public const string PracticeWrite = "practice:write";
+
     public const string ExamRead = "exam:read";
     public const string ExamWrite = "exam:write";
     public const string ExamPublish = "exam:publish";
@@ -63,6 +66,7 @@ public static class PermissionCatalog
         ImportRun, ImportAdopt,
         PaperRead, PaperWrite, PaperPublish,
         BlueprintGenerate,
+        PracticeRead, PracticeWrite,
         ExamRead, ExamWrite, ExamPublish,
         AttemptTake, AttemptReadOwn, AttemptReadAll,
         ReviewGrade, ReviewBatchAdopt,
@@ -88,6 +92,7 @@ public static class PermissionCatalog
                 ImportRun, ImportAdopt,
                 PaperRead, PaperWrite, PaperPublish,
                 BlueprintGenerate,
+                PracticeRead, PracticeWrite,
                 ExamRead, ExamWrite, ExamPublish,
                 AttemptTake, AttemptReadOwn, AttemptReadAll,
                 ReviewGrade, ReviewBatchAdopt,
@@ -104,6 +109,7 @@ public static class PermissionCatalog
                 ImportRun, ImportAdopt,
                 PaperRead, PaperWrite, PaperPublish,
                 BlueprintGenerate,
+                PracticeRead, PracticeWrite,
                 ExamRead, ExamWrite,
                 AttemptTake, AttemptReadOwn,
                 AnalyticsRead,
@@ -146,6 +152,8 @@ public static class PermissionCatalog
             [PaperWrite] = "编辑试卷",
             [PaperPublish] = "发布试卷",
             [BlueprintGenerate] = "生成组卷方案",
+            [PracticeRead] = "查看练习",
+            [PracticeWrite] = "管理练习",
             [ExamRead] = "查看考试",
             [ExamWrite] = "编辑考试",
             [ExamPublish] = "发布考试",

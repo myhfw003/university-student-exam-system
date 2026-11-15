@@ -36,6 +36,25 @@ public sealed class AttemptRepository : IAttemptRepository
             .OrderByDescending(a => a.AttemptNo)
             .FirstOrDefaultAsync(cancellationToken);
 
+    public async Task<IReadOnlyDictionary<long, int>> CountByPracticeAssignmentsAsync(
+        IReadOnlyCollection<long> practiceAssignmentIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (practiceAssignmentIds.Count == 0)
+        {
+            return new Dictionary<long, int>();
+        }
+
+        var rows = await _db.Set<Attempt>()
+            .AsNoTracking()
+            .Where(a => a.PracticeAssignmentId != null && practiceAssignmentIds.Contains(a.PracticeAssignmentId!.Value))
+            .GroupBy(a => a.PracticeAssignmentId!.Value)
+            .Select(g => new { AssignmentId = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        return rows.ToDictionary(r => r.AssignmentId, r => r.Count);
+    }
+
     public Task<int> CountByPracticeAsync(
         long userId,
         long practiceAssignmentId,
