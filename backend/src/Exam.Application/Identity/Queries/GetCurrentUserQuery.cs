@@ -7,7 +7,7 @@ using MediatR;
 namespace Exam.Application.Identity.Queries;
 
 /// <summary>查询当前登录用户的档案与权限。</summary>
-public sealed record GetCurrentUserQuery : IAppQuery<UserProfileDto?>, IAuthorizableRequest
+public sealed record GetCurrentUserQuery : IAppQuery<UserProfileDto?>, IAuthorizableRequest, IExemptFromPasswordChange
 {
     public IReadOnlyCollection<string> RequiredPermissions { get; } = [];
 }

@@ -11,7 +11,8 @@ namespace Exam.Application.Authoring.Queries;
 /// <summary>列出某份试卷的全部快照版本（新版本在前）。</summary>
 public sealed record ListPaperSnapshotsQuery(long PaperId) : IAppQuery<PaperSnapshotListResponse>, IAuthorizableRequest
 {
-    public IReadOnlyCollection<string> RequiredPermissions { get; init; } = [PermissionCatalog.PaperRead];
+    // 快照里冻结着正确答案与解析：只有出题的人能看，考生看就是泄题。
+    public IReadOnlyCollection<string> RequiredPermissions { get; init; } = [PermissionCatalog.PaperWrite];
 }
 
 public sealed class ListPaperSnapshotsHandler : IRequestHandler<ListPaperSnapshotsQuery, PaperSnapshotListResponse>
@@ -38,7 +39,8 @@ public sealed class ListPaperSnapshotsHandler : IRequestHandler<ListPaperSnapsho
 /// </summary>
 public sealed record GetPaperSnapshotQuery(long PaperId, int? Version) : IAppQuery<PaperSnapshotDetailDto>, IAuthorizableRequest
 {
-    public IReadOnlyCollection<string> RequiredPermissions { get; init; } = [PermissionCatalog.PaperRead];
+    // 快照里冻结着正确答案与解析：只有出题的人能看，考生看就是泄题。
+    public IReadOnlyCollection<string> RequiredPermissions { get; init; } = [PermissionCatalog.PaperWrite];
 }
 
 public sealed class GetPaperSnapshotHandler : IRequestHandler<GetPaperSnapshotQuery, PaperSnapshotDetailDto>

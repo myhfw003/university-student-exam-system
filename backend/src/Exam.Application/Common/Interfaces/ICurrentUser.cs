@@ -15,4 +15,10 @@ public interface ICurrentUser
     IReadOnlySet<string> Permissions { get; }
 
     bool HasPermission(string permissionCode);
+
+    /// <summary>
+    /// 当前用户是否必须先改密码（管理员重置密码或导入名单时置位）。
+    /// <para>由访问令牌里的标记判定——改密后重新签发的令牌不再带这个标记。</para>
+    /// </summary>
+    bool MustChangePassword { get; }
 }

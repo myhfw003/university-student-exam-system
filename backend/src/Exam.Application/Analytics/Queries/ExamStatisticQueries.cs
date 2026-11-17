@@ -3,6 +3,7 @@ using Exam.Application.Analytics.Services;
 using Exam.Application.Common.Exceptions;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
+using Exam.Application.Delivery.Services;
 using Exam.Domain.Analytics;
 using Exam.Domain.Catalog;
 using Exam.Domain.Identity;
@@ -29,17 +30,20 @@ public sealed class GetExamSessionStatisticsHandler
     private readonly IPaperSnapshotRepository _snapshots;
     private readonly IExamStatisticRepository _readModel;
     private readonly ExamStatisticsService _service;
+    private readonly ExamAccessScope _scope;
 
     public GetExamSessionStatisticsHandler(
         IExamSessionRepository sessions,
         IPaperSnapshotRepository snapshots,
         IExamStatisticRepository readModel,
-        ExamStatisticsService service)
+        ExamStatisticsService service,
+        ExamAccessScope scope)
     {
         _sessions = sessions;
         _snapshots = snapshots;
         _readModel = readModel;
         _service = service;
+        _scope = scope;
     }
 
     public async Task<ExamSessionStatisticsResponse> Handle(
@@ -48,6 +52,9 @@ public sealed class GetExamSessionStatisticsHandler
     {
         var session = await _sessions.GetByIdAsync(request.ExamSessionId, cancellationToken)
             ?? throw new NotFoundException("考试场次不存在。");
+
+        // 统计只对自己负责的场次开放。
+        await _scope.EnsureSessionVisibleAsync(session.Id, cancellationToken);
 
         // 统计必须与原始作答数据一致：读模型落后了就当场重算。
         if (await _service.IsStaleAsync(session.Id, cancellationToken))
@@ -150,13 +157,35 @@ public sealed class GetQuestionStatisticsHandler
     : IRequestHandler<GetQuestionStatisticsQuery, QuestionStatisticsResponse>
 {
     private readonly ExamStatisticsService _service;
+    private readonly IPaperRepository _papers;
+    private readonly ExamAccessScope _scope;
 
-    public GetQuestionStatisticsHandler(ExamStatisticsService service) => _service = service;
+    public GetQuestionStatisticsHandler(
+        ExamStatisticsService service,
+        IPaperRepository papers,
+        ExamAccessScope scope)
+    {
+        _service = service;
+        _papers = papers;
+        _scope = scope;
+    }
 
     public async Task<QuestionStatisticsResponse> Handle(
         GetQuestionStatisticsQuery request,
         CancellationToken cancellationToken)
     {
+        // 跨场次汇总只对自己可见的卷子开放：这题在自己的卷子里才看得到统计。
+        var scope = await _scope.ResolveAsync(cancellationToken);
+        if (scope.Tier != AccessScopeTier.Manager)
+        {
+            var visiblePapers = await _papers.GetByIdsAsync(scope.PaperIds.ToList(), cancellationToken);
+            var owns = visiblePapers.Any(p => p.Items.Any(i => i.QuestionId == request.QuestionId));
+            if (!owns)
+            {
+                throw new ForbiddenException("你没有查看该题统计的权限。");
+            }
+        }
+
         var summary = await _service.BuildQuestionSummaryAsync(request.QuestionId, cancellationToken)
             ?? throw new NotFoundException("题目不存在。");
 

@@ -68,7 +68,7 @@ public sealed class RefreshAccessTokenHandlerTests
         var user = User.Register("zhangsan", "张三", "hash-x", Now);
         _users.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(user);
         _permissions.GetPermissionCodesAsync(Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns([]);
-        _tokenService.IssueAccessToken(Arg.Any<long>(), Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>>())
+        _tokenService.IssueAccessToken(Arg.Any<long>(), Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<bool>())
             .Returns(new AccessTokenMaterial("new-access", "jti-2", Now.AddMinutes(15)));
         _tokenService.IssueRefreshToken(Arg.Any<long>(), Arg.Any<Guid>())
             .Returns(new RefreshTokenMaterial("new-refresh", "hash-2", Now.AddDays(7)));

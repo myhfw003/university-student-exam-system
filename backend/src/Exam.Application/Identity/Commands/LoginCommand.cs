@@ -78,7 +78,11 @@ public sealed class LoginHandler : IRequestHandler<LoginCommand, LoginResult>
         var permissionCodes = await _permissions.GetPermissionCodesAsync(user.Id, cancellationToken);
         var roleCodes = await _permissions.GetRoleCodesAsync(user.Id, cancellationToken);
 
-        var access = _tokenService.IssueAccessToken(user.Id, user.Username, permissionCodes);
+        var access = _tokenService.IssueAccessToken(
+            user.Id,
+            user.Username,
+            permissionCodes,
+            user.MustChangePassword);
 
         var familyId = Guid.NewGuid();
         var refresh = _tokenService.IssueRefreshToken(user.Id, familyId);

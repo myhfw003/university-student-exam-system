@@ -60,6 +60,17 @@ public sealed class PaperRepository : IPaperRepository
         CancellationToken cancellationToken = default) =>
         Filtered(kind, status, keyword).CountAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Paper>> ListByCreatorAsync(
+        long userId,
+        CancellationToken cancellationToken = default) =>
+        await _db.Papers
+            .AsNoTracking()
+            .Include(p => p.Items)
+            .Where(p => p.CreatedBy == userId)
+            .OrderByDescending(p => p.UpdatedAt ?? p.CreatedAt)
+            .ThenByDescending(p => p.Id)
+            .ToListAsync(cancellationToken);
+
     public async Task AddAsync(Paper paper, CancellationToken cancellationToken = default) =>
         await _db.Papers.AddAsync(paper, cancellationToken);
 

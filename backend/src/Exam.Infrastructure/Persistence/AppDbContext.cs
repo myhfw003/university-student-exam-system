@@ -100,6 +100,8 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
 
     public DbSet<ExamParticipant> ExamParticipants => Set<ExamParticipant>();
 
+    public DbSet<ExamSessionAssignment> ExamSessionAssignments => Set<ExamSessionAssignment>();
+
     public DbSet<Attempt> Attempts => Set<Attempt>();
 
     public DbSet<Answer> Answers => Set<Answer>();

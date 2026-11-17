@@ -39,6 +39,13 @@ public sealed class AuthorizationBehavior<TRequest, TResponse> : IPipelineBehavi
             throw new ForbiddenException("请先登录。");
         }
 
+        // 强制改密：管理员重置密码或导入名单后，用户必须先改密。
+        // 放行的只有标记了 IExemptFromPasswordChange 的请求（改密、看本人档案、登出）。
+        if (_currentUser.MustChangePassword && request is not IExemptFromPasswordChange)
+        {
+            throw new ForbiddenException("请先修改初始密码，再继续使用。");
+        }
+
         var required = authorizable.RequiredPermissions;
         if (required.Count == 0)
         {

@@ -25,6 +25,7 @@ public sealed class GetAttemptHandler : IRequestHandler<GetAttemptQuery, Attempt
     private readonly IExamSessionRepository _sessions;
     private readonly AttemptPaperSurfaceBuilder _surfaceBuilder;
     private readonly IClock _clock;
+    private readonly ExamAccessScope _scope;
     private readonly ICurrentUser _currentUser;
 
     public GetAttemptHandler(
@@ -33,8 +34,10 @@ public sealed class GetAttemptHandler : IRequestHandler<GetAttemptQuery, Attempt
         IExamSessionRepository sessions,
         AttemptPaperSurfaceBuilder surfaceBuilder,
         IClock clock,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        ExamAccessScope scope)
     {
+        _scope = scope;
         _attempts = attempts;
         _answers = answers;
         _sessions = sessions;
@@ -49,10 +52,7 @@ public sealed class GetAttemptHandler : IRequestHandler<GetAttemptQuery, Attempt
             ?? throw new NotFoundException("作答会话不存在。");
 
         var userId = _currentUser.UserId;
-        if (userId != attempt.UserId && !_currentUser.HasPermission(PermissionCatalog.AttemptReadAll))
-        {
-            throw new ForbiddenException("只能查看自己的作答。");
-        }
+        await _scope.EnsureAttemptVisibleAsync(attempt, cancellationToken);
 
         var session = attempt.ExamSessionId is { } sessionId
             ? await _sessions.GetByIdAsync(sessionId, cancellationToken)

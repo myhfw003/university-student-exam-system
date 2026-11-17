@@ -5,8 +5,12 @@ namespace Exam.Domain.Delivery;
 /// <summary>
 /// 答案公布判定。
 /// <para>
-/// 公布时机由试卷的答案公布策略决定：立即公布（开考即公布）、交卷后公布、
-/// 场次关闭后公布。策略在试卷发布时冻结进快照——考完之后改试卷也改不动。
+/// 规则：**考试进行中，任何人都读不到答案与解析**。场次关闭之后才按策略公布，
+/// 公布策略在试卷发布时冻结进快照——考完之后改试卷也改不动。
+/// </para>
+/// <para>
+/// 练习不走这里：练习没有场次，按练习的反馈时机（即时 / 交卷后）判定，
+/// 见 <c>GetAttemptReportHandler.ShouldRevealPracticeAsync</c>。
 /// </para>
 /// </summary>
 public static class AnswerRevealPolicy
@@ -18,18 +22,27 @@ public static class AnswerRevealPolicy
     public static bool ShouldReveal(
         AnswerPolicy policy,
         ExamSessionStatus sessionStatus,
-        bool studentSubmitted) =>
-        policy switch
+        bool studentSubmitted)
+    {
+        // 场次没关闭就是考试进行中：答案一律不给，哪怕策略写着「立即公布」。
+        // 考生在考试期间看到答案，等于开卷考试。
+        if (sessionStatus != ExamSessionStatus.Closed)
         {
-            // 开考即公布：场次开考之后就算数。
-            AnswerPolicy.Immediately => sessionStatus != ExamSessionStatus.Scheduled,
+            return false;
+        }
 
-            // 交卷后公布：本人交卷就能看自己的答案。
+        return policy switch
+        {
+            // 结束后立即公布：全场结束，人人都能看到。
+            AnswerPolicy.Immediately => true,
+
+            // 结束后只给交卷的人看：没交卷的（缺考）拿不到答案与解析。
             AnswerPolicy.AfterSubmit => studentSubmitted,
 
-            // 场次关闭后公布：整场考完才一起公布。
-            AnswerPolicy.AfterClose => sessionStatus == ExamSessionStatus.Closed,
+            // 结束后公布：全场结束，人人都能看到。
+            AnswerPolicy.AfterClose => true,
 
             _ => false,
         };
+    }
 }

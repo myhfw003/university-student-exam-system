@@ -27,4 +27,6 @@ public sealed class BackgroundCurrentUser : ICurrentUser
     public IReadOnlySet<string> Permissions => new HashSet<string>(StringComparer.Ordinal);
 
     public bool HasPermission(string permissionCode) => false;
+
+    public bool MustChangePassword => false;
 }

@@ -2077,6 +2077,44 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Exam.Domain.Delivery.ExamSessionAssignment", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("CreatedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_by");
+
+                    b.Property<long>("ExamSessionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("exam_session_id");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_exam_session_assignment");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_exam_session_assignment_user");
+
+                    b.HasIndex("ExamSessionId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_exam_session_assignment_user");
+
+                    b.ToTable("exam_session_assignment", "delivery");
+                });
+
             modelBuilder.Entity("Exam.Domain.Delivery.FocusEvent", b =>
                 {
                     b.Property<long>("Id")
@@ -3417,6 +3455,16 @@ namespace Exam.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_exam_session_papers_paper_id");
+                });
+
+            modelBuilder.Entity("Exam.Domain.Delivery.ExamSessionAssignment", b =>
+                {
+                    b.HasOne("Exam.Domain.Delivery.ExamSession", null)
+                        .WithMany()
+                        .HasForeignKey("ExamSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_exam_session_assignment_exam_sessions_exam_session_id");
                 });
 
             modelBuilder.Entity("Exam.Domain.Delivery.ProctorAction", b =>

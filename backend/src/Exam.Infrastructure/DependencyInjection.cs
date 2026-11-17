@@ -72,6 +72,7 @@ public static class DependencyInjection
         services.AddScoped<IPaperTemplateRepository, PaperTemplateRepository>();
         services.AddScoped<IExamSessionRepository, ExamSessionRepository>();
         services.AddScoped<IExamParticipantRepository, ExamParticipantRepository>();
+        services.AddScoped<IExamSessionAssignmentRepository, ExamSessionAssignmentRepository>();
         services.AddScoped<ExamRosterBuilder>();
         services.AddScoped<IAttemptRepository, AttemptRepository>();
         services.AddScoped<IAnswerRepository, AnswerRepository>();
@@ -92,6 +93,8 @@ public static class DependencyInjection
         services.AddScoped<Exam.Application.Learning.Services.PracticeRulesResolver>();
         services.AddScoped<Exam.Application.Learning.Services.PracticeAssignmentService>();
         services.AddScoped<Exam.Application.Delivery.Services.AnswerReconciler>();
+        // 对象级可见范围：谁能看哪些场次、哪些卷子、哪些作答。
+        services.AddScoped<Exam.Application.Delivery.Services.ExamAccessScope>();
         // 快照不可变，缓存住：开考瞬间 1000 人进考场读的是同一份。
         services.AddSingleton<Exam.Application.Authoring.Services.PaperSnapshotCache>();
         services.AddScoped<Exam.Application.Learning.Services.DashboardService>();

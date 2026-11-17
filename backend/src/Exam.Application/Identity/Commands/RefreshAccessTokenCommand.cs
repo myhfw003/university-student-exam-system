@@ -84,7 +84,11 @@ public sealed class RefreshAccessTokenHandler : IRequestHandler<RefreshAccessTok
         }
 
         var permissionCodes = await _permissions.GetPermissionCodesAsync(user.Id, cancellationToken);
-        var access = _tokenService.IssueAccessToken(user.Id, user.Username, permissionCodes);
+        var access = _tokenService.IssueAccessToken(
+            user.Id,
+            user.Username,
+            permissionCodes,
+            user.MustChangePassword);
 
         // 轮换：新令牌属于同一令牌族。
         var refresh = _tokenService.IssueRefreshToken(user.Id, stored.FamilyId);

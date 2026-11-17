@@ -34,6 +34,7 @@ public sealed class GetAttemptFeedbackHandler
     private readonly AttemptPaperResolver _resolver;
     private readonly AttemptScoringService _scoring;
     private readonly PracticeRulesResolver _practiceRules;
+    private readonly ExamAccessScope _scope;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
 
@@ -44,8 +45,10 @@ public sealed class GetAttemptFeedbackHandler
         AttemptScoringService scoring,
         PracticeRulesResolver practiceRules,
         ICurrentUser currentUser,
-        IClock clock)
+        IClock clock,
+        ExamAccessScope scope)
     {
+        _scope = scope;
         _attempts = attempts;
         _answers = answers;
         _resolver = resolver;
@@ -62,13 +65,7 @@ public sealed class GetAttemptFeedbackHandler
         var attempt = await _attempts.GetByIdAsync(request.AttemptId, cancellationToken)
             ?? throw new NotFoundException("作答会话不存在。");
 
-        var userId = _currentUser.UserId
-            ?? throw new ForbiddenException("请先登录。");
-
-        if (attempt.UserId != userId && !_currentUser.HasPermission(PermissionCatalog.AttemptReadAll))
-        {
-            throw new ForbiddenException("只能查看自己的练习反馈。");
-        }
+        await _scope.EnsureAttemptVisibleAsync(attempt, cancellationToken);
 
         if (attempt.TargetType != AttemptTargetType.Practice)
         {

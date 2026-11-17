@@ -248,26 +248,40 @@ public static class QuestionDtoFactory
         question.CreatedAt,
         question.UpdatedAt);
 
-    public static QuestionDetailDto ToDetail(Question question) => new(
+    /// <summary>
+    /// 题目详情。
+    /// <para>
+    /// <paramref name="includeSensitive"/> 为 false 时脱敏：不返回正确选项标记、
+    /// 评分要点、参考答案与解析。学生/社会人士直接读题目时走这一支——
+    /// 考试进行中绝不通过题目接口泄露答案。
+    /// </para>
+    /// </summary>
+    public static QuestionDetailDto ToDetail(Question question, bool includeSensitive = true) => new(
         ToSummary(question),
         question.Options
             .OrderBy(o => o.SortOrder)
             .ThenBy(o => o.Key, StringComparer.Ordinal)
-            .Select(o => new QuestionOptionDto(o.Key, o.Text, o.IsCorrect))
+            .Select(o => new QuestionOptionDto(o.Key, o.Text, includeSensitive && o.IsCorrect))
             .ToList(),
-        question.Keypoints
-            .OrderBy(k => k.SortOrder)
-            .Select(k => new QuestionKeypointDto(k.Text, k.Keywords))
-            .ToList(),
+        includeSensitive
+            ? question.Keypoints
+                .OrderBy(k => k.SortOrder)
+                .Select(k => new QuestionKeypointDto(k.Text, k.Keywords))
+                .ToList()
+            : [],
         question.Steps
             .OrderBy(s => s.SortOrder)
             .Select(s => new QuestionStepDto(
-                s.Code, s.Prompt, s.ReferenceAnswer, s.Keywords, s.Score.Value))
+                s.Code,
+                s.Prompt,
+                includeSensitive ? s.ReferenceAnswer : null,
+                includeSensitive ? s.Keywords : [],
+                s.Score.Value))
             .ToList(),
         question.Attachments
             .OrderBy(a => a.SortOrder)
             .Select(a => new QuestionAttachmentDto(a.Id, a.FileName, a.ContentType, a.SizeBytes))
             .ToList(),
-        question.Analysis,
-        question.ReferenceAnswer);
+        includeSensitive ? question.Analysis : null,
+        includeSensitive ? question.ReferenceAnswer : null);
 }

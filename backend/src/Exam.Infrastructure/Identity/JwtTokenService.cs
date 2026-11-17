@@ -32,7 +32,8 @@ public sealed class JwtTokenService : ITokenService
     public AccessTokenMaterial IssueAccessToken(
         long userId,
         string username,
-        IReadOnlyCollection<string> permissions)
+        IReadOnlyCollection<string> permissions,
+        bool mustChangePassword = false)
     {
         var now = DateTimeOffset.UtcNow;
         var expiresAt = now.AddMinutes(Math.Max(1, _options.AccessTokenMinutes));
@@ -44,9 +45,19 @@ public sealed class JwtTokenService : ITokenService
             new(JwtRegisteredClaimNames.Jti, jti),
             new(JwtRegisteredClaimNames.UniqueName, username),
             new(JwtRegisteredClaimNames.Iat, now.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64),
+            // 毫秒精度的签发时间：账号被重置密码后要按签发时间吊销旧令牌，
+            // 只靠整秒的 iat 会把「重置后同一秒登录」的新令牌误判成旧令牌。
+            new("iat_ms", now.ToUnixTimeMilliseconds().ToString()),
         };
 
         claims.AddRange(permissions.Select(p => new Claim("perm", p)));
+
+        // 强制改密标记：管理员重置密码或导入名单后，令牌带上它，
+        // 期间只放行改密、查看本人档案与登出。
+        if (mustChangePassword)
+        {
+            claims.Add(new Claim("must_change_password", "true"));
+        }
 
         var token = new JwtSecurityToken(
             issuer: _options.Issuer,

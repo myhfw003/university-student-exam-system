@@ -4,6 +4,7 @@ using Exam.Application.Common.Markers;
 using Exam.Application.Delivery.Contracts;
 using Exam.Application.Grading.Services;
 using Exam.Application.Delivery.Services;
+using Exam.Application.Learning.Services;
 using Exam.Domain.Authoring;
 using Exam.Domain.Catalog;
 using Exam.Domain.Delivery;
@@ -34,6 +35,8 @@ public sealed class GetAttemptReportHandler : IRequestHandler<GetAttemptReportQu
     private readonly IScoreResultRepository _scoreResults;
     private readonly AttemptPaperResolver _resolver;
     private readonly GradeVisibilityResolver _visibility;
+    private readonly PracticeRulesResolver _practiceRules;
+    private readonly ExamAccessScope _scope;
     private readonly ICurrentUser _currentUser;
 
     public GetAttemptReportHandler(
@@ -44,8 +47,11 @@ public sealed class GetAttemptReportHandler : IRequestHandler<GetAttemptReportQu
         IScoreResultRepository scoreResults,
         AttemptPaperResolver resolver,
         GradeVisibilityResolver visibility,
-        ICurrentUser currentUser)
+        PracticeRulesResolver practiceRules,
+        ICurrentUser currentUser,
+        ExamAccessScope scope)
     {
+        _scope = scope;
         _attempts = attempts;
         _sessions = sessions;
         _practiceAssignments = practiceAssignments;
@@ -53,6 +59,7 @@ public sealed class GetAttemptReportHandler : IRequestHandler<GetAttemptReportQu
         _scoreResults = scoreResults;
         _resolver = resolver;
         _visibility = visibility;
+        _practiceRules = practiceRules;
         _currentUser = currentUser;
     }
 
@@ -64,10 +71,7 @@ public sealed class GetAttemptReportHandler : IRequestHandler<GetAttemptReportQu
             ?? throw new NotFoundException("作答会话不存在。");
 
         var userId = _currentUser.UserId;
-        if (userId != attempt.UserId && !_currentUser.HasPermission(PermissionCatalog.AttemptReadAll))
-        {
-            throw new ForbiddenException("只能查看自己的成绩报告。");
-        }
+        await _scope.EnsureAttemptVisibleAsync(attempt, cancellationToken);
 
         // 考试走场次快照，练习走练习开放单挂的试卷——练习的报告同样要逐题解析。
         var paper = await _resolver.ResolveAsync(attempt, cancellationToken);
@@ -89,9 +93,9 @@ public sealed class GetAttemptReportHandler : IRequestHandler<GetAttemptReportQu
 
         // 答案公布：策略说了算。没到公布时机，答案与解析一律不给。
         var policy = snapshot?.AnswerPolicy ?? AnswerPolicy.AfterClose;
-        var reveal = session is null
-            ? true
-            : AnswerRevealPolicy.ShouldReveal(policy, session.Status, attempt.IsSubmitted);
+        var reveal = session is not null
+            ? AnswerRevealPolicy.ShouldReveal(policy, session.Status, attempt.IsSubmitted)
+            : await ShouldRevealPracticeAsync(attempt, cancellationToken);
 
         var answerByQuestion = answers.ToDictionary(a => a.QuestionId);
         var resultByQuestion = results.ToDictionary(r => r.QuestionId);
@@ -142,6 +146,28 @@ public sealed class GetAttemptReportHandler : IRequestHandler<GetAttemptReportQu
             reveal,
             policy.ToStorage(),
             details);
+    }
+
+    /// <summary>
+    /// 练习报告是否公布答案：练习没有场次，按练习的反馈时机判定。
+    /// 交卷后一律可看；未交卷只有「即时反馈」的练习可以边做边看。
+    /// </summary>
+    private async Task<bool> ShouldRevealPracticeAsync(
+        Attempt attempt,
+        CancellationToken cancellationToken)
+    {
+        if (attempt.IsSubmitted)
+        {
+            return true;
+        }
+
+        if (attempt.PracticeAssignmentId is not { } assignmentId)
+        {
+            return false;
+        }
+
+        var rules = await _practiceRules.ResolveAsync(assignmentId, cancellationToken);
+        return string.Equals(rules.FeedbackTiming, "immediate", StringComparison.OrdinalIgnoreCase);
     }
 }
 

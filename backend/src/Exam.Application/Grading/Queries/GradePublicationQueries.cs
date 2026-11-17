@@ -2,6 +2,7 @@ using Exam.Application.Common.Exceptions;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
 using Exam.Application.Delivery.Contracts;
+using Exam.Application.Delivery.Services;
 using Exam.Application.Grading.Contracts;
 using Exam.Domain.Delivery;
 using Exam.Domain.Grading;
@@ -26,6 +27,7 @@ public sealed class GetExamSessionGradesHandler
     private readonly IGradePublicationRepository _publications;
     private readonly IUserRepository _users;
     private readonly ICurrentUser _currentUser;
+    private readonly ExamAccessScope _scope;
 
     public GetExamSessionGradesHandler(
         IExamSessionRepository sessions,
@@ -33,7 +35,8 @@ public sealed class GetExamSessionGradesHandler
         IScoreResultRepository scoreResults,
         IGradePublicationRepository publications,
         IUserRepository users,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        ExamAccessScope scope)
     {
         _sessions = sessions;
         _attempts = attempts;
@@ -41,6 +44,7 @@ public sealed class GetExamSessionGradesHandler
         _publications = publications;
         _users = users;
         _currentUser = currentUser;
+        _scope = scope;
     }
 
     public async Task<ExamSessionGradeListResponse> Handle(
@@ -49,6 +53,9 @@ public sealed class GetExamSessionGradesHandler
     {
         var session = await _sessions.GetByIdAsync(request.ExamSessionId, cancellationToken)
             ?? throw new NotFoundException("考试场次不存在。");
+
+        // 成绩只对自己负责的场次开放。
+        await _scope.EnsureSessionVisibleAsync(session.Id, cancellationToken);
 
         var attempts = (await _attempts.ListBySessionAsync(session.Id, cancellationToken))
             // 强制交卷与超时自动交卷同样要出现在成绩里：

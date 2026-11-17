@@ -155,6 +155,29 @@ public sealed class ExamSessionsController : ControllerBase
             new SetExamParticipantsCommand(id, request.ParticipantTagIds ?? []),
             cancellationToken);
 
+    /// <summary>场次负责人。被指派的人看得到这场考试的全部作答与监考数据。</summary>
+    [HttpGet("{id:long}/assignments")]
+    [Authorize(Policy = PermissionCatalog.ExamRead)]
+    [ProducesResponseType(typeof(ExamSessionAssignmentListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ExamSessionAssignmentListResponse> ListAssignments(
+        long id,
+        CancellationToken cancellationToken) =>
+        await _mediator.Send(new ListExamSessionAssignmentsQuery(id), cancellationToken);
+
+    /// <summary>设置场次负责人（覆盖式）。指派不授予权限，只界定能看哪些场次。</summary>
+    [HttpPut("{id:long}/assignments")]
+    [Authorize(Policy = PermissionCatalog.ExamWrite)]
+    [ProducesResponseType(typeof(ExamSessionAssignmentListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ExamSessionAssignmentListResponse> SetAssignments(
+        long id,
+        SetExamSessionAssignmentsRequest request,
+        CancellationToken cancellationToken) =>
+        await _mediator.Send(
+            new SetExamSessionAssignmentsCommand(id, request.UserIds ?? []),
+            cancellationToken);
+
     /// <summary>关闭场次。</summary>
     [HttpPost("{id:long}/close")]
     [Authorize(Policy = PermissionCatalog.ExamPublish)]

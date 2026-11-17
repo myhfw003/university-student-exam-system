@@ -27,6 +27,7 @@ public sealed class HeartbeatAttemptHandler : IRequestHandler<HeartbeatAttemptCo
     private readonly IExamSessionRepository _sessions;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
+    private readonly ExamAccessScope _scope;
     private readonly ICurrentUser _currentUser;
     private readonly AttemptPaperResolver _resolver;
     private readonly AttemptFinalizationService _finalization;
@@ -38,8 +39,10 @@ public sealed class HeartbeatAttemptHandler : IRequestHandler<HeartbeatAttemptCo
         IClock clock,
         ICurrentUser currentUser,
         AttemptPaperResolver resolver,
-        AttemptFinalizationService finalization)
+        AttemptFinalizationService finalization,
+        ExamAccessScope scope)
     {
+        _scope = scope;
         _attempts = attempts;
         _sessions = sessions;
         _unitOfWork = unitOfWork;
@@ -56,11 +59,7 @@ public sealed class HeartbeatAttemptHandler : IRequestHandler<HeartbeatAttemptCo
         var attempt = await _attempts.GetByIdAsync(request.AttemptId, cancellationToken)
             ?? throw new NotFoundException("作答会话不存在。");
 
-        var userId = _currentUser.UserId;
-        if (userId != attempt.UserId && !_currentUser.HasPermission(PermissionCatalog.AttemptReadAll))
-        {
-            throw new ForbiddenException("只能上报自己的心跳。");
-        }
+        await _scope.EnsureAttemptVisibleAsync(attempt, cancellationToken);
 
         var session = await _sessions.GetByIdAsync(attempt.ExamSessionId!.Value, cancellationToken)
             ?? throw new NotFoundException("考试场次不存在。");

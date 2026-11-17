@@ -4,6 +4,7 @@ using Exam.Application.Common.Attributes;
 using Exam.Application.Common.Exceptions;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
+using Exam.Application.Delivery.Services;
 using Exam.Domain.Authoring;
 using Exam.Domain.Catalog;
 using Exam.Domain.Identity;
@@ -22,8 +23,13 @@ public sealed record ListPapersQuery(string? Kind, string? Status, string? Keywo
 public sealed class ListPapersHandler : IRequestHandler<ListPapersQuery, PaperListResponse>
 {
     private readonly IPaperRepository _papers;
+    private readonly ExamAccessScope _scope;
 
-    public ListPapersHandler(IPaperRepository papers) => _papers = papers;
+    public ListPapersHandler(IPaperRepository papers, ExamAccessScope scope)
+    {
+        _papers = papers;
+        _scope = scope;
+    }
 
     public async Task<PaperListResponse> Handle(ListPapersQuery request, CancellationToken cancellationToken)
     {
@@ -44,8 +50,34 @@ public sealed class ListPapersHandler : IRequestHandler<ListPapersQuery, PaperLi
                 ?? throw new BusinessRuleException("试卷状态取值不合法。");
         }
 
-        var total = await _papers.CountAsync(kind, status, request.Keyword, cancellationToken);
-        var papers = await _papers.ListAsync(kind, status, request.Keyword, (page - 1) * size, size, cancellationToken);
+        // 对象级范围：考生只看得到自己场次与练习挂着的试卷，
+        // 教职人员只看得到自己出的卷子。全局管理者看得到全部。
+        var scope = await _scope.ResolveAsync(cancellationToken);
+
+        IReadOnlyList<Paper> papers;
+        int total;
+
+        if (scope.Tier == AccessScopeTier.Manager)
+        {
+            total = await _papers.CountAsync(kind, status, request.Keyword, cancellationToken);
+            papers = await _papers.ListAsync(kind, status, request.Keyword, (page - 1) * size, size, cancellationToken);
+        }
+        else
+        {
+            var visible = await _papers.GetByIdsAsync(scope.PaperIds.ToList(), cancellationToken);
+            var filtered = visible
+                .Where(p => kind is null || p.Kind == kind.Value)
+                .Where(p => status is null || p.Status == status.Value)
+                .Where(p => string.IsNullOrWhiteSpace(request.Keyword)
+                    || p.Name.Contains(request.Keyword.Trim(), StringComparison.OrdinalIgnoreCase)
+                    || (p.Batch?.Contains(request.Keyword.Trim(), StringComparison.OrdinalIgnoreCase) ?? false))
+                .OrderByDescending(p => p.UpdatedAt ?? p.CreatedAt)
+                .ThenByDescending(p => p.Id)
+                .ToList();
+
+            total = filtered.Count;
+            papers = filtered.Skip((page - 1) * size).Take(size).ToList();
+        }
 
         return new PaperListResponse(
             papers.Select(PaperDtoFactory.ToSummary).ToList(),
@@ -64,13 +96,20 @@ public sealed record GetPaperQuery(long Id) : IAppQuery<PaperDetailDto>, IAuthor
 public sealed class GetPaperHandler : IRequestHandler<GetPaperQuery, PaperDetailDto>
 {
     private readonly IPaperRepository _papers;
+    private readonly ExamAccessScope _scope;
 
-    public GetPaperHandler(IPaperRepository papers) => _papers = papers;
+    public GetPaperHandler(IPaperRepository papers, ExamAccessScope scope)
+    {
+        _papers = papers;
+        _scope = scope;
+    }
 
     public async Task<PaperDetailDto> Handle(GetPaperQuery request, CancellationToken cancellationToken)
     {
         var paper = await _papers.GetByIdAsync(request.Id, cancellationToken)
             ?? throw new NotFoundException("试卷不存在。");
+
+        await _scope.EnsurePaperVisibleAsync(paper.Id, cancellationToken);
 
         return PaperDtoFactory.ToDetail(paper);
     }

@@ -290,7 +290,10 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 | POST | `/papers/{id}/publish` | `paper:publish` | 发布并生成快照 |
 | POST | `/papers/{id}/unpublish` | `paper:publish` | 撤回 |
 | POST | `/papers/{id}/archive` | `paper:publish` | 归档/下架 |
-| GET | `/papers/{id}/preview` | `paper:read` | 预览某考生的实际卷面 |
+| GET | `/papers/{id}/preview` | `paper:write` | 预览某考生的实际卷面 |
+| GET | `/papers/{id}/snapshots` | `paper:write` | 快照版本列表 |
+| GET | `/papers/{id}/snapshots/latest` | `paper:write` | 最新快照（**含冻结的正确答案与解析**） |
+| GET | `/papers/{id}/snapshots/{version}` | `paper:write` | 指定版本快照 |
 | GET | `/paper-templates` | `paper:read` | |
 | POST | `/paper-templates` | `paper:write` | 由试卷另存为模板 |
 | POST | `/paper-templates/{id}/apply` | `paper:write` | 套用模板到目标试卷 |
@@ -354,11 +357,27 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 
 ---
 
+### 6.2 对象级范围（谁能看哪些数据）
+
+权限码回答「这类操作能不能做」，对象级范围回答「这条数据能不能看」。范围按已有的事实判定，不猜：
+
+| 调用者 | 能看到的场次 | 能看到的试卷与作答 |
+|---|---|---|
+| 系统管理员 / 内容管理员（有用户管理权限） | 全部 | 全部 |
+| 出题教师 | 自己创建的、自己出的卷子挂的场次 | 自己的卷子；自己卷子里的作答 |
+| 阅卷教师 / 监考人员 | 被指派负责的场次（`exam_session_assignment`）、被指派了阅卷任务的场次 | 被指派阅卷的作答 |
+| 考生（学生、社会人士） | 名单物化后自己参加的场次 + 全员开放且已发布的场次 | 自己参加的场次与可见练习挂的试卷 |
+
+指派只界定「哪些场次」，不授予权限：被指派的人仍要自己有 `attempt:read-all`、
+`proctor:monitor` 这些权限点，才看得到对应的数据。
+
+范围之外的请求一律 403（`Forbidden`）。考生读场次名单时只拿到自己那一条。
+
 ## 7. 考试场次
 
 | 方法 | 路径 | 权限 | 说明 |
 |---|---|---|---|
-| GET | `/exam-sessions` | `exam:read` | 管理端列表 |
+| GET | `/exam-sessions` | `exam:read` | 场次列表（按对象级范围过滤，见下） |
 | POST | `/exam-sessions` | `exam:write` | 由试卷创建场次 |
 | GET | `/exam-sessions/{id}` | `exam:read` | 详情 |
 | PUT | `/exam-sessions/{id}` | `exam:write` | 修改 |
@@ -368,6 +387,8 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 | PUT | `/exam-sessions/{id}/participants` | `exam:write` | 设置名单（组织标签） |
 | POST | `/exam-sessions/{id}/participants/import` | `exam:write` | 名单 CSV 导入 |
 | GET | `/exam-sessions/{id}/participants` | `exam:read` | 名单与状态 |
+| GET | `/exam-sessions/{id}/assignments` | `exam:read` | 场次负责人（限本场工作人员） |
+| PUT | `/exam-sessions/{id}/assignments` | `exam:write` | 设置场次负责人（覆盖式） |
 | GET | `/exam-sessions/{id}/monitoring` | `proctor:monitor` | 监考快照（首次加载） |
 | GET | `/exam-sessions/{id}/statistics` | `analytics:read` | 成绩统计 |
 
@@ -593,7 +614,12 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 }
 ```
 
-`answersRevealed` 由场次的 `answerPolicy` 与考生状态共同决定：开考即公布（`immediately`）、本人交卷后（`after_submit`）、场次关闭后（`after_close`）。没到公布时机，`correctAnswer` / `analysis` 一律为空。
+`answersRevealed` 的判定规则：**考试进行中一律不给答案与解析**，场次关闭之后才按试卷的 `answerPolicy` 公布——
+结束后全员公布（`immediately` / `after_close`），或结束后仅交卷者公布（`after_submit`）。
+没到公布时机，`correctAnswer` / `analysis` 一律为空。
+
+练习不走场次：练习按「解析反馈时机」公布——`immediate` 边做边看，`after_submit` 交卷后给
+（`POST /attempts/{id}/feedback`）。
 
 **`GET /my/results`**：我的成绩列表（每场考试的总分、总分上限、待阅标记与可见性）。
 

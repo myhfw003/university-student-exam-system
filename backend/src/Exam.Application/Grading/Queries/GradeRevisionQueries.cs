@@ -1,6 +1,7 @@
 using Exam.Application.Common.Exceptions;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
+using Exam.Application.Delivery.Services;
 using Exam.Application.Grading.Contracts;
 using Exam.Domain.Identity;
 using MediatR;
@@ -26,6 +27,7 @@ public sealed class GetAttemptGradeRevisionsHandler
     private readonly IScoreResultRepository _scoreResults;
     private readonly IGradeRevisionRepository _revisions;
     private readonly Exam.Application.Grading.Services.GradeVisibilityResolver _visibility;
+    private readonly ExamAccessScope _scope;
     private readonly ICurrentUser _currentUser;
 
     public GetAttemptGradeRevisionsHandler(
@@ -33,8 +35,10 @@ public sealed class GetAttemptGradeRevisionsHandler
         IScoreResultRepository scoreResults,
         IGradeRevisionRepository revisions,
         Exam.Application.Grading.Services.GradeVisibilityResolver visibility,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        ExamAccessScope scope)
     {
+        _scope = scope;
         _attempts = attempts;
         _scoreResults = scoreResults;
         _revisions = revisions;
@@ -49,11 +53,7 @@ public sealed class GetAttemptGradeRevisionsHandler
         var attempt = await _attempts.GetByIdAsync(request.AttemptId, cancellationToken)
             ?? throw new NotFoundException("作答会话不存在。");
 
-        var userId = _currentUser.UserId;
-        if (userId != attempt.UserId && !_currentUser.HasPermission(PermissionCatalog.AttemptReadAll))
-        {
-            throw new ForbiddenException("只能查看自己的改分记录。");
-        }
+        await _scope.EnsureAttemptVisibleAsync(attempt, cancellationToken);
 
         // 成绩没发布之前，改分记录也是分数的一部分——先不露出去。
         var results = await _scoreResults.ListByAttemptAsync(attempt.Id, cancellationToken);

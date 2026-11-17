@@ -14,7 +14,9 @@ namespace Exam.Infrastructure.Seeding;
 /// </summary>
 public sealed class DataSeeder
 {
-    public const string MarkerName = "iam.v2";
+    // 升版触发一次增量补种：iam.v3 增加了「学生可查看考试场次」（exam:read）。
+    // 种子是幂等的，只补不删，重复执行安全。
+    public const string MarkerName = "iam.v3";
 
     private readonly AppDbContext _db;
     private readonly IClock _clock;

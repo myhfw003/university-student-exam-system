@@ -180,13 +180,22 @@ builder.Services
                 // 账号被禁用时，其已签发的访问令牌立即失效，不必等令牌自然过期。
                 var subject = context.Principal?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
                     ?? context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                var issuedAt = context.Principal?.FindFirst(JwtRegisteredClaimNames.Iat)?.Value;
+                var issuedAtMs = context.Principal?.FindFirst("iat_ms")?.Value;
+                var issuedAtSeconds = context.Principal?.FindFirst(JwtRegisteredClaimNames.Iat)?.Value;
 
-                if (long.TryParse(subject, out var userId)
-                    && long.TryParse(issuedAt, out var issuedAtUnixSeconds))
+                DateTimeOffset? issuedAtUtc = null;
+                if (long.TryParse(issuedAtMs, out var issuedAtUnixMs))
                 {
-                    var issuedAtUtc = DateTimeOffset.FromUnixTimeSeconds(issuedAtUnixSeconds);
-                    if (await blacklist.IsUserRevokedAsync(userId, issuedAtUtc, context.HttpContext.RequestAborted))
+                    issuedAtUtc = DateTimeOffset.FromUnixTimeMilliseconds(issuedAtUnixMs);
+                }
+                else if (long.TryParse(issuedAtSeconds, out var issuedAtUnixSeconds))
+                {
+                    issuedAtUtc = DateTimeOffset.FromUnixTimeSeconds(issuedAtUnixSeconds);
+                }
+
+                if (long.TryParse(subject, out var userId) && issuedAtUtc is { } issuedAt)
+                {
+                    if (await blacklist.IsUserRevokedAsync(userId, issuedAt, context.HttpContext.RequestAborted))
                     {
                         context.Fail("账号已被禁用。");
                     }

@@ -36,4 +36,13 @@ public sealed class HttpCurrentUser : ICurrentUser
         ?? new HashSet<string>(StringComparer.Ordinal);
 
     public bool HasPermission(string permissionCode) => Permissions.Contains(permissionCode);
+
+    public bool MustChangePassword
+    {
+        get
+        {
+            var value = Principal?.FindFirstValue("must_change_password");
+            return string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
+        }
+    }
 }

@@ -32,6 +32,9 @@ public sealed record UpdateExamSessionRequest(
 /// <summary>设置场次名单（按组织标签）。</summary>
 public sealed record SetExamParticipantsRequest(IReadOnlyList<long>? ParticipantTagIds);
 
+/// <summary>设置场次负责人（覆盖式）。</summary>
+public sealed record SetExamSessionAssignmentsRequest(IReadOnlyList<long>? UserIds);
+
 /// <summary>
 /// 发布成绩。
 /// <para>

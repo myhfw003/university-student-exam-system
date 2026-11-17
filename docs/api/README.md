@@ -23,8 +23,8 @@ SKIP_BUILD=1 bash scripts/export-openapi.sh # 用现成构建产物导出
 ### 成功响应
 
 - 读取类接口直接返回资源对象或列表；写入类接口返回写入后的对象。
-- 列表接口统一分页：请求带 `page`（从 1 开始）与 `pageSize`，响应带
-  `total`、`page`、`pageSize`（部分列表接口用 `items` 作为数组字段名）。
+- 列表接口统一分页：请求带 `page`（从 1 开始）与 `size`，响应带
+  `total`、`page`、`size`（部分列表接口用 `items` 作为数组字段名）。
 - 时间一律 ISO-8601 带时区偏移（`2026-11-15T08:30:00+08:00`）。
 
 ### 错误响应
@@ -110,7 +110,14 @@ POST /api/v1/auth/login     { "username": "...", "password": "..." }
 POST /api/v1/auth/refresh   （用刷新令牌换新的访问令牌）
 POST /api/v1/auth/logout    （吊销当前刷新令牌）
 GET  /api/v1/auth/me        （当前用户档案与权限码）
+POST /api/v1/auth/change-password
+  { "currentPassword": "...", "newPassword": "..." }
+  → { "accessToken": "...", "tokenType": "Bearer", "expiresIn": 900 }
 ```
+
+- **强制改密**：管理员重置密码或导入名单后，令牌带「必须改密」标记，
+  这期间除改密、`/auth/me` 与登出外一律 403；改密成功返回**新的访问令牌**，
+  客户端必须换掉旧令牌（旧令牌上的标记还在，换掉才恢复通行）。
 
 - 访问令牌默认 15 分钟，刷新令牌默认 7 天。
 - 之后每个请求带 `Authorization: Bearer <accessToken>`。

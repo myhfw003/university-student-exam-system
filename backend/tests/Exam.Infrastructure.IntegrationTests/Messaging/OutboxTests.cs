@@ -46,6 +46,7 @@ public sealed class OutboxTests : IClassFixture<AppDbContextFixture>
         public string? DisplayName => "测试";
         public IReadOnlySet<string> Permissions => new HashSet<string>();
         public bool HasPermission(string permissionCode) => false;
+        public bool MustChangePassword => false;
     }
 
     private sealed class StubClock : Domain.SharedKernel.Abstractions.IClock

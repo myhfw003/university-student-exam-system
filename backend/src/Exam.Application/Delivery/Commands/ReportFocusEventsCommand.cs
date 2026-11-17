@@ -29,6 +29,7 @@ public sealed class ReportFocusEventsHandler : IRequestHandler<ReportFocusEvents
     private readonly IExamSessionRepository _sessions;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
+    private readonly ExamAccessScope _scope;
     private readonly ICurrentUser _currentUser;
     private readonly IExamMetrics _metrics;
     private readonly AttemptPaperResolver _resolver;
@@ -43,8 +44,10 @@ public sealed class ReportFocusEventsHandler : IRequestHandler<ReportFocusEvents
         ICurrentUser currentUser,
         IExamMetrics metrics,
         AttemptPaperResolver resolver,
-        AttemptFinalizationService finalization)
+        AttemptFinalizationService finalization,
+        ExamAccessScope scope)
     {
+        _scope = scope;
         _attempts = attempts;
         _events = events;
         _sessions = sessions;
@@ -63,11 +66,7 @@ public sealed class ReportFocusEventsHandler : IRequestHandler<ReportFocusEvents
         var attempt = await _attempts.GetByIdAsync(request.AttemptId, cancellationToken)
             ?? throw new NotFoundException("作答会话不存在。");
 
-        var userId = _currentUser.UserId;
-        if (userId != attempt.UserId && !_currentUser.HasPermission(PermissionCatalog.AttemptReadAll))
-        {
-            throw new ForbiddenException("只能上报自己的焦点事件。");
-        }
+        await _scope.EnsureAttemptVisibleAsync(attempt, cancellationToken);
 
         if (attempt.IsSubmitted)
         {

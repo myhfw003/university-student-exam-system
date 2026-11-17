@@ -16,7 +16,8 @@ namespace Exam.Application.Authoring.Queries;
 public sealed record PreviewPaperVariantQuery(long PaperId, string StudentKey, string SessionSeed)
     : IAppQuery<PaperVariantDto>, IAuthorizableRequest
 {
-    public IReadOnlyCollection<string> RequiredPermissions { get; init; } = [PermissionCatalog.PaperRead];
+    // 卷面预览是出题工具：考生卷面只能从自己的作答里取。
+    public IReadOnlyCollection<string> RequiredPermissions { get; init; } = [PermissionCatalog.PaperWrite];
 }
 
 public sealed class PreviewPaperVariantHandler : IRequestHandler<PreviewPaperVariantQuery, PaperVariantDto>

@@ -32,6 +32,7 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
     private readonly Exam.Application.Grading.Services.GradeVisibilityResolver _visibility;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
+    private readonly ExamAccessScope _scope;
     private readonly ICurrentUser _currentUser;
     private readonly Exam.Application.Learning.Services.PracticeRulesResolver _practiceRules;
 
@@ -45,8 +46,10 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
         IUnitOfWork unitOfWork,
         IClock clock,
         ICurrentUser currentUser,
-        Exam.Application.Learning.Services.PracticeRulesResolver practiceRules)
+        Exam.Application.Learning.Services.PracticeRulesResolver practiceRules,
+        ExamAccessScope scope)
     {
+        _scope = scope;
         _attempts = attempts;
         _answers = answers;
         _scoreResults = scoreResults;
@@ -66,11 +69,7 @@ public sealed class SubmitAttemptHandler : IRequestHandler<SubmitAttemptCommand,
         var attempt = await _attempts.GetByIdAsync(request.AttemptId, cancellationToken)
             ?? throw new NotFoundException("作答会话不存在。");
 
-        var userId = _currentUser.UserId;
-        if (userId != attempt.UserId && !_currentUser.HasPermission(PermissionCatalog.AttemptReadAll))
-        {
-            throw new ForbiddenException("只能提交自己的作答。");
-        }
+        await _scope.EnsureAttemptVisibleAsync(attempt, cancellationToken);
 
         // 考试走场次快照；练习走练习开放单挂的试卷。
         var paper = await _resolver.ResolveAsync(attempt, cancellationToken);

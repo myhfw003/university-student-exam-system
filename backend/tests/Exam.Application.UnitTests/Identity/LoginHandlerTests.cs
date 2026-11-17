@@ -86,7 +86,7 @@ public sealed class LoginHandlerTests
             .Returns(new[] { "attempt:take" });
         _permissions.GetRoleCodesAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(new[] { "student" });
-        _tokenService.IssueAccessToken(Arg.Any<long>(), Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>>())
+        _tokenService.IssueAccessToken(Arg.Any<long>(), Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<bool>())
             .Returns(new AccessTokenMaterial("access-token", "jti-1", Now.AddMinutes(15)));
         _tokenService.IssueRefreshToken(Arg.Any<long>(), Arg.Any<Guid>())
             .Returns(new RefreshTokenMaterial("refresh-token", "hash-1", Now.AddDays(7)));
@@ -108,7 +108,7 @@ public sealed class LoginHandlerTests
         ArrangeExistingUser();
         _permissions.GetPermissionCodesAsync(Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns([]);
         _permissions.GetRoleCodesAsync(Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns([]);
-        _tokenService.IssueAccessToken(Arg.Any<long>(), Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>>())
+        _tokenService.IssueAccessToken(Arg.Any<long>(), Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<bool>())
             .Returns(new AccessTokenMaterial("access-token", "jti-1", Now.AddMinutes(15)));
         _tokenService.IssueRefreshToken(Arg.Any<long>(), Arg.Any<Guid>())
             .Returns(new RefreshTokenMaterial("refresh-token", "hash-1", Now.AddDays(7)));

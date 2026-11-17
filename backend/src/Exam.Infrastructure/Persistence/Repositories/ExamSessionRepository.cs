@@ -76,6 +76,43 @@ public sealed class ExamSessionRepository : IExamSessionRepository
         return query.CountAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<ExamSession>> ListByCreatorAsync(
+        long userId,
+        CancellationToken cancellationToken = default) =>
+        await _db.Set<ExamSession>()
+            .AsNoTracking()
+            .Where(s => s.CreatedBy == userId)
+            .OrderBy(s => s.OpenAt)
+            .ThenBy(s => s.Id)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<ExamSession>> ListByPaperIdsAsync(
+        IReadOnlyCollection<long> paperIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (paperIds.Count == 0)
+        {
+            return [];
+        }
+
+        var idList = paperIds.ToList();
+        return await _db.Set<ExamSession>()
+            .AsNoTracking()
+            .Where(s => idList.Contains(s.PaperId))
+            .OrderBy(s => s.OpenAt)
+            .ThenBy(s => s.Id)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ExamSession>> ListOpenToAllPublishedAsync(
+        CancellationToken cancellationToken = default) =>
+        await _db.Set<ExamSession>()
+            .AsNoTracking()
+            .Where(s => s.ParticipantMode == ParticipantMode.OpenToAll && s.PublishedAt != null)
+            .OrderBy(s => s.OpenAt)
+            .ThenBy(s => s.Id)
+            .ToListAsync(cancellationToken);
+
     public async Task AddAsync(ExamSession session, CancellationToken cancellationToken = default) =>
         await _db.Set<ExamSession>().AddAsync(session, cancellationToken);
 

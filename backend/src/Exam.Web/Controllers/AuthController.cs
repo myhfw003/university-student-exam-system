@@ -86,6 +86,28 @@ public sealed class AuthController : ControllerBase
     public async Task<UserProfileDto?> Me(CancellationToken cancellationToken) =>
         await _mediator.Send(new GetCurrentUserQuery(), cancellationToken);
 
+    /// <summary>修改本人密码。改密后当前会话保留，其它设备的登录立即失效。</summary>
+    /// <remarks>返回新的访问令牌：改密前的令牌带着「必须改密」标记，不换掉就还用不了。</remarks>
+    [HttpPost("change-password")]
+    [Authorize]
+    [ProducesResponseType(typeof(ChangePasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ChangePasswordResponse> ChangePassword(
+        ChangePasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        var raw = Request.Cookies[RefreshCookieName];
+
+        var result = await _mediator.Send(
+            new ChangeOwnPasswordCommand(
+                request.CurrentPassword ?? string.Empty,
+                request.NewPassword ?? string.Empty,
+                raw),
+            cancellationToken);
+
+        return new ChangePasswordResponse(result.AccessToken, result.TokenType, result.ExpiresIn);
+    }
+
     private void SetRefreshCookie(string token, DateTimeOffset expiresAt) =>
         Response.Cookies.Append(RefreshCookieName, token, new CookieOptions
         {

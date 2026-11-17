@@ -16,8 +16,8 @@ namespace Exam.Web.FunctionalTests;
 /// <summary>
 /// 成绩报告与答案公布。
 /// <para>
-/// 答案公布三档策略：开考即公布、交卷后公布、场次关闭后公布。
-/// 考试进行中，答题接口永远不返回答案。
+/// 答案公布：考试进行中一律不给答案与解析；场次关闭之后才按策略公布
+/// （结束后全员公布，或结束后仅交卷者公布）。
 /// </para>
 /// </summary>
 public sealed class ExamReportTests : IAsyncLifetime
@@ -83,7 +83,7 @@ public sealed class ExamReportTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task 开考即公布交卷后就能看到答案与解析()
+    public async Task 考试进行中交卷也看不到答案_场次关闭后才公布()
     {
         var sessionId = await CreateSessionAsync("immediately");
         var attemptId = await StartAttemptAsync(sessionId);
@@ -92,13 +92,29 @@ public sealed class ExamReportTests : IAsyncLifetime
         await SaveAnswerAsync(attemptId, _shortQuestionId, new { text = "TCP 三次握手可以建立连接" });
         await SubmitAsync(attemptId);
 
+        // 考试进行中：即便策略是「立即公布」，也不给答案与解析。
         await LoginAsync(StudentUsername, StudentPassword);
-        var report = await _client.GetAsync($"/api/v1/attempts/{attemptId}/report");
-        report.StatusCode.ShouldBe(HttpStatusCode.OK, await report.Content.ReadAsStringAsync());
+        var during = await _client.GetAsync($"/api/v1/attempts/{attemptId}/report");
+        during.StatusCode.ShouldBe(HttpStatusCode.OK, await during.Content.ReadAsStringAsync());
 
-        var body = await report.Content.ReadFromJsonAsync<JsonElement>();
+        var duringBody = await during.Content.ReadFromJsonAsync<JsonElement>();
+        duringBody.GetProperty("answersRevealed").GetBoolean().ShouldBeFalse();
+        duringBody.GetProperty("answerPolicy").GetString().ShouldBe("immediately");
+
+        var duringObjective = DetailOf(duringBody, _singleQuestionId);
+        duringObjective.GetProperty("revealed").GetBoolean().ShouldBeFalse();
+        duringObjective.GetProperty("correctKeys").GetArrayLength().ShouldBe(0);
+        duringObjective.GetProperty("analysis").ValueKind.ShouldBe(JsonValueKind.Null);
+
+        // 场次关闭之后：答案与解析才给。
+        await LoginAsync(TeacherUsername, TeacherPassword);
+        var close = await _client.PostAsync($"/api/v1/exam-sessions/{sessionId}/close", null);
+        close.StatusCode.ShouldBe(HttpStatusCode.OK, await close.Content.ReadAsStringAsync());
+
+        await LoginAsync(StudentUsername, StudentPassword);
+        var after = await _client.GetAsync($"/api/v1/attempts/{attemptId}/report");
+        var body = await after.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("answersRevealed").GetBoolean().ShouldBeTrue();
-        body.GetProperty("answerPolicy").GetString().ShouldBe("immediately");
 
         var objective = DetailOf(body, _singleQuestionId);
         objective.GetProperty("revealed").GetBoolean().ShouldBeTrue();
@@ -112,7 +128,7 @@ public sealed class ExamReportTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task 交卷后公布本人交卷才能看到()
+    public async Task 结束后仅交卷者公布()
     {
         var sessionId = await CreateSessionAsync("after_submit");
         var attemptId = await StartAttemptAsync(sessionId);
@@ -132,9 +148,19 @@ public sealed class ExamReportTests : IAsyncLifetime
         beforeObjective.GetProperty("correctKeys").GetArrayLength().ShouldBe(0);
         beforeObjective.GetProperty("analysis").ValueKind.ShouldBe(JsonValueKind.Null);
 
-        // 交卷之后：答案才给。
+        // 交卷了，但考试还没结束：仍然不给答案。
         await SubmitAsync(attemptId);
 
+        var during = await _client.GetAsync($"/api/v1/attempts/{attemptId}/report");
+        var duringBody = await during.Content.ReadFromJsonAsync<JsonElement>();
+        duringBody.GetProperty("answersRevealed").GetBoolean().ShouldBeFalse();
+
+        // 场次关闭之后：交卷的人才拿到答案。
+        await LoginAsync(TeacherUsername, StudentPassword);
+        var close = await _client.PostAsync($"/api/v1/exam-sessions/{sessionId}/close", null);
+        close.StatusCode.ShouldBe(HttpStatusCode.OK, await close.Content.ReadAsStringAsync());
+
+        await LoginAsync(StudentUsername, StudentPassword);
         var after = await _client.GetAsync($"/api/v1/attempts/{attemptId}/report");
         var afterBody = await after.Content.ReadFromJsonAsync<JsonElement>();
         afterBody.GetProperty("answersRevealed").GetBoolean().ShouldBeTrue();

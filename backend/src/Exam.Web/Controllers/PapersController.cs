@@ -183,14 +183,16 @@ public sealed class PapersController : ControllerBase
 
     /// <summary>列出试卷的全部快照版本（新版本在前）。</summary>
     [HttpGet("{id:long}/snapshots")]
-    [Authorize(Policy = PermissionCatalog.PaperRead)]
+    // 快照里冻结着正确答案与解析：只有出题的人能看。
+    [Authorize(Policy = PermissionCatalog.PaperWrite)]
     [ProducesResponseType(typeof(PaperSnapshotListResponse), StatusCodes.Status200OK)]
     public async Task<PaperSnapshotListResponse> ListSnapshots(long id, CancellationToken cancellationToken) =>
         await _mediator.Send(new ListPaperSnapshotsQuery(id), cancellationToken);
 
     /// <summary>取回最新快照版本。</summary>
     [HttpGet("{id:long}/snapshots/latest")]
-    [Authorize(Policy = PermissionCatalog.PaperRead)]
+    // 快照里冻结着正确答案与解析：只有出题的人能看。
+    [Authorize(Policy = PermissionCatalog.PaperWrite)]
     [ProducesResponseType(typeof(PaperSnapshotDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<PaperSnapshotDetailDto> GetLatestSnapshot(long id, CancellationToken cancellationToken) =>
@@ -198,7 +200,8 @@ public sealed class PapersController : ControllerBase
 
     /// <summary>取回指定版本的快照。</summary>
     [HttpGet("{id:long}/snapshots/{version:int}")]
-    [Authorize(Policy = PermissionCatalog.PaperRead)]
+    // 快照里冻结着正确答案与解析：只有出题的人能看。
+    [Authorize(Policy = PermissionCatalog.PaperWrite)]
     [ProducesResponseType(typeof(PaperSnapshotDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<PaperSnapshotDetailDto> GetSnapshot(long id, int version, CancellationToken cancellationToken) =>
@@ -206,7 +209,8 @@ public sealed class PapersController : ControllerBase
 
     /// <summary>预览某位考生实际拿到的卷面（题序与选项显示顺序）。</summary>
     [HttpGet("{id:long}/preview")]
-    [Authorize(Policy = PermissionCatalog.PaperRead)]
+    // 卷面预览是出题工具：考生卷面只能从自己的作答里取。
+    [Authorize(Policy = PermissionCatalog.PaperWrite)]
     [ProducesResponseType(typeof(PaperVariantDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<PaperVariantDto> Preview(

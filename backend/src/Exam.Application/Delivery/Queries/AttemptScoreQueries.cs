@@ -2,6 +2,7 @@ using Exam.Application.Common.Attributes;
 using Exam.Application.Common.Exceptions;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
+using Exam.Application.Delivery.Services;
 using Exam.Application.Delivery.Contracts;
 using Exam.Domain.Identity;
 using MediatR;
@@ -20,14 +21,17 @@ public sealed class GetAttemptScoresHandler : IRequestHandler<GetAttemptScoresQu
     private readonly IAttemptRepository _attempts;
     private readonly IScoreResultRepository _scoreResults;
     private readonly Exam.Application.Grading.Services.GradeVisibilityResolver _visibility;
+    private readonly ExamAccessScope _scope;
     private readonly ICurrentUser _currentUser;
 
     public GetAttemptScoresHandler(
         IAttemptRepository attempts,
         IScoreResultRepository scoreResults,
         Exam.Application.Grading.Services.GradeVisibilityResolver visibility,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        ExamAccessScope scope)
     {
+        _scope = scope;
         _attempts = attempts;
         _scoreResults = scoreResults;
         _visibility = visibility;
@@ -41,11 +45,7 @@ public sealed class GetAttemptScoresHandler : IRequestHandler<GetAttemptScoresQu
         var attempt = await _attempts.GetByIdAsync(request.AttemptId, cancellationToken)
             ?? throw new NotFoundException("作答会话不存在。");
 
-        var userId = _currentUser.UserId;
-        if (userId != attempt.UserId && !_currentUser.HasPermission(PermissionCatalog.AttemptReadAll))
-        {
-            throw new ForbiddenException("只能查看自己的成绩。");
-        }
+        await _scope.EnsureAttemptVisibleAsync(attempt, cancellationToken);
 
         var results = await _scoreResults.ListByAttemptAsync(attempt.Id, cancellationToken);
 

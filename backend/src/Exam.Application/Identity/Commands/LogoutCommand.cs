@@ -7,7 +7,8 @@ using MediatR;
 namespace Exam.Application.Identity.Commands;
 
 /// <summary>登出：吊销当前令牌族，并把当前访问令牌加入吊销名单。</summary>
-public sealed record LogoutCommand(string? RawRefreshToken, string? AccessTokenJti) : IAppCommand, IAuthorizableRequest
+public sealed record LogoutCommand(string? RawRefreshToken, string? AccessTokenJti)
+    : IAppCommand, IAuthorizableRequest, IExemptFromPasswordChange
 {
     public IReadOnlyCollection<string> RequiredPermissions { get; } = [];
 }

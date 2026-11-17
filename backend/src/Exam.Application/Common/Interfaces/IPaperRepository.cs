@@ -25,6 +25,11 @@ public interface IPaperRepository
         string? keyword,
         CancellationToken cancellationToken = default);
 
+    /// <summary>列出某人创建的试卷（范围判定用：自己的卷子）。</summary>
+    Task<IReadOnlyList<Paper>> ListByCreatorAsync(
+        long userId,
+        CancellationToken cancellationToken = default);
+
     Task AddAsync(Paper paper, CancellationToken cancellationToken = default);
 
     void Update(Paper paper);

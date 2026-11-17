@@ -20,11 +20,16 @@ public sealed class GetExamMonitoringHandler : IRequestHandler<GetExamMonitoring
 {
     private readonly IExamSessionRepository _sessions;
     private readonly ExamMonitoringService _monitoring;
+    private readonly ExamAccessScope _scope;
 
-    public GetExamMonitoringHandler(IExamSessionRepository sessions, ExamMonitoringService monitoring)
+    public GetExamMonitoringHandler(
+        IExamSessionRepository sessions,
+        ExamMonitoringService monitoring,
+        ExamAccessScope scope)
     {
         _sessions = sessions;
         _monitoring = monitoring;
+        _scope = scope;
     }
 
     public async Task<ExamStatusBatchDto> Handle(
@@ -33,6 +38,9 @@ public sealed class GetExamMonitoringHandler : IRequestHandler<GetExamMonitoring
     {
         var session = await _sessions.GetByIdAsync(request.ExamSessionId, cancellationToken)
             ?? throw new NotFoundException("考试场次不存在。");
+
+        // 监考只对自己负责的场次开放。
+        await _scope.EnsureSessionVisibleAsync(session.Id, cancellationToken);
 
         return await _monitoring.BuildBatchAsync(session, cancellationToken);
     }

@@ -126,7 +126,11 @@ public static class PermissionCatalog
             ],
             [Role.Codes.Student] =
             [
-                QuestionRead, TagRead, PaperRead,
+                // 学生不进题库：练习与考试的内容从自己的作答卷面拿，
+                // 题库里连题干带答案都读不到。
+                TagRead, PaperRead,
+                // 学生要能看到自己的考试场次（只读，且只看得到与自己相关的）。
+                ExamRead,
                 AttemptTake, AttemptReadOwn,
             ],
             [Role.Codes.GeneralUser] =

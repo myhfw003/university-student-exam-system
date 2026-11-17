@@ -112,15 +112,27 @@ public sealed record GetQuestionQuery(long Id) : IAppQuery<QuestionDetailDto>, I
 public sealed class GetQuestionHandler : IRequestHandler<GetQuestionQuery, QuestionDetailDto>
 {
     private readonly IQuestionRepository _questions;
+    private readonly ICurrentUser _currentUser;
 
-    public GetQuestionHandler(IQuestionRepository questions) => _questions = questions;
+    public GetQuestionHandler(IQuestionRepository questions, ICurrentUser currentUser)
+    {
+        _questions = questions;
+        _currentUser = currentUser;
+    }
 
     public async Task<QuestionDetailDto> Handle(GetQuestionQuery request, CancellationToken cancellationToken)
     {
         var question = await _questions.GetByIdAsync(request.Id, cancellationToken)
             ?? throw new NotFoundException("题目不存在。");
 
-        return QuestionDtoFactory.ToDetail(question);
+        // 只有能出题或阅卷的人可以看到答案与解析；学生直接读题目时脱敏。
+        var includeSensitive =
+            _currentUser.HasPermission(PermissionCatalog.QuestionWrite)
+            || _currentUser.HasPermission(PermissionCatalog.QuestionPublish)
+            || _currentUser.HasPermission(PermissionCatalog.ReviewGrade)
+            || _currentUser.HasPermission(PermissionCatalog.AttemptReadAll);
+
+        return QuestionDtoFactory.ToDetail(question, includeSensitive);
     }
 }
 

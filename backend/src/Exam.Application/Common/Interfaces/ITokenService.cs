@@ -9,7 +9,12 @@ public sealed record RefreshTokenMaterial(string RawToken, string TokenHash, Dat
 /// <summary>令牌服务抽象。实现位于 Infrastructure。</summary>
 public interface ITokenService
 {
-    AccessTokenMaterial IssueAccessToken(long userId, string username, IReadOnlyCollection<string> permissions);
+    /// <param name="mustChangePassword">用户是否必须先改密码。为真时令牌带强制改密标记。</param>
+    AccessTokenMaterial IssueAccessToken(
+        long userId,
+        string username,
+        IReadOnlyCollection<string> permissions,
+        bool mustChangePassword = false);
 
     RefreshTokenMaterial IssueRefreshToken(long userId, Guid familyId);
 
