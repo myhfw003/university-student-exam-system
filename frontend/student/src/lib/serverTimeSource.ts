@@ -4,7 +4,7 @@
    调后端 GET /api/v1/system/time（已实现），返回服务端当前时间。
    ========================================================================== */
 
-import { ENDPOINTS } from "@exam/shared/api";
+import { apiBaseUrl, ENDPOINTS } from "@exam/shared/api";
 import type { ServerTimeSource } from "./useServerTime";
 
 /** 服务端时钟响应体。 */
@@ -14,7 +14,7 @@ interface ServerTimePayload {
 }
 
 /** 基于后端接口的服务端时钟源。 */
-export function createHttpServerTimeSource(baseUrl = ""): ServerTimeSource {
+export function createHttpServerTimeSource(baseUrl = apiBaseUrl()): ServerTimeSource {
   return {
     async fetch(): Promise<number> {
       const response = await fetch(`${baseUrl}${ENDPOINTS.system.time}`, {

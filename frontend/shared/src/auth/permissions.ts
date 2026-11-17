@@ -25,6 +25,8 @@ export type PermissionPoint =
   | "paper:write"
   | "paper:publish"
   | "blueprint:generate"
+  | "practice:read"
+  | "practice:write"
   | "exam:read"
   | "exam:write"
   | "exam:publish"
@@ -68,6 +70,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly PermissionPoint[]> = {
     "paper:write",
     "paper:publish",
     "blueprint:generate",
+    "practice:read",
+    "practice:write",
     "exam:read",
     "exam:write",
     "exam:publish",
@@ -103,6 +107,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly PermissionPoint[]> = {
     "paper:write",
     "paper:publish",
     "blueprint:generate",
+    "practice:read",
+    "practice:write",
     "exam:read",
     "exam:write",
     "exam:publish",
@@ -135,12 +141,13 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly PermissionPoint[]> = {
     "paper:write",
     "paper:publish",
     "blueprint:generate",
+    "practice:read",
+    "practice:write",
     "exam:read",
     "exam:write",
     "exam:publish",
     "attempt:take",
     "attempt:read-own",
-    "attempt:read-all",
     "user-tag:assign",
     "analytics:read",
   ],
@@ -155,15 +162,15 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly PermissionPoint[]> = {
     "attempt:read-all",
     "review:grade",
     "review:batch-adopt",
-    "grade:publish",
     "proctor:monitor",
     "proctor:act",
     "analytics:read",
   ],
   student: [
-    ...READ_ONLY_QUESTION,
+    // 学生不进题库：练习与考试的内容从自己的作答卷面拿。
     ...READ_ONLY_TAG,
     ...READ_ONLY_PAPER,
+    // 学生要能看到自己的考试场次（只读，且只看得到与自己相关的）。
     "exam:read",
     "attempt:take",
     "attempt:read-own",

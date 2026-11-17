@@ -376,16 +376,16 @@ export interface ExamSession {
 
 /** 考生在监考视图中的状态（FR-ANT-04）。 */
 export type CandidateStatus =
-  | "not_started"
-  | "answering"
-  | "submitted"
-  | "forced_submitted"
-  | "disconnected";
+  "not_started" | "answering" | "submitted" | "forced_submitted" | "disconnected";
 
 /** 监考视图的考生条目。 */
 export interface ProctorCandidate {
   sessionId: string;
   studentId: string;
+  /** 后端监考快照返回的姓名（真实后端才有，mock 从名单解析）。 */
+  displayName?: string;
+  /** 后端监考快照返回的登录账号（真实后端才有）。 */
+  username?: string;
   status: CandidateStatus;
   /** 切屏次数。 */
   focusLossCount: number;

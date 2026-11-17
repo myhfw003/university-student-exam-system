@@ -39,8 +39,12 @@ pnpm e2e                                  # 端到端测试（Playwright，跑�
 ```
 
 **数据源开关**：默认走本地示例数据（mock）。设置 `VITE_DATA_SOURCE=http`
-（或 `VITE_API_BASE_URL`）后，登录态、答案上行、监考快照、内容目录全部改走后端，
-**页面代码不感知这个开关**。
+（或 `VITE_API_BASE_URL`）后，登录/刷新/登出/改密、服务端时钟、答案上行、
+监考快照与内容目录读取走后端，**页面代码不感知这个开关**。
+
+截至 2026-11-16 联调：考试作答主流程仍从 mock 试卷建卷、未调用 `POST /attempts`；
+管理端场次/用户/审计/阅卷/监考的写操作仍走 `useAdminOps`。前端适配层与真实后端的
+契约测试见 `e2e/frontend-contract.api.spec.ts`。
 
 交付前必须：`pnpm -r typecheck` 零错误，`pnpm -r test` 全绿，
 **并且 `pnpm smoke` 全部路由通过**（见 §10）。
@@ -49,7 +53,7 @@ pnpm e2e                                  # 端到端测试（Playwright，跑�
 
 ## 2. shared 的公开 API
 
-- `api/index.ts`：`AuthInterceptorConfig`、`DEFAULT_BASE_URL`、`DEFAULT_TIMEOUT_MS`、`ENDPOINTS`、`ERROR_MESSAGE_MAP`、`HttpClientConfig`、`HttpError`、`HttpMethod`、`NETWORK_ERROR_MESSAGE`、`NormalizedProblem`、`OnAuthFailureFn`、`ProblemDetails`、`RefreshTokenFn`、`RequestOptions`、`STATUS_MESSAGE_MAP`、`TokenPair`、`clearTokens`、`createHttpClient`、`getAccessToken`、`getTokens`、`httpClient`、`isExpired`、`isRefreshing`、`isUnauthorized`、`messageForErrorCode`、`normalizeProblem`、`parseProblemDetails`、`refreshOnce`、`setTokens`、`subscribeTokens`、`withAuthRetry`
+- `api/index.ts`：`AuthInterceptorConfig`、`DEFAULT_BASE_URL`、`DEFAULT_TIMEOUT_MS`、`ENDPOINTS`、`ERROR_MESSAGE_MAP`、`HttpClientConfig`、`HttpError`、`HttpMethod`、`NETWORK_ERROR_MESSAGE`、`NormalizedProblem`、`OnAuthFailureFn`、`ProblemDetails`、`RefreshTokenFn`、`RequestOptions`、`STATUS_MESSAGE_MAP`、`TokenPair`、`clearTokens`、`createHttpClient`、`getAccessToken`、`getTokens`、`httpClient`、`isExpired`、`isRefreshing`、`isUnauthorized`、`messageForErrorCode`、`normalizeProblem`、`parseProblemDetails`、`refreshOnce`、`setTokens`、`subscribeTokens`、`withAuthRetry`、`refreshAccessToken`、`toDomainPayload`、`toServerAnswerBatch`、`toServerPayload`、`ServerAnswerBatch`、`ServerAnswerPayload`、`ServerAnswerStep`、`apiBaseUrl`、`dataSourceMode`、`isBackendEnabled`、`loadCatalogSnapshot`、`CatalogClient`、`CatalogSnapshot`
 - `charts/index.ts`：`BarChart`、`BarChartDatum`、`BarChartProps`、`CHART_ACCENT`、`CHART_AXIS`、`CHART_COLORS`、`CHART_FILL`、`CHART_GRID`、`DonutChart`、`DonutChartDatum`、`DonutChartProps`、`HorizontalBarChart`、`HorizontalBarChartDatum`、`HorizontalBarChartProps`、`LineChart`、`LineChartDatum`、`LineChartProps`、`chartColor`、`niceMax`
 - `ui/index.ts`：`Icon`、`IconProps`、`Analysis`、`AnalysisProps`、`AnswerSheet`、`AnswerSheetProps`、`Badge`、`BadgeProps`、`BadgeTone`、`BarRow`、`BarRowProps`、`Button`、`ButtonProps`、`ButtonSize`、`ButtonVariant`、`Callout`、`CalloutProps`、`CalloutTone`、`Card`、`CardProps`、`ConfirmDialog`、`ConfirmDialogProps`、`DataTable`、`DataTableColumn`、`DataTableProps`、`Dialog`、`DialogProps`、`Empty`、`EmptyProps`、`Field`、`FieldProps`、`IconButton`、`IconButtonProps`、`KeypointItem`、`KeypointList`、`KeypointListProps`、`Meter`、`MeterProps`、`MeterTone`、`OptionList`、`OptionListProps`、`Pagination`、`PaginationProps`、`QuestionHead`、`QuestionHeadProps`、`RuleList`、`RuleListProps`、`SearchInput`、`SearchInputProps`、`Segmented`、`SegmentedOption`、`SegmentedProps`、`SelectInput`、`SelectInputProps`、`SheetCell`、`Skeleton`、`SkeletonProps`、`SortDirection`、`Stat`、`StatProps`、`TYPE_BADGE_TONE`、`TabItem`、`Tabs`、`TabsProps`、`TagChip`、`TagChipGroup`、`TagChipProps`、`TagFilter`、`TagFilterProps`、`TextArea`、`TextAreaProps`、`TextInput`、`TextInputProps`、`Toast`、`ToastHost`、`ToastHostProps`、`ToastProps`、`ToastTone`、`keypointItems`、`stepItems`
 - `utils/index.ts`：`NUM_CLASS`、`formatClock`、`formatDate`、`formatDateTime`、`formatInteger`、`formatMinutes`、`formatPercent`、`formatPercentWithSign`、`formatScore`、`formatTime`、`downloadCsv`、`downloadText`、`toCsv`、`ATTACHMENT_MAX_BYTES`、`ATTACHMENT_MIME_TYPES`、`formatFileSize`、`readFileAsDataUrl`、`validateAttachment`、`parseCsv`、`decodeCsvBuffer`
@@ -121,6 +125,22 @@ import { useAdminOps, getSession, createSession, publishSession, cancelSession,
 - `parseCsv(text)`：分隔符自动识别（逗号 / 制表符 / 分号）、引号包裹、字段内换行、双引号转义、去 BOM、跳空行
 - `decodeCsvBuffer(buffer)`：UTF-8 优先，解出替换字符时按 GBK 重解
 - 试题导入（FR-CAT-07）与人员名单导入（FR-IAM-05）**共用**这一套实现
+
+### 认证与强制改密（`@exam/shared/auth`）
+
+- `useAuth()`：登录态（`status` / `user` / `signIn` / `signOut` / `changePassword` / `resetPassword` / `can`）。
+  http 模式下 `user.mustChangePassword` 来自服务端（`/auth/login`、`/auth/me`）。
+- **强制改密**：管理员重置密码或导入名单后，服务端令牌带「必须改密」标记。
+  两端的路由守卫（学生端 `RequireAuth`、管理端 `RequirePermission`）会把这类用户
+  统一送到 `/change-password`（该路由放在守卫之外），改密成功后换发的新令牌立即恢复通行。
+- `ChangePasswordForm`：两端共用的改密表单（个人中心与强制改密页都用它）。
+
+### API 适配层（`@exam/shared/api`）
+
+- `ENDPOINTS`：相对 API 根的路径常量，与 `docs/api/openapi.json` 一一对应。
+- `httpClient`：超时、错误归一化、401 单飞刷新重试。
+- `catalogApi.loadCatalogSnapshot`：内容目录（标签 / 题库 / 题目 / 试卷 / 练习）。
+- `examSessionApi.loadMyExamSessions`：考试场次列表（后端已按对象级范围过滤）。
 
 ### UI 原语（`@exam/shared`）
 

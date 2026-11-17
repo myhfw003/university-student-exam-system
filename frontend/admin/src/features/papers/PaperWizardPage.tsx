@@ -1298,15 +1298,19 @@ export function PaperWizardPage() {
               <>
                 <h3 className="section-title">考试设置</h3>
                 <div className="grid-2" style={{ marginTop: "var(--sp-3)" }}>
-                  <Field label="答案公布时机" htmlFor="wiz-publish-answer">
+                  <Field
+                    label="答案公布时机"
+                    htmlFor="wiz-publish-answer"
+                    hint="考试进行中任何人都读不到答案与解析；场次结束后才按这里的设置公布。练习卷在「练习设置」里按反馈时机公布。"
+                  >
                     <SelectInput
                       id="wiz-publish-answer"
                       value={publishAnswer}
                       onChange={(e) => setPublishAnswer(e.target.value)}
                     >
-                      <option value="after_close">考试结束后公布</option>
-                      <option value="after_submit">交卷后立即公布</option>
-                      <option value="on_open">开考即公布</option>
+                      <option value="after_close">结束后全员公布</option>
+                      <option value="after_submit">结束后仅交卷者公布</option>
+                      <option value="on_open">结束后立即公布</option>
                     </SelectInput>
                   </Field>
                   <div className="field">

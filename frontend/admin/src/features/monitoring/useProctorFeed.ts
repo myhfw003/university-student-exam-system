@@ -4,14 +4,18 @@
    设计文档 FR-ANT-04 要求监考视图以**批量聚合**方式更新（默认 2 秒一批），
    不做逐事件即时推送；NFR-PERF-08 要求刷新延迟 < 3 秒。
 
-   后端接入 SignalR 后，只需把本 hook 内部的轮询换成 Hub 订阅，
-   对外暴露的 `candidates` 语义不变。
+   后端 `GET /exam-sessions/{id}/monitoring` 返回
+   `{ examSessionId, serverTime, candidates[] }`；本 hook 负责把后端的
+   状态词表（in_progress / auto_submitted / force_submitted / abandoned）
+   映射成监考视图的语义（answering / submitted / forced_submitted / disconnected）。
+
+   后端接入 SignalR 后，只需把轮询换成 Hub 订阅，对外语义不变。
    ========================================================================== */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { httpClient, isBackendEnabled } from "@exam/shared/api";
+import { ENDPOINTS, httpClient, isBackendEnabled } from "@exam/shared/api";
 import { proctorSnapshot, setCandidate } from "@exam/shared/mock/adminOps";
-import type { ProctorCandidate } from "@exam/shared/domain/types";
+import type { CandidateStatus, ProctorCandidate } from "@exam/shared/domain/types";
 
 /** 轮询间隔（毫秒）。 */
 export const PROCTOR_POLL_MS = 2000;
@@ -26,6 +30,62 @@ export interface ProctorFeed {
   updatedAt: number;
   /** 手动刷新。 */
   refresh: () => void;
+}
+
+/** 后端监考快照里的一名考生（ExamCandidateStatusDto）。 */
+interface CandidateDto {
+  attemptId?: string | number;
+  userId?: string | number;
+  displayName?: string;
+  username?: string;
+  status?: string;
+  focusLossCount?: number;
+  disconnectCount?: number;
+  lastHeartbeatAt?: string | null;
+  offline?: boolean;
+  answeredCount?: number;
+  totalCount?: number;
+}
+
+/** 后端监考快照（ExamStatusBatchDto）。 */
+interface MonitoringDto {
+  examSessionId?: string | number;
+  serverTime?: string;
+  candidates?: CandidateDto[];
+}
+
+/** 后端 AttemptStatus 存储值 → 监考视图状态。 */
+const STATUS_MAP: Record<string, CandidateStatus> = {
+  not_started: "not_started",
+  in_progress: "answering",
+  submitted: "submitted",
+  auto_submitted: "submitted",
+  force_submitted: "forced_submitted",
+  abandoned: "disconnected",
+};
+
+function toCandidate(sessionId: string, dto: CandidateDto): ProctorCandidate {
+  const raw = dto.status ?? "not_started";
+  let status = STATUS_MAP[raw] ?? "not_started";
+  // 仍在作答但心跳超时：监考视图按「断连中」呈现，与模拟快照语义一致。
+  if (dto.offline && raw === "in_progress") status = "disconnected";
+
+  const candidate: ProctorCandidate = {
+    sessionId,
+    studentId: String(dto.userId ?? dto.attemptId ?? ""),
+    status,
+    focusLossCount: dto.focusLossCount ?? 0,
+    disconnectCount: dto.disconnectCount ?? 0,
+    lastHeartbeatAt: dto.lastHeartbeatAt ?? null,
+    answeredCount: dto.answeredCount ?? 0,
+    totalCount: dto.totalCount ?? 0,
+    submittedAt: null,
+    forcedReason: null,
+  };
+
+  if (dto.displayName) candidate.displayName = dto.displayName;
+  if (dto.username) candidate.username = dto.username;
+  return candidate;
 }
 
 /**
@@ -60,35 +120,9 @@ export function useProctorFeed(sessionId: string | undefined): ProctorFeed {
     let cancelled = false;
     const load = async (): Promise<void> => {
       try {
-        const res = await httpClient.get<{
-          candidates?: Array<{
-            attemptId?: string | number;
-            userId?: string | number;
-            displayName?: string;
-            status?: string;
-            focusLossCount?: number;
-            disconnectCount?: number;
-            lastHeartbeatAt?: string;
-            answeredCount?: number;
-            totalCount?: number;
-          }>;
-        }>(`/exam-sessions/${sessionId}/candidates`);
+        const res = await httpClient.get<MonitoringDto>(ENDPOINTS.delivery.monitoring(sessionId));
         if (cancelled) return;
-        setRemote(
-          (res?.candidates ?? []).map((c) => ({
-            sessionId,
-            studentId: String(c.userId ?? c.attemptId ?? ""),
-            displayName: c.displayName ?? "",
-            status: (c.status ?? "not_started") as ProctorCandidate["status"],
-            focusLossCount: c.focusLossCount ?? 0,
-            disconnectCount: c.disconnectCount ?? 0,
-            lastHeartbeatAt: c.lastHeartbeatAt ?? null,
-            answeredCount: c.answeredCount ?? 0,
-            totalCount: c.totalCount ?? 0,
-            submittedAt: null,
-            forcedReason: null,
-          })),
-        );
+        setRemote((res.candidates ?? []).map((candidate) => toCandidate(sessionId, candidate)));
       } catch {
         // 拉取失败时保留上一份快照，监考视图不闪空。
       }
@@ -102,10 +136,7 @@ export function useProctorFeed(sessionId: string | undefined): ProctorFeed {
   }, [sessionId]);
 
   const candidates = useMemo(
-    () =>
-      sessionId
-        ? (remote ?? proctorSnapshot(sessionId, tick))
-        : [],
+    () => (sessionId ? (remote ?? proctorSnapshot(sessionId, tick)) : []),
     [sessionId, tick, remote],
   );
 

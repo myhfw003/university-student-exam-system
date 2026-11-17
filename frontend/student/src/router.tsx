@@ -20,6 +20,10 @@ const ForbiddenPage = lazy(async () => ({
 const LoginPage = lazy(async () => ({
   default: (await import("./features/auth/LoginPage")).LoginPage,
 }));
+const ForceChangePasswordPage = lazy(async () => ({
+  default: (await import("./features/auth/ForceChangePasswordPage"))
+    .ForceChangePasswordPage,
+}));
 const DashboardPage = lazy(async () => ({
   default: (await import("./features/dashboard/DashboardPage")).DashboardPage,
 }));
@@ -68,6 +72,12 @@ const router = createBrowserRouter([
   {
     path: "/login",
     element: lazyPage(LoginPage),
+  },
+  {
+    // 强制改密页放在守卫之外：守卫会把「必须改密」的用户送到这里，
+    // 页面自己判断登录态。
+    path: "/change-password",
+    element: lazyPage(ForceChangePasswordPage),
   },
   {
     // 登录守卫：未登录时跳转 /login 并携带原路由

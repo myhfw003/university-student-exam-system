@@ -77,7 +77,6 @@ export function UsersPage() {
   // 重置密码（FR-IAM-03）：管理员重置任意用户密码并强制其下次登录修改。
   const [resetTarget, setResetTarget] = useState<AppUser | null>(null);
   const [resetPassword, setResetPassword] = useState("");
-  const [forceChange, setForceChange] = useState(true);
   const [resetError, setResetError] = useState<string | null>(null);
   // 名单批量导入（FR-IAM-05）。
   const [importOpen, setImportOpen] = useState(false);
@@ -128,7 +127,7 @@ export function UsersPage() {
   const handleResetPassword = async () => {
     if (!resetTarget) return;
     setResetError(null);
-    const result = await doResetPassword(resetTarget.id, resetPassword, forceChange);
+    const result = await doResetPassword(resetTarget.id, resetPassword);
     if (!result.ok) {
       setResetError(result.message ?? "重置失败，请重试");
       return;
@@ -138,14 +137,13 @@ export function UsersPage() {
       action: "user.password_reset",
       targetType: "user",
       targetId: resetTarget.id,
-      summary: `重置「${resetTarget.name}」的密码${forceChange ? "，强制下次登录修改" : ""}`,
+      summary: `重置「${resetTarget.name}」的密码，强制下次登录修改`,
       ip: "10.12.0.21",
       userAgent: "Chrome 131 / Windows",
     });
     toast.ok("密码已重置");
     setResetTarget(null);
     setResetPassword("");
-    setForceChange(true);
   };
 
   /** 选择名单 CSV → 解析并逐行校验（不阻断整批）。 */
@@ -330,7 +328,6 @@ export function UsersPage() {
                           onClick={() => {
                             setResetError(null);
                             setResetPassword("");
-                            setForceChange(true);
                             setResetTarget(u);
                           }}
                         >
@@ -379,19 +376,10 @@ export function UsersPage() {
               onChange={(e) => setResetPassword(e.target.value)}
             />
           </Field>
-          <label className="checkline">
-            <input
-              type="checkbox"
-              checked={forceChange}
-              onChange={(e) => setForceChange(e.target.checked)}
-            />
-            <span className="checkline-text">
-              <span>强制下次登录修改</span>
-              <span className="checkline-hint">
-                管理员重置的密码仅作首次登录凭据，用户登录后需立即修改。
-              </span>
-            </span>
-          </label>
+          <p className="section-note">
+            管理员重置的密码仅作首次登录凭据：用户登录后必须立即修改密码，
+            改密之前只能用改密、查看本人档案与登出这三个功能。
+          </p>
         </div>
       </Dialog>
 

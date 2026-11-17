@@ -37,10 +37,19 @@ export {
   type RefreshTokenFn,
 } from "./authInterceptor";
 export { ENDPOINTS } from "./endpoints";
+export { refreshAccessToken } from "./authRefresh";
 export {
-  apiBaseUrl,
-  dataSourceMode,
-  isBackendEnabled,
-  type DataSourceMode,
-} from "./dataSource";
-export { loadCatalogSnapshot, type CatalogSnapshot } from "./catalogApi";
+  toDomainPayload,
+  toServerAnswerBatch,
+  toServerPayload,
+  type ServerAnswerBatch,
+  type ServerAnswerPayload,
+  type ServerAnswerStep,
+} from "./answerPayload";
+export { apiBaseUrl, dataSourceMode, isBackendEnabled, type DataSourceMode } from "./dataSource";
+export { loadCatalogSnapshot, type CatalogClient, type CatalogSnapshot } from "./catalogApi";
+export {
+  loadMyExamSessions,
+  type ExamSessionStatus,
+  type ExamSessionSummary,
+} from "./examSessionApi";

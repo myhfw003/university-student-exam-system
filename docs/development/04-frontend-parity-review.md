@@ -260,6 +260,21 @@
 | C7 | Playwright 端到端测试：① 练习闭环、② 内容工作台 / 组卷向导 / 阅卷队列、③ 切屏采集与分级反馈（后端相关的两段用 `test.skip` 标注原因） | §12 | `frontend/e2e/**`、`playwright.config.ts` |
 | C8 | 数据源开关：`VITE_DATA_SOURCE=http`（或设 `VITE_API_BASE_URL`）后，登录态、答案上行、监考快照、内容目录都走后端，**页面代码不感知** | §3 / 05-api.md | `shared/src/api/dataSource.ts`、`catalogApi.ts`、两端 `providers.tsx`、`useExamSession.ts`、`usePracticeSession.ts`、`useProctorFeed.ts` |
 
+
+> **2026-11-16 联调补记（修正 C8 的范围）**：http 通路目前覆盖登录/刷新/登出/改密、
+> 内容目录读取、监考快照与答案上行；**考试作答主流程仍从 mock 试卷建卷**，
+> 未调用 `POST /attempts`，也未上报 focus-events / submit / heartbeat；
+> 管理端场次、用户、审计、阅卷与监考的写操作仍走 `useAdminOps`。
+> 前端适配层（`ENDPOINTS` / `httpClient` / `catalogApi` / `answerPayload`）
+> 与真实后端的契约测试见 `frontend/e2e/frontend-contract.api.spec.ts`。
+>
+> **2026-11-16 第二轮补记（权限与范围）**：两端新增**强制改密**流程——
+> 管理员重置密码或导入名单后，令牌带「必须改密」标记，
+> 路由守卫把这类用户送到 `/change-password`（`ChangePasswordForm` 为两端共用组件），
+> 改密成功后换发的新令牌立即恢复通行。学生可见的**考试场次**已由后端按对象级范围给出，
+> 前端适配层 `shared/src/api/examSessionApi.ts`（`loadMyExamSessions`）就位；
+> 但学生端的「考试安排」页仍读 mock 目录，等作答主流程 http 化后一并切换。
+
 ### 顺带修掉的门禁问题
 
 - `pnpm lint` 在根级脚本（`scripts/*.mjs`）上一直报 `console` / `process` 未定义 —— **CI 的 lint 门禁此前是红的**。已在 `eslint.config.js` 给 `.mjs` 补上 node 环境。

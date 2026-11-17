@@ -1,33 +1,32 @@
 /* ==========================================================================
    知行测评 · 内容目录的后端读取
    --------------------------------------------------------------------------
-   把 `/api/v1/**` 的 DTO 映射成前端领域对象。两条约定：
+   把 `/api/v1/**` 的 DTO 映射成前端领域对象。约定：
 
    1. **ID 一律转字符串**：后端主键是数字，前端统一用字符串 ID
       （docs/design/06-frontend.md §14.3），映射只在这一层发生。
-   2. **字段名容错**：后端 DTO 用 `tagIds` / `questionIds` 等复数形式，
-      映射层同时接受单复数两种写法，避免后端微调字段就要改页面。
+   2. **只映射真实存在的字段**：列表 DTO 不返回题目选项/答案/解析、
+      试卷摘要不返回题位，缺少的部分留空字段，绝不臆造。
+      需要完整内容时按 id 调详情接口（试卷在加载目录时已补详情）。
+   3. 枚举值做**存储值 → 前端口径**的转换（如 `answerPolicy: immediately`
+      → `on_open`），转换表集中在各映射函数里。
    ========================================================================== */
 
 import { httpClient } from "./httpClient";
 import { ENDPOINTS } from "./endpoints";
-import type {
-  Bank,
-  DifficultyLevel,
-  ExamPaper,
-  Practice,
-  Question,
-  Tag,
-} from "../domain/types";
+import type { Bank, ExamPaper, PaperMode, Practice, Question, Tag } from "../domain/types";
 
 /** 分页响应。 */
 interface Paged<T> {
-  items: T[];
+  items?: T[];
   total?: number;
 }
 
-/** 后端 DTO（宽松声明）。 */
+/** 后端 DTO（宽松声明；字段以 OpenAPI 契约为准）。 */
 type Dto = Record<string, unknown>;
+
+/** 目录读取所需的最小客户端接口（便于端到端测试注入自定义基地址）。 */
+export type CatalogClient = Pick<typeof httpClient, "get">;
 
 function str(value: unknown, fallback = ""): string {
   if (value === null || value === undefined) return fallback;
@@ -35,6 +34,7 @@ function str(value: unknown, fallback = ""): string {
 }
 
 function num(value: unknown, fallback = 0): number {
+  if (value === null || value === undefined || value === "") return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 }
@@ -43,7 +43,7 @@ function bool(value: unknown, fallback = false): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
-/** 取 ID 数组（兼容 tagIds / tags、questionIds / questions）。 */
+/** 取 ID 数组（兼容 tagIds / tags）。 */
 function ids(dto: Dto, ...keys: string[]): string[] {
   for (const key of keys) {
     const value = dto[key];
@@ -52,98 +52,132 @@ function ids(dto: Dto, ...keys: string[]): string[] {
   return [];
 }
 
-/** 映射标签。 */
+/** 映射标签（TagDto）。 */
 function toTag(dto: Dto): Tag {
   const group = str(dto.group, "domain") as Tag["group"];
-  const level = dto.level === undefined || dto.level === null ? undefined : num(dto.level);
   const tag: Tag = { id: str(dto.id), name: str(dto.name), group };
-  if (level) tag.level = level as DifficultyLevel;
+  const level = num(dto.level, 0);
+  if (level === 1 || level === 2 || level === 3) tag.level = level;
   return tag;
 }
 
-/** 映射题目。 */
+/**
+ * 映射题目摘要（QuestionSummaryDto）。
+ *
+ * 列表接口按设计不返回选项、正确答案与解析（防泄题），
+ * 因此这里 `options` 缺省、`answer` 为空数组、`analysis` 为空串。
+ * 需要完整内容时走 `GET /questions/{id}`（QuestionDetailDto）。
+ */
 function toQuestion(dto: Dto): Question {
-  const options = Array.isArray(dto.options)
-        ? (dto.options as Dto[]).map((o) => ({ key: str(o.key), text: str(o.text) }))
-        : undefined;
-  const answer = Array.isArray(dto.answer) ? dto.answer.map((a) => str(a)) : [];
-  const question: Question = {
+  return {
     id: str(dto.id),
     type: str(dto.type, "single") as Question["type"],
-    score: num(dto.score, 5),
+    score: num(dto.defaultScore, 5),
     status: str(dto.status, "draft") as Question["status"],
     source: str(dto.source, "manual") as Question["source"],
-    tags: ids(dto, "tagIds", "tags"),
+    tags: ids(dto, "tagIds"),
     stem: str(dto.stem),
-    answer,
-    analysis: str(dto.analysis),
+    answer: [],
+    analysis: "",
   };
-  if (options && options.length > 0) question.options = options;
-  return question;
 }
 
-/** 映射题库。 */
+/** 映射题库摘要（QuestionBankSummaryDto；接口不返回题目清单）。 */
 function toBank(dto: Dto): Bank {
   return {
     id: str(dto.id),
     name: str(dto.name),
-    desc: str(dto.desc),
-    tags: ids(dto, "tagIds", "tags"),
-    questionIds: ids(dto, "questionIds", "questions"),
+    desc: str(dto.description),
+    tags: [],
+    questionIds: [],
   };
 }
 
-/** 映射试卷。 */
-function toExam(dto: Dto): ExamPaper {
-  const items = Array.isArray(dto.items)
-    ? (dto.items as Dto[]).map((item) => ({ qid: str(item.qid ?? item.questionId), score: num(item.score, 5) }))
-    : [];
-  const plum = (dto.plum ?? {}) as Dto;
-  const exam: ExamPaper = {
-    id: str(dto.id),
-    name: str(dto.name),
-    batch: str(dto.batch),
-    tags: ids(dto, "tagIds", "tags"),
-    durationMin: num(dto.durationMin, 60),
-    totalScore: num(dto.totalScore, 100),
-    passScore: num(dto.passScore, 60),
-    openAt: str(dto.openAt),
-    closeAt: str(dto.closeAt),
-    status: str(dto.status, "draft") as ExamPaper["status"],
-    published: bool(dto.published, str(dto.status, "draft") === "published"),
-    allowRetake: bool(dto.allowRetake),
-    publishAnswer: (str(dto.publishAnswer, "after_close") as ExamPaper["publishAnswer"]),
-    scope: ids(dto, "scope", "scopeIds", "classIds"),
-    questionIds: ids(dto, "questionIds", "questions"),
+/** 后端试卷状态 → 前端试卷状态。 */
+function toPaperStatus(raw: string): ExamPaper["status"] {
+  if (raw === "published") return "ongoing";
+  if (raw === "archived") return "ended";
+  return "draft";
+}
+
+/** 后端答案公布策略 → 前端口径。 */
+function toPublishAnswer(raw: string): ExamPaper["publishAnswer"] {
+  if (raw === "immediately") return "on_open";
+  if (raw === "after_submit") return "after_submit";
+  return "after_close";
+}
+
+/** 后端卷型规则 → 前端卷型。 */
+function toPaperMode(raw: string): PaperMode {
+  if (raw === "small_plum") return "small";
+  if (raw === "large_plum") return "large";
+  return "standard";
+}
+
+/**
+ * 映射试卷：摘要（PaperSummaryDto）+ 详情（PaperDetailDto，可选）。
+ *
+ * 题位、标签、卷型、答案策略只在详情里，加载目录时逐卷补详情；
+ * 详情拉取失败则退回摘要，页面仍可展示名称/时长/总分等基本信息。
+ */
+function toExam(summary: Dto, detail: Dto | null): ExamPaper {
+  const paper = (detail?.paper as Dto | undefined) ?? summary;
+  const rawStatus = str(paper.status, "draft");
+
+  const rawItems = Array.isArray(detail?.items) ? (detail.items as Dto[]) : [];
+  const items = rawItems.map((item) => ({
+    qid: str(item.questionId ?? item.qid),
+    score: num(item.score, 5),
+  }));
+
+  return {
+    id: str(paper.id),
+    name: str(paper.name),
+    batch: str(paper.batch),
+    tags: ids(detail ?? {}, "tagIds"),
+    durationMin: num(paper.durationMinutes, 60),
+    totalScore: num(paper.targetTotalScore, 100),
+    passScore: num(paper.passScore, 60),
+    openAt: "",
+    closeAt: "",
+    status: toPaperStatus(rawStatus),
+    published: rawStatus === "published",
+    allowRetake: bool(detail?.allowRetake),
+    publishAnswer: toPublishAnswer(str(detail?.answerPolicy, "after_close")),
+    scope: [],
+    questionIds: items.map((item) => item.qid),
     items,
-    orderRule: (str(dto.orderRule, "type") as ExamPaper["orderRule"]),
-    plum: { mode: (str(plum.mode, "standard") as ExamPaper["plum"]["mode"]) },
-    note: str(dto.note),
+    orderRule: str(detail?.orderRule, "by_type") === "manual" ? "manual" : "type",
+    plum: { mode: toPaperMode(str(detail?.variantRule, "standard")) },
+    note: str(detail?.note),
   };
-  return exam;
 }
 
-/** 映射练习。 */
+/**
+ * 映射练习（PracticeSummaryDto）。
+ *
+ * 该接口只返回练习摘要：标题、题量、总分、标签名与规则。
+ * 题库外的题位要按 paperId 另取试卷详情，这里不额外发请求，
+ * 因此 `items` / `questionIds` 为空。
+ */
 function toPractice(dto: Dto): Practice {
-  const items = Array.isArray(dto.items)
-    ? (dto.items as Dto[]).map((item) => ({ qid: str(item.qid ?? item.questionId), score: num(item.score, 5) }))
-    : [];
+  const feedback = str(dto.feedbackTiming, "after_submit");
   return {
     id: str(dto.id),
-    name: str(dto.name),
-    tags: ids(dto, "tagIds", "tags"),
-    durationMin: num(dto.durationMin, 30),
-    totalScore: num(dto.totalScore, items.reduce((sum, i) => sum + i.score, 0)),
-    status: str(dto.status, "draft") as Practice["status"],
-    published: bool(dto.published, str(dto.status, "draft") === "published"),
-    scope: ids(dto, "scope", "scopeIds", "classIds"),
-    repeats: num(dto.repeats, 0),
-    feedback: (str(dto.feedback, "after_submit") as Practice["feedback"]),
-    mistakeReflow: bool(dto.mistakeReflow, true),
-    questionIds: ids(dto, "questionIds", "questions"),
-    items,
-    orderRule: (str(dto.orderRule, "type") as Practice["orderRule"]),
-    note: str(dto.note),
+    name: str(dto.title),
+    tags: [],
+    questionIds: [],
+    items: [],
+    durationMin: num(dto.suggestedMinutes, 30),
+    totalScore: num(dto.totalScore),
+    status: "published",
+    published: true,
+    scope: [],
+    repeats: num(dto.maxAttempts),
+    feedback: feedback === "immediate" ? "immediate" : "after_submit",
+    mistakeReflow: bool(dto.reflowMistakes, true),
+    orderRule: "type",
+    note: "",
   };
 }
 
@@ -156,23 +190,80 @@ export interface CatalogSnapshot {
   practices: Practice[];
 }
 
-/** 读一条分页列表（后端返回 { items, total }）。 */
-async function fetchList<T>(path: string, map: (dto: Dto) => T): Promise<T[]> {
-  const res = await httpClient.get<Paged<Dto> | Dto[]>(path, {
-    query: { page: 1, size: 200 },
+/** 读一条列表（后端可能返回 { items, total }，也可能直接返回数组）。 */
+async function fetchList(
+  client: CatalogClient,
+  path: string,
+  query: Record<string, string | number | undefined> = {},
+): Promise<Dto[]> {
+  const res = await client.get<Paged<Dto> | Dto[]>(path, {
+    query: { page: 1, size: 200, ...query },
   });
-  const items = Array.isArray(res) ? res : (res?.items ?? []);
-  return items.map(map);
+  if (Array.isArray(res)) return res;
+  return res.items ?? [];
 }
 
-/** 读回整个内容目录。 */
-export async function loadCatalogSnapshot(): Promise<CatalogSnapshot> {
+/** 读标签：接口按维度分组返回 `{ groups: [{ group, tags }] }`。 */
+async function fetchTags(client: CatalogClient): Promise<Tag[]> {
+  interface TagGroupsDto {
+    groups?: Array<{ group?: string; tags?: Dto[] }>;
+  }
+
+  const res = await client.get<TagGroupsDto | Dto[]>(ENDPOINTS.catalog.tags);
+  if (Array.isArray(res)) return res.map(toTag);
+
+  const tags: Tag[] = [];
+  for (const group of res.groups ?? []) {
+    // 组织维度标签只挂用户，不属于内容目录（前端 Tag 只有四个内容维度）。
+    if (group.group === "organization") continue;
+    for (const dto of group.tags ?? []) tags.push(toTag(dto));
+  }
+  return tags;
+}
+
+/** 读考试卷：列表 + 逐卷详情（题位/标签/卷型/答案策略在详情里）。 */
+async function fetchExams(client: CatalogClient): Promise<ExamPaper[]> {
+  const summaries = await fetchList(client, ENDPOINTS.catalog.papers, { kind: "exam" });
+  const details = await Promise.all(
+    summaries.map(async (summary) => {
+      const id = str(summary.id);
+      if (!id) return null;
+      try {
+        return await client.get<Dto>(`${ENDPOINTS.catalog.papers}/${id}`);
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return summaries.map((summary, index) => toExam(summary, details[index] ?? null));
+}
+
+/** 单个来源不可用（例如学生无权读题库）不应拖垮整份目录。 */
+async function optional<T>(task: Promise<T[]>): Promise<T[]> {
+  try {
+    return await task;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 读回整个内容目录。可注入自定义客户端（端到端测试打真实后端时用）。
+ *
+ * 五个来源**互相独立**：某一类数据 403 / 网络失败只让该类为空，
+ * 其余目录照常可用。学生角色没有 `bank:read`，题库列表必然是空。
+ */
+export async function loadCatalogSnapshot(
+  client: CatalogClient = httpClient,
+): Promise<CatalogSnapshot> {
   const [tags, banks, questions, exams, practices] = await Promise.all([
-    fetchList(ENDPOINTS.catalog.tags, toTag),
-    fetchList(ENDPOINTS.catalog.banks, toBank),
-    fetchList(ENDPOINTS.catalog.questions, toQuestion),
-    fetchList(ENDPOINTS.catalog.papers, toExam),
-    fetchList(ENDPOINTS.delivery.assignments, toPractice),
+    optional(fetchTags(client)),
+    optional(fetchList(client, ENDPOINTS.catalog.banks).then((items) => items.map(toBank))),
+    optional(fetchList(client, ENDPOINTS.catalog.questions).then((items) => items.map(toQuestion))),
+    optional(fetchExams(client)),
+    optional(
+      fetchList(client, ENDPOINTS.delivery.practices).then((items) => items.map(toPractice)),
+    ),
   ]);
   return { tags, banks, questions, exams, practices };
 }

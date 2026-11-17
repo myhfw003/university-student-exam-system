@@ -1,23 +1,26 @@
 /* ==========================================================================
    知行测评 · 登录态
    --------------------------------------------------------------------------
-   两种运行模式：
+   两种运行模式（与数据源开关同一判定，见 `api/dataSource.ts`）：
 
-   - **mock**（默认，后端未就绪）：用应用提供的演示身份自动登录，
-     路由守卫与权限判定照常生效，演示不被「必须先登录」挡住。
-   - **http**（设置环境变量 `VITE_API_BASE_URL` 后启用）：
-     走 `POST /auth/login` / `GET /auth/me` / `POST /auth/logout`，
-     令牌只存内存（tokenStore），刷新页面靠 HttpOnly Cookie 静默换发。
+   - **mock**（缺省）：用应用提供的演示身份自动登录，路由守卫与权限判定
+     照常生效，演示不被「必须先登录」挡住。
+   - **http**：走 `POST /auth/login` / `GET /auth/me` / `POST /auth/logout`。
+     令牌只存内存（tokenStore）；刷新页面时用 HttpOnly Cookie 静默换发：
+     先 `POST /auth/refresh`，再 `GET /auth/me`。
 
-   令牌**不落盘**：localStorage / sessionStorage 里不放令牌。
+   权限以**服务端返回的权限码为准**（http 模式）；mock 模式退回本地角色矩阵，
+   保证演示可用。后端仍会独立校验每个请求的权限。
    ========================================================================== */
 
 import { create } from "zustand";
 import type { UserRole } from "../domain/types";
 import { ENDPOINTS } from "../api/endpoints";
 import { httpClient } from "../api/httpClient";
-import { clearTokens, setTokens } from "../api/tokenStore";
-import { hasPermission, permissionsFor, type PermissionPoint } from "./permissions";
+import { dataSourceMode } from "../api/dataSource";
+import { refreshAccessToken } from "../api/authRefresh";
+import { clearTokens, getAccessToken, setTokens } from "../api/tokenStore";
+import { permissionsFor, type PermissionPoint } from "./permissions";
 
 /** 登录用户档案（前端口径）。 */
 export interface AuthUser {
@@ -31,33 +34,29 @@ export interface AuthUser {
   roles: UserRole[];
   /** 组织维度标签 ID 列表；社会人士为空。 */
   orgTags: string[];
+  /** 服务端下发的权限码；mock 模式没有，退回角色矩阵。 */
+  permissions?: PermissionPoint[];
+  /** 是否必须先改密码（管理员重置密码或导入名单后置位）。 */
+  mustChangePassword?: boolean;
 }
 
 /** 运行模式。 */
 export type AuthMode = "mock" | "http";
 
-/** 后端 /auth/me 与 /auth/login 返回的用户档案（按 05-api.md §2）。 */
+/** 后端 /auth/me 与 /auth/login 返回的用户档案（UserProfileDto）。 */
 interface ApiUser {
   id?: string | number;
   username?: string;
   displayName?: string;
-  organizationTags?: Array<{ id?: string | number; name?: string }>;
   roles?: UserRole[];
-}
-
-/** 读取环境变量（共享层被两个 SPA 以源码方式消费，import.meta.env 需容错）。 */
-function envValue(key: string): string | undefined {
-  try {
-    const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
-    return env?.[key];
-  } catch {
-    return undefined;
-  }
+  permissions?: string[];
+  organizationTags?: Array<{ id?: string | number; name?: string }>;
+  mustChangePassword?: boolean;
 }
 
 /** 当前是否走真实后端。 */
 export function authMode(): AuthMode {
-  return envValue("VITE_API_BASE_URL") ? "http" : "mock";
+  return dataSourceMode();
 }
 
 /** 登录态状态。 */
@@ -68,7 +67,7 @@ export interface AuthState {
   user: AuthUser | null;
   /** 运行模式。 */
   mode: AuthMode;
-  /** 初始化：mock 模式用演示身份登录；http 模式拉 /auth/me。 */
+  /** 初始化：mock 模式用演示身份登录；http 模式先静默刷新再拉 /auth/me。 */
   bootstrap: (demo?: AuthUser | null) => Promise<void>;
   /** 登录。 */
   signIn: (
@@ -80,11 +79,13 @@ export interface AuthState {
   signOut: () => void;
   /** 修改本人密码。 */
   changePassword: (current: string, next: string) => Promise<{ ok: boolean; message?: string }>;
-  /** 管理员重置他人密码。 */
+  /**
+   * 管理员重置他人密码。
+   * <para>后端一律置「必须改密」：重置出来的密码只作首次登录凭据。</para>
+   */
   resetPassword: (
     userId: string,
     next: string,
-    forceChange: boolean,
   ) => Promise<{ ok: boolean; message?: string }>;
   /** 是否拥有权限点。 */
   can: (point: PermissionPoint) => boolean;
@@ -95,13 +96,18 @@ export interface AuthState {
 function toAuthUser(user: ApiUser | undefined, fallbackAccount = ""): AuthUser | null {
   if (!user) return null;
   const account = user.username ?? fallbackAccount;
-  return {
+  const profile: AuthUser = {
     id: String(user.id ?? account),
     account,
     name: user.displayName ?? account,
     roles: user.roles ?? [],
     orgTags: (user.organizationTags ?? []).map((tag) => String(tag.id ?? "")),
+    mustChangePassword: user.mustChangePassword ?? false,
   };
+  if (Array.isArray(user.permissions)) {
+    profile.permissions = user.permissions as PermissionPoint[];
+  }
+  return profile;
 }
 
 export const useAuth = create<AuthState>((set, get) => ({
@@ -112,8 +118,11 @@ export const useAuth = create<AuthState>((set, get) => ({
   bootstrap: async (demo) => {
     if (get().mode === "http") {
       try {
-        const res = await httpClient.get<{ user: ApiUser }>(ENDPOINTS.auth.me);
-        const user = toAuthUser(res?.user);
+        // 页面刷新后 access token 已丢：先用 HttpOnly Cookie 静默换发。
+        // 没有有效 Cookie 时 refresh 返回 null，随后的 /auth/me 会 401。
+        if (!getAccessToken()) await refreshAccessToken();
+        const profile = await httpClient.get<ApiUser>(ENDPOINTS.auth.me);
+        const user = toAuthUser(profile);
         set({ status: user ? "authenticated" : "anonymous", user });
       } catch {
         set({ status: "anonymous", user: null });
@@ -147,8 +156,7 @@ export const useAuth = create<AuthState>((set, get) => ({
         set({ status: user ? "authenticated" : "anonymous", user });
         return user ? { ok: true } : { ok: false, message: "登录失败：未返回用户档案" };
       } catch (error) {
-        const message =
-          error instanceof Error && error.message ? error.message : "账号或密码错误";
+        const message = error instanceof Error && error.message ? error.message : "账号或密码错误";
         return { ok: false, message };
       }
     }
@@ -161,6 +169,10 @@ export const useAuth = create<AuthState>((set, get) => ({
   },
 
   signOut: () => {
+    // 先通知服务端吊销刷新令牌族（HttpOnly Cookie 只能由服务端清除）。
+    if (get().mode === "http") {
+      void httpClient.post(ENDPOINTS.auth.logout).catch(() => undefined);
+    }
     clearTokens();
     set({ status: "anonymous", user: null });
   },
@@ -171,10 +183,25 @@ export const useAuth = create<AuthState>((set, get) => ({
     if (next.length < 8) return { ok: false, message: "新密码至少 8 位" };
     if (get().mode === "http") {
       try {
-        await httpClient.post(ENDPOINTS.auth.changePassword, {
+        const res = await httpClient.post<{
+          accessToken?: string;
+          expiresIn?: number;
+        }>(ENDPOINTS.auth.changePassword, {
           currentPassword: current,
           newPassword: next,
         });
+
+        // 改密前的令牌带着「必须改密」标记：换掉它才能继续用系统。
+        if (res?.accessToken) {
+          setTokens({
+            accessToken: res.accessToken,
+            ...(res.expiresIn ? { expiresAt: Date.now() + res.expiresIn * 1000 } : {}),
+          });
+        }
+        const user = get().user;
+        if (user) {
+          set({ user: { ...user, mustChangePassword: false } });
+        }
         return { ok: true };
       } catch (error) {
         const message =
@@ -186,14 +213,14 @@ export const useAuth = create<AuthState>((set, get) => ({
     return { ok: true };
   },
 
-  resetPassword: async (userId, next, forceChange) => {
+  resetPassword: async (userId, next) => {
     if (!userId) return { ok: false, message: "用户不存在" };
     if (!next || next.length < 8) return { ok: false, message: "新密码至少 8 位" };
     if (get().mode === "http") {
       try {
         await httpClient.post(ENDPOINTS.admin.resetPassword(userId), {
           newPassword: next,
-          mustChangeOnNextLogin: forceChange,
+          mustChangeOnNextLogin: true,
         });
         return { ok: true };
       } catch (error) {
@@ -205,12 +232,21 @@ export const useAuth = create<AuthState>((set, get) => ({
     return { ok: true };
   },
 
-  can: (point) => hasPermission(get().user?.roles, point),
+  can: (point) => get().permissions().includes(point),
 
-  permissions: () => permissionsFor(get().user?.roles),
+  permissions: () => {
+    const user = get().user;
+    if (user?.permissions && user.permissions.length > 0) return user.permissions;
+    return permissionsFor(user?.roles);
+  },
 }));
 
 /** 便捷读取：当前用户是否拥有某权限点。 */
 export function useCan(point: PermissionPoint): boolean {
-  return useAuth((state) => hasPermission(state.user?.roles, point));
+  return useAuth((state) => state.permissions().includes(point));
+}
+
+/** 便捷读取：当前用户是否必须先改密码。 */
+export function useMustChangePassword(): boolean {
+  return useAuth((state) => state.user?.mustChangePassword === true);
 }

@@ -58,11 +58,19 @@ export function RequirePermission({ permission }: RequirePermissionProps) {
   const location = useLocation();
   const status = useAuth((state) => state.status);
   const roles = useAuth((state) => state.user?.roles);
+  const mustChangePassword = useAuth((state) => state.user?.mustChangePassword);
 
   if (status === "unknown") return <Loading />;
 
   if (status === "anonymous") {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+
+  // 强制改密：管理员重置密码后必须先改密，其余页面一律挡住。
+  if (mustChangePassword && location.pathname !== "/change-password") {
+    return (
+      <Navigate to="/change-password" replace state={{ from: location.pathname }} />
+    );
   }
 
   const need = permission ?? requiredPermission(location.pathname);

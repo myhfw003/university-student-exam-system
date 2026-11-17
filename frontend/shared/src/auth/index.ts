@@ -12,7 +12,12 @@ export {
   authMode,
   useAuth,
   useCan,
+  useMustChangePassword,
   type AuthMode,
   type AuthState,
   type AuthUser,
 } from "./useAuth";
+export {
+  ChangePasswordForm,
+  type ChangePasswordFormProps,
+} from "./ChangePasswordForm";

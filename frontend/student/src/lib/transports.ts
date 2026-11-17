@@ -3,9 +3,9 @@
    --------------------------------------------------------------------------
    上行引擎（syncEngine）只依赖 AnswerTransport 接口，这里给出两种实现：
 
-   1. HttpAnswerTransport —— 对接后端 /api/v1/attempts/{id}/answers。
-      后端作答接口在 P4 阶段落地，届时把 createTransport() 切到它即可，
-      引擎逻辑不动。
+   1. HttpAnswerTransport —— 对接后端 `POST /api/v1/attempts/{id}/answers`。
+      请求体按 `SaveAnswersRequest` 组装：`{ clientSeq, items, clientSentAt }`；
+      载荷字段名转换集中在 `@exam/shared/api` 的 answerPayload 模块。
 
    2. MockAnswerTransport —— 本地模拟服务端语义（接收批次、维护 lastClientSeq、
       存储答案、模拟网络故障），让前端在无后端时也能完整跑通
@@ -14,15 +14,38 @@
 
 import type { AnswerBatch, AnswerPayload } from "@exam/shared/domain/attempt";
 import {
+  apiBaseUrl,
+  ENDPOINTS,
+  toDomainPayload,
+  toServerAnswerBatch,
+  type ServerAnswerPayload,
+} from "@exam/shared/api";
+import {
   NetworkUnavailableError,
   type AnswerTransport,
   type RemoteAttemptState,
 } from "./syncEngine";
 
+/** 后端一批答案保存结果（SaveAnswersResponse 的子集）。 */
+interface SaveAnswersResponse {
+  acceptedClientSeq?: number;
+}
+
+/** 后端作答会话（AttemptResponse 的子集）。 */
+interface ServerAttemptResponse {
+  status?: string;
+  lastClientSeq?: number;
+  answers?: Array<{
+    questionId?: number | string;
+    payload?: ServerAnswerPayload | null;
+    clientSeq?: number;
+  }>;
+}
+
 /** HTTP 传输实现。 */
 export class HttpAnswerTransport implements AnswerTransport {
   constructor(
-    private readonly baseUrl = "/api/v1",
+    private readonly baseUrl = apiBaseUrl(),
     private readonly getAccessToken: () => string | null = () => null,
   ) {}
 
@@ -34,11 +57,14 @@ export class HttpAnswerTransport implements AnswerTransport {
 
     let response: Response;
     try {
-      response = await fetch(`${this.baseUrl}/attempts/${batch.attemptId}/answers`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(batch),
-      });
+      response = await fetch(
+        `${this.baseUrl}${ENDPOINTS.delivery.attempts}/${batch.attemptId}/answers`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify(toServerAnswerBatch(batch)),
+        },
+      );
     } catch {
       throw new NetworkUnavailableError();
     }
@@ -49,7 +75,7 @@ export class HttpAnswerTransport implements AnswerTransport {
       throw new Error(`答案上行失败：HTTP ${response.status}`);
     }
 
-    const data = (await response.json()) as { acceptedClientSeq?: number };
+    const data = (await response.json()) as SaveAnswersResponse;
     return data.acceptedClientSeq ?? batch.clientSeq;
   }
 
@@ -61,28 +87,31 @@ export class HttpAnswerTransport implements AnswerTransport {
 
     let response: Response;
     try {
-      response = await fetch(`${this.baseUrl}/attempts/${attemptId}`, { headers });
+      response = await fetch(`${this.baseUrl}${ENDPOINTS.delivery.attempts}/${attemptId}`, {
+        headers,
+      });
     } catch {
       throw new NetworkUnavailableError();
     }
 
     if (!response.ok) throw new NetworkUnavailableError();
 
-    const data = (await response.json()) as {
-      lastClientSeq?: number;
-      answers?: Record<string, AnswerPayload>;
-      submitted?: boolean;
-    };
+    const data = (await response.json()) as ServerAttemptResponse;
 
+    // 后端返回数组形式的 answers，这里按题目 ID 建索引。
     const answers: Record<string, AnswerPayload> = {};
-    for (const [key, value] of Object.entries(data.answers ?? {})) {
-      answers[key] = value;
+    for (const answer of data.answers ?? []) {
+      if (answer.questionId === undefined || answer.questionId === null) continue;
+      if (!answer.payload) continue;
+      answers[String(answer.questionId)] = toDomainPayload(answer.payload);
     }
+
+    const status = data.status ?? "";
 
     return {
       lastClientSeq: data.lastClientSeq ?? 0,
       answers,
-      submitted: data.submitted ?? false,
+      submitted: status !== "" && status !== "not_started" && status !== "in_progress",
     };
   }
 }

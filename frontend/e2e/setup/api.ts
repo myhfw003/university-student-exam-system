@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 /** API 基地址（不含 /api/v1 前缀由调用方补）。 */
-export const apiRoot = process.env.E2E_API_BASE_URL ?? "http://127.0.0.1:5000";
+export const apiRoot = process.env.E2E_API_BASE_URL ?? "http://127.0.0.1:8080";
 
 /** 管理员账号：由端到端环境预先种子。 */
 export const adminUsername = process.env.E2E_ADMIN_USERNAME ?? "admin";
@@ -52,11 +52,7 @@ export function readOpenApiDocument(): OpenApiDocument {
 }
 
 /** 登录，拿到令牌与权限码。 */
-export async function login(
-  baseUrl: string,
-  username: string,
-  password: string,
-): Promise<Session> {
+export async function login(baseUrl: string, username: string, password: string): Promise<Session> {
   const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -64,9 +60,7 @@ export async function login(
   });
 
   if (!response.ok) {
-    throw new Error(
-      `登录失败：${username} → HTTP ${response.status} ${await response.text()}`,
-    );
+    throw new Error(`登录失败：${username} → HTTP ${response.status} ${await response.text()}`);
   }
 
   const body = (await response.json()) as {
@@ -104,10 +98,7 @@ export async function ensureStudent(
   }
 
   // 账号已存在就直接用（密码不变）。
-  const listResponse = await fetch(
-    `${baseUrl}/api/v1/users?page=1&pageSize=200`,
-    { headers },
-  );
+  const listResponse = await fetch(`${baseUrl}/api/v1/users?page=1&size=200`, { headers });
   const list = (await listResponse.json()) as { items?: { id: number; username: string }[] };
   const existing = list.items?.find((user) => user.username === studentUsername);
 

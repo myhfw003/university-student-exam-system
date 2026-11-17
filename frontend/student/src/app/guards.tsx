@@ -40,6 +40,13 @@ export function RequireAuth({ roles }: RequireAuthProps) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
+  // 强制改密：管理员重置密码后必须先改密，其余页面一律挡住。
+  if (user?.mustChangePassword && location.pathname !== "/change-password") {
+    return (
+      <Navigate to="/change-password" replace state={{ from: location.pathname }} />
+    );
+  }
+
   if (roles && roles.length > 0) {
     const granted = roles.some((role) => user?.roles.includes(role));
     if (!granted) {

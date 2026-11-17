@@ -20,6 +20,10 @@ const ForbiddenPage = lazy(async () => ({
 const LoginPage = lazy(async () => ({
   default: (await import("./features/auth/LoginPage")).LoginPage,
 }));
+const ForceChangePasswordPage = lazy(async () => ({
+  default: (await import("./features/auth/ForceChangePasswordPage"))
+    .ForceChangePasswordPage,
+}));
 const OverviewPage = lazy(async () => ({
   default: (await import("./features/overview/OverviewPage")).OverviewPage,
 }));
@@ -80,6 +84,11 @@ const routes = [
   {
     path: "/login",
     element: lazyPage(LoginPage),
+  },
+  {
+    // 强制改密页放在守卫之外：守卫会把「必须改密」的用户送到这里。
+    path: "/change-password",
+    element: lazyPage(ForceChangePasswordPage),
   },
   {
     // 权限守卫：按权限点判定，无权限跳转 403 页

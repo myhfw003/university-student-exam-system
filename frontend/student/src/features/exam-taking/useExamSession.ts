@@ -29,8 +29,7 @@ import {
 import { clearDraft } from "@/stores/draftQueue";
 import { SyncEngine } from "@/lib/syncEngine";
 import { HttpAnswerTransport, MockAnswerTransport } from "@/lib/transports";
-import { apiBaseUrl, isBackendEnabled } from "@exam/shared/api";
-import { getAccessToken } from "@exam/shared/api";
+import { apiBaseUrl, ENDPOINTS, getAccessToken, isBackendEnabled } from "@exam/shared/api";
 import { createHttpServerTimeSource } from "@/lib/serverTimeSource";
 import { useServerTime } from "@/lib/useServerTime";
 import { useStudentStore } from "@/stores/studentStore";
@@ -41,18 +40,11 @@ import { useFocusGuard } from "./FocusGuard";
 const mockTransport = new MockAnswerTransport();
 /** 数据源切到后端时，答案上行走真实的作答接口。 */
 function createTransport() {
-  return isBackendEnabled()
-    ? new HttpAnswerTransport(apiBaseUrl(), getAccessToken)
-    : mockTransport;
+  return isBackendEnabled() ? new HttpAnswerTransport(apiBaseUrl(), getAccessToken) : mockTransport;
 }
 
 /** 会话为空时的原因。 */
-export type SessionBlockReason =
-  | null
-  | "not_found"
-  | "already_submitted"
-  | "ended"
-  | "time_up";
+export type SessionBlockReason = null | "not_found" | "already_submitted" | "ended" | "time_up";
 
 /** 考试会话控制器。 */
 export interface ExamSessionController {
@@ -154,10 +146,7 @@ export function useExamSession(examId: string): ExamSessionController {
   }, [attempts, examId, studentId]);
 
   const paper = useMemo(
-    () =>
-      exam
-        ? buildPaper(exam, studentId, undefined, getQuestion, difficultyLevels())
-        : null,
+    () => (exam ? buildPaper(exam, studentId, undefined, getQuestion, difficultyLevels()) : null),
     [exam, studentId],
   );
 
@@ -178,7 +167,8 @@ export function useExamSession(examId: string): ExamSessionController {
     if (!exam || !paper) return;
     // 换考试时重置会话状态。直接读 store 当前值，避免把整个会话对象挂进依赖。
     const current = useExamSessionStore.getState();
-    if (current.examId !== examId) {
+    // 会话与「考试 × 答题者」绑定：换了答题者必须重新初始化，不能沿用上一人的快照。
+    if (current.examId !== examId || current.studentId !== studentId) {
       current.init({
         examId,
         studentId,
@@ -222,7 +212,10 @@ export function useExamSession(examId: string): ExamSessionController {
 
     // 关闭页面前用 beacon 发最后一批；不可用时靠 L2 的 IndexedDB 兜底。
     const onBeforeUnload = () => {
-      void engine.flushWithBeacon(null, `/api/v1/attempts/${examId}/answers`);
+      void engine.flushWithBeacon(
+        getAccessToken(),
+        `${apiBaseUrl()}${ENDPOINTS.delivery.attempts}/${examId}/answers`,
+      );
     };
     window.addEventListener("beforeunload", onBeforeUnload);
 
@@ -265,15 +258,12 @@ export function useExamSession(examId: string): ExamSessionController {
 
   /* ------------------------------------------------------------ 作答 */
 
-  const record = useCallback(
-    (qid: string, next: ExamResponses[string]) => {
-      const store = useExamSessionStore.getState();
-      store.setAnswer(qid, toPayload(next));
-      // L2 落盘 + L3/L4 上行（引擎内部防抖）。
-      engineRef.current?.recordAnswer(qid, toPayload(next));
-    },
-    [],
-  );
+  const record = useCallback((qid: string, next: ExamResponses[string]) => {
+    const store = useExamSessionStore.getState();
+    store.setAnswer(qid, toPayload(next));
+    // L2 落盘 + L3/L4 上行（引擎内部防抖）。
+    engineRef.current?.recordAnswer(qid, toPayload(next));
+  }, []);
 
   const choose = useCallback(
     (qid: string, keys: string[]) => {
@@ -313,65 +303,68 @@ export function useExamSession(examId: string): ExamSessionController {
 
   /* ------------------------------------------------------------ 交卷 */
 
-  const submit = useCallback((auto = false, reason?: string) => {
-    if (!exam || !paper) return;
+  const submit = useCallback(
+    (auto = false, reason?: string) => {
+      if (!exam || !paper) return;
 
-    const graded = scorePaper(paper, responses);
-    const store = useExamSessionStore.getState();
+      const graded = scorePaper(paper, responses);
+      const store = useExamSessionStore.getState();
 
-    saveAttempt({
-      examId: exam.id,
-      studentId,
-      submittedAt: new Date().toISOString(),
-      responses,
-      score: graded.total,
-      total: graded.totalMax,
-      pendingSubjective: graded.subjective.pending > 0,
-      variantLabel: paper.variantLabel,
-      attemptNo,
-      attempts: attemptNo,
-    });
+      saveAttempt({
+        examId: exam.id,
+        studentId,
+        submittedAt: new Date().toISOString(),
+        responses,
+        score: graded.total,
+        total: graded.totalMax,
+        pendingSubjective: graded.subjective.pending > 0,
+        variantLabel: paper.variantLabel,
+        attemptNo,
+        attempts: attemptNo,
+      });
 
-    // 主观题入阅卷队列：简答整题一条，综合题按步骤拆开。
-    graded.details.forEach((detail, index) => {
-      if (detail.type !== "short" && detail.type !== "comprehensive") return;
-      if (detail.type === "short") {
-        addReview({
-          id: `rv-live-${exam.id}-${studentId}-a${attemptNo}-${detail.qid}-q-${index}`,
-          examId: exam.id,
-          studentId,
-          qid: detail.qid,
-          stepId: null,
-          attempt: attemptNo,
-          answerText: detail.answerText ?? "",
-          submittedAt: new Date().toISOString(),
-        });
-        return;
-      }
-      (detail.steps ?? []).forEach((step, stepIndex) => {
-        addReview({
-          id: `rv-live-${exam.id}-${studentId}-a${attemptNo}-${detail.qid}-${step.id}-${stepIndex}`,
-          examId: exam.id,
-          studentId,
-          qid: detail.qid,
-          stepId: step.id,
-          attempt: attemptNo,
-          answerText: step.answer,
-          submittedAt: new Date().toISOString(),
+      // 主观题入阅卷队列：简答整题一条，综合题按步骤拆开。
+      graded.details.forEach((detail, index) => {
+        if (detail.type !== "short" && detail.type !== "comprehensive") return;
+        if (detail.type === "short") {
+          addReview({
+            id: `rv-live-${exam.id}-${studentId}-a${attemptNo}-${detail.qid}-q-${index}`,
+            examId: exam.id,
+            studentId,
+            qid: detail.qid,
+            stepId: null,
+            attempt: attemptNo,
+            answerText: detail.answerText ?? "",
+            submittedAt: new Date().toISOString(),
+          });
+          return;
+        }
+        (detail.steps ?? []).forEach((step, stepIndex) => {
+          addReview({
+            id: `rv-live-${exam.id}-${studentId}-a${attemptNo}-${detail.qid}-${step.id}-${stepIndex}`,
+            examId: exam.id,
+            studentId,
+            qid: detail.qid,
+            stepId: step.id,
+            attempt: attemptNo,
+            answerText: step.answer,
+            submittedAt: new Date().toISOString(),
+          });
         });
       });
-    });
 
-    store.markSubmitted();
-    void clearDraft(examId);
-    void engineRef.current?.flush();
+      store.markSubmitted();
+      void clearDraft(examId);
+      void engineRef.current?.flush();
 
-    // 提示文案与原型一致：手动交卷 / 超时自动交卷；
-    // 强制交卷用处置原因本身（原型没有防作弊采集这一段）。
-    toast.ok(reason ?? (auto ? "考试时间到，已自动交卷" : "已交卷，正在生成成绩报告"));
+      // 提示文案与原型一致：手动交卷 / 超时自动交卷；
+      // 强制交卷用处置原因本身（原型没有防作弊采集这一段）。
+      toast.ok(reason ?? (auto ? "考试时间到，已自动交卷" : "已交卷，正在生成成绩报告"));
 
-    navigate(`/exams/${examId}/report`);
-  }, [exam, paper, responses, studentId, examId, attemptNo, navigate]);
+      navigate(`/exams/${examId}/report`);
+    },
+    [exam, paper, responses, studentId, examId, attemptNo, navigate],
+  );
 
   const forceSubmit = useCallback(
     (reason: string) => {
@@ -411,7 +404,7 @@ export function useExamSession(examId: string): ExamSessionController {
   let blocked: SessionBlockReason = null;
   if (!exam) blocked = "not_found";
   else if (session.submitted) blocked = "already_submitted";
-  else if (session.remainingSec <= 0) blocked = "time_up";
+  else if (session.deadlineAt !== null && session.remainingSec <= 0) blocked = "time_up";
   else if (exam.status === "ended" && !exam.allowRetake) blocked = "ended";
 
   // 倒计时归零：**自动交卷**（判分、落 attempt、主观题进阅卷队列），再跳成绩报告。

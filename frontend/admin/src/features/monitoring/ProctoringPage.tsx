@@ -64,9 +64,7 @@ export function ProctoringPage() {
   const [reason, setReason] = useState("");
 
   const candidates = feed.candidates;
-  const filtered = candidates.filter(
-    (c) => statusFilter === "all" || c.status === statusFilter,
-  );
+  const filtered = candidates.filter((c) => statusFilter === "all" || c.status === statusFilter);
 
   // 虚拟滚动：只渲染可视区的行（§7.3 的 1000 考生场景）。
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -126,7 +124,9 @@ export function ProctoringPage() {
       targetType: "exam_session",
       targetId: session.id,
       summary: `对考生「${
-        students.find((s) => s.id === dialog.studentId)?.name ?? dialog.studentId
+        candidates.find((c) => c.studentId === dialog.studentId)?.displayName ??
+        students.find((s) => s.id === dialog.studentId)?.name ??
+        dialog.studentId
       }」执行${PROCTOR_ACTION_LABEL[dialog.kind]}${reason ? `：${reason}` : ""}`,
       ip: "10.12.0.21",
       userAgent: "Chrome 131 / Windows",
@@ -145,9 +145,7 @@ export function ProctoringPage() {
         <PageHead
           title="实时监考"
           sub="选择一个考试场次，进入考生状态大屏。"
-          actions={
-            <Button onClick={() => navigate("/exam-sessions")}>返回场次列表</Button>
-          }
+          actions={<Button onClick={() => navigate("/exam-sessions")}>返回场次列表</Button>}
         />
 
         <section className="card">
@@ -317,82 +315,89 @@ export function ProctoringPage() {
                 ) : (
                   <>
                     {/* 顶部占位：撑出虚拟滚动需要的空白高度。 */}
-                    <tr aria-hidden="true" style={{ height: virtualRows[0]?.start ?? 0, border: 0 }}>
+                    <tr
+                      aria-hidden="true"
+                      style={{ height: virtualRows[0]?.start ?? 0, border: 0 }}
+                    >
                       <td colSpan={8} style={{ padding: 0, border: 0 }} />
                     </tr>
                     {virtualRows.map((virtualRow) => {
-                    const c = filtered[virtualRow.index];
-                    if (!c) return null;
-                    const student = students.find((s) => s.id === c.studentId);
-                    return (
-                      <tr
-                        key={c.studentId}
-                        data-index={virtualRow.index}
-                        ref={virtualizer.measureElement}
-                      >
-                        <td>
-                          <div className="strong" style={{ fontWeight: 500 }}>
-                            {student?.name ?? c.studentId}
-                          </div>
-                          <div className="text-xs text-3 mono">{c.studentId}</div>
-                        </td>
-                        <td>
-                          <Badge tone={STATUS_TONE[c.status]}>
-                            {CANDIDATE_STATUS_LABEL[c.status]}
-                          </Badge>
-                          {c.forcedReason ? (
-                            <div className="text-xs text-3">{c.forcedReason}</div>
-                          ) : null}
-                        </td>
-                        <td className="num">
-                          {c.focusLossCount > 0 ? (
-                            <Badge tone={c.focusLossCount >= session.policy.maxFocusLoss ? "danger" : "warn"}>
-                              {c.focusLossCount}
+                      const c = filtered[virtualRow.index];
+                      if (!c) return null;
+                      const student = students.find((s) => s.id === c.studentId);
+                      return (
+                        <tr
+                          key={c.studentId}
+                          data-index={virtualRow.index}
+                          ref={virtualizer.measureElement}
+                        >
+                          <td>
+                            <div className="strong" style={{ fontWeight: 500 }}>
+                              {c.displayName ?? student?.name ?? c.studentId}
+                            </div>
+                            <div className="text-xs text-3 mono">{c.studentId}</div>
+                          </td>
+                          <td>
+                            <Badge tone={STATUS_TONE[c.status]}>
+                              {CANDIDATE_STATUS_LABEL[c.status]}
                             </Badge>
-                          ) : (
-                            <span className="text-3">0</span>
-                          )}
-                        </td>
-                        <td className="num">{c.disconnectCount}</td>
-                        <td className="text-xs text-3">
-                          {c.lastHeartbeatAt ?? "—"}
-                        </td>
-                        <td className="num">
-                          {c.answeredCount} / {c.totalCount}
-                        </td>
-                        <td className="text-xs text-3">{c.submittedAt ?? "—"}</td>
-                        <td className="col-actions">
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              setDialog({ studentId: c.studentId, kind: "warn" });
-                              setReason("");
-                            }}
-                          >
-                            警告
-                          </Button>{" "}
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              setDialog({ studentId: c.studentId, kind: "note" });
-                              setReason("");
-                            }}
-                          >
-                            备注
-                          </Button>{" "}
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            onClick={() => {
-                              setDialog({ studentId: c.studentId, kind: "force_submit" });
-                              setReason("");
-                            }}
-                          >
-                            强制交卷
-                          </Button>
-                        </td>
-                      </tr>
-                    );
+                            {c.forcedReason ? (
+                              <div className="text-xs text-3">{c.forcedReason}</div>
+                            ) : null}
+                          </td>
+                          <td className="num">
+                            {c.focusLossCount > 0 ? (
+                              <Badge
+                                tone={
+                                  c.focusLossCount >= session.policy.maxFocusLoss
+                                    ? "danger"
+                                    : "warn"
+                                }
+                              >
+                                {c.focusLossCount}
+                              </Badge>
+                            ) : (
+                              <span className="text-3">0</span>
+                            )}
+                          </td>
+                          <td className="num">{c.disconnectCount}</td>
+                          <td className="text-xs text-3">{c.lastHeartbeatAt ?? "—"}</td>
+                          <td className="num">
+                            {c.answeredCount} / {c.totalCount}
+                          </td>
+                          <td className="text-xs text-3">{c.submittedAt ?? "—"}</td>
+                          <td className="col-actions">
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setDialog({ studentId: c.studentId, kind: "warn" });
+                                setReason("");
+                              }}
+                            >
+                              警告
+                            </Button>{" "}
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setDialog({ studentId: c.studentId, kind: "note" });
+                                setReason("");
+                              }}
+                            >
+                              备注
+                            </Button>{" "}
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              onClick={() => {
+                                setDialog({ studentId: c.studentId, kind: "force_submit" });
+                                setReason("");
+                              }}
+                            >
+                              强制交卷
+                            </Button>
+                          </td>
+                        </tr>
+                      );
                     })}
                     {/* 底部占位。 */}
                     <tr
@@ -449,7 +454,9 @@ export function ProctoringPage() {
         title={
           dialog
             ? `${PROCTOR_ACTION_LABEL[dialog.kind]} · ${
-                students.find((s) => s.id === dialog.studentId)?.name ?? dialog.studentId
+                candidates.find((c) => c.studentId === dialog.studentId)?.displayName ??
+                students.find((s) => s.id === dialog.studentId)?.name ??
+                dialog.studentId
               }`
             : ""
         }
@@ -478,9 +485,7 @@ export function ProctoringPage() {
             id="proctor-reason"
             value={reason}
             placeholder={
-              dialog?.kind === "force_submit"
-                ? "例如：切屏次数超限，疑似离开考场"
-                : "处置说明"
+              dialog?.kind === "force_submit" ? "例如：切屏次数超限，疑似离开考场" : "处置说明"
             }
             onChange={(e) => setReason(e.target.value)}
           />

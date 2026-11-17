@@ -14,6 +14,7 @@
    ========================================================================== */
 
 import type { AnswerBatch, AnswerPayload } from "@exam/shared/domain/attempt";
+import { toServerAnswerBatch } from "@exam/shared/api";
 import {
   countPending,
   deleteBatchesUpTo,
@@ -320,7 +321,9 @@ export class SyncEngine {
           const nextRetryAt = new Date(Date.now() + delay).toISOString();
           await updateBatch({ ...batch, retries, nextRetryAt });
           this.scheduleRetry(nextRetryAt);
-          await this.emitStatus({ lastError: `答案同步失败，${Math.round(delay / 1000)} 秒后重试。` });
+          await this.emitStatus({
+            lastError: `答案同步失败，${Math.round(delay / 1000)} 秒后重试。`,
+          });
           break;
         }
       }
@@ -397,9 +400,9 @@ export class SyncEngine {
   /**
    * 页面关闭前的最后一搏：用 sendBeacon 上行最后一批。
    *
-   * sendBeacon 不支持自定义 Authorization 头，因此该端点额外接受
-   * `?access_token=` 查询参数（仅限此端点，且令牌有效期短）。
-   * beacon 不可用时依赖 L2 的 IndexedDB —— 刷新后依然不丢。
+   * sendBeacon 不能携带 Authorization 头，而后端只对 /hubs 接受查询参数令牌，
+   * 因此改用 fetch keepalive：带 Bearer 头，且页面卸载后请求仍可完成。
+   * 失败时依赖 L2 的 IndexedDB —— 刷新后依然不丢。
    */
   async flushWithBeacon(accessToken: string | null, endpoint: string): Promise<boolean> {
     if (this.pendingItems.size === 0) return false;
@@ -422,21 +425,25 @@ export class SyncEngine {
       createdAt: new Date().toISOString(),
     };
 
-    if (typeof navigator === "undefined" || typeof navigator.sendBeacon !== "function") {
-      // beacon 不可用：退回普通上行（失败也不丢，队列里还有）。
-      await enqueueBatch(this.attemptId, clientSeq, items);
-      void this.replay();
-      return false;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(toServerAnswerBatch(batch)),
+        credentials: "include",
+        keepalive: true,
+      });
+      if (response.ok) return true;
+    } catch {
+      // 网络失败：落到下面的排队逻辑。
     }
 
-    const url = `${endpoint}?access_token=${encodeURIComponent(accessToken ?? "")}`;
-    const blob = new Blob([JSON.stringify(batch)], { type: "application/json" });
-    const sent = navigator.sendBeacon(url, blob);
-    if (!sent) {
-      await enqueueBatch(this.attemptId, clientSeq, items);
-      void this.replay();
-    }
-    return sent;
+    await enqueueBatch(this.attemptId, clientSeq, items);
+    void this.replay();
+    return false;
   }
 
   /** 释放定时器。 */

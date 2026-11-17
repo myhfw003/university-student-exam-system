@@ -1,8 +1,11 @@
 /* ==========================================================================
-   知行测评 · HTTP 客户端骨架
+   知行测评 · HTTP 客户端
    --------------------------------------------------------------------------
-   职责：超时控制、错误归一化、认证头注入。
-   本文件只提供骨架与类型，**不实现任何真实请求**（真实调用待后端接口就绪后接入）。
+   职责：基地址拼接、超时控制、错误归一化、认证头注入、401 单飞刷新重试。
+
+   基地址取 `apiBaseUrl()`：同源部署是 `/api/v1`，跨域部署是
+   `VITE_API_BASE_URL`。请求路径来自 `ENDPOINTS`（相对 API 根），
+   两者拼起来才是完整地址，避免双前缀。
    ========================================================================== */
 
 import {
@@ -11,7 +14,10 @@ import {
   parseProblemDetails,
   type NormalizedProblem,
 } from "./problemDetails";
-import { getAccessToken } from "./tokenStore";
+import { apiBaseUrl } from "./dataSource";
+import { refreshAccessToken } from "./authRefresh";
+import { ENDPOINTS } from "./endpoints";
+import { getAccessToken, type TokenPair } from "./tokenStore";
 
 /** 请求方法。 */
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -49,17 +55,28 @@ export class HttpError extends Error {
 /** 默认超时。 */
 export const DEFAULT_TIMEOUT_MS = 15_000;
 
-/** 默认基地址（骨架占位，接入后端时由各应用通过 createHttpClient 覆盖）。 */
-export const DEFAULT_BASE_URL = "/api/v1";
+/**
+ * 默认基地址。
+ *
+ * 保留该导出是为了兼容既有引用；实际基地址由 `apiBaseUrl()` 决定，
+ * 调用方一般不需要显式传 `baseUrl`。
+ */
+export const DEFAULT_BASE_URL = "";
 
 /** HTTP 客户端配置。 */
 export interface HttpClientConfig {
+  /** API 根地址；缺省取 `apiBaseUrl()`。 */
   baseUrl?: string;
   timeoutMs?: number;
   /** 注入认证头，默认读取 tokenStore 的 access token。 */
   getAuthToken?: () => string | null;
   /** 全局请求头。 */
   headers?: Record<string, string>;
+  /**
+   * 收到 401 时的刷新函数；返回 null 表示刷新失败。
+   * 未配置时不自动刷新。
+   */
+  refreshToken?: () => Promise<TokenPair | null>;
 }
 
 function buildUrl(baseUrl: string, path: string, query: RequestOptions["query"]): string {
@@ -77,15 +94,41 @@ function buildUrl(baseUrl: string, path: string, query: RequestOptions["query"])
 }
 
 /**
- * 创建一个带超时与错误归一化的 fetch 客户端。
- * 骨架阶段不内置任何业务端点。
+ * 创建一个带超时、错误归一化与 401 刷新重试的 fetch 客户端。
  */
 export function createHttpClient(config: HttpClientConfig = {}) {
-  const baseUrl = config.baseUrl ?? DEFAULT_BASE_URL;
+  const baseUrl = config.baseUrl ?? apiBaseUrl();
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const getAuthToken = config.getAuthToken ?? getAccessToken;
 
-  async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  // 单飞：并发 401 只触发一次刷新。
+  let refreshInFlight: Promise<TokenPair | null> | null = null;
+
+  function runRefresh(): Promise<TokenPair | null> {
+    const refresh = config.refreshToken;
+    if (!refresh) return Promise.resolve(null);
+
+    if (!refreshInFlight) {
+      refreshInFlight = refresh()
+        .catch(() => null)
+        .finally(() => {
+          refreshInFlight = null;
+        });
+    }
+
+    return refreshInFlight;
+  }
+
+  function shouldRefresh(path: string): boolean {
+    return (
+      config.refreshToken !== undefined &&
+      path !== ENDPOINTS.auth.login &&
+      path !== ENDPOINTS.auth.refresh &&
+      path !== ENDPOINTS.auth.logout
+    );
+  }
+
+  async function dispatch(path: string, options: RequestOptions): Promise<Response> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? timeoutMs);
     const externalSignal = options.signal;
@@ -102,20 +145,21 @@ export function createHttpClient(config: HttpClientConfig = {}) {
     }
     if (options.auth !== false) {
       const token = getAuthToken();
-      if (token) headers["Authorization"] = `Bearer ${token}`;
+      if (token) headers.Authorization = `Bearer ${token}`;
     }
 
-    let response: Response;
     try {
       const init: RequestInit = {
         method: options.method ?? "GET",
         headers,
         signal: controller.signal,
+        // 刷新令牌在 HttpOnly Cookie 里，跨域部署必须显式允许带 Cookie。
+        credentials: "include",
       };
       if (options.body !== undefined) {
         init.body = typeof options.body === "string" ? options.body : JSON.stringify(options.body);
       }
-      response = await fetch(buildUrl(baseUrl, path, options.query), init);
+      return await fetch(buildUrl(baseUrl, path, options.query), init);
     } catch (error) {
       const aborted = error instanceof Error && error.name === "AbortError";
       throw new HttpError({
@@ -124,6 +168,18 @@ export function createHttpClient(config: HttpClientConfig = {}) {
     } finally {
       clearTimeout(timer);
       externalSignal?.removeEventListener("abort", onExternalAbort);
+    }
+  }
+
+  async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+    let response = await dispatch(path, options);
+
+    // access token 过期：刷新一次后重放原请求。
+    if (response.status === 401 && options.auth !== false && shouldRefresh(path)) {
+      const tokens = await runRefresh();
+      if (tokens) {
+        response = await dispatch(path, options);
+      }
     }
 
     if (!response.ok) {
@@ -151,5 +207,5 @@ export function createHttpClient(config: HttpClientConfig = {}) {
   };
 }
 
-/** 默认客户端实例（骨架）。 */
-export const httpClient = createHttpClient();
+/** 默认客户端实例：带上 Cookie 刷新能力。 */
+export const httpClient = createHttpClient({ refreshToken: refreshAccessToken });

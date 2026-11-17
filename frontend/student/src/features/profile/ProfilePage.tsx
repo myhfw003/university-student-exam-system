@@ -11,14 +11,13 @@
 import { useState } from "react";
 import {
   Button,
-  Callout,
   Card,
+  ChangePasswordForm,
   ConfirmDialog,
   Field,
   RuleList,
   Segmented,
   SelectInput,
-  TextInput,
   toast,
   useAuth,
 } from "@exam/shared";
@@ -41,8 +40,6 @@ export function ProfilePage() {
   const [clearing, setClearing] = useState(false);
   // 修改密码（FR-IAM-03）：需校验原密码。
   const changePassword = useAuth((state) => state.changePassword);
-  const [passwords, setPasswords] = useState({ current: "", next: "", confirm: "" });
-  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const current = students.find((s) => s.id === studentId);
 
@@ -62,19 +59,16 @@ export function ProfilePage() {
     }
   };
 
-  const handleChangePassword = async (): Promise<void> => {
-    setPasswordError(null);
-    if (passwords.next !== passwords.confirm) {
-      setPasswordError("两次输入的新密码不一致");
-      return;
-    }
-    const result = await changePassword(passwords.current, passwords.next);
+  const handleChangePassword = async (
+    current: string,
+    next: string,
+  ): Promise<string | null> => {
+    const result = await changePassword(current, next);
     if (!result.ok) {
-      setPasswordError(result.message ?? "修改失败，请重试");
-      return;
+      return result.message ?? "修改失败，请重试";
     }
     toast.ok("密码已修改");
-    setPasswords({ current: "", next: "", confirm: "" });
+    return null;
   };
 
   return (
@@ -102,51 +96,7 @@ export function ProfilePage() {
           </Card>
 
           <Card title="修改密码">
-            <div className="stack">
-              {passwordError ? (
-                <Callout tone="danger" title="修改失败">
-                  {passwordError}
-                </Callout>
-              ) : null}
-              <Field label="原密码" required htmlFor="pwd-current">
-                <TextInput
-                  id="pwd-current"
-                  type="password"
-                  autoComplete="current-password"
-                  value={passwords.current}
-                  onChange={(e) =>
-                    setPasswords((prev) => ({ ...prev, current: e.target.value }))
-                  }
-                />
-              </Field>
-              <Field label="新密码" required htmlFor="pwd-next">
-                <TextInput
-                  id="pwd-next"
-                  type="password"
-                  autoComplete="new-password"
-                  value={passwords.next}
-                  onChange={(e) =>
-                    setPasswords((prev) => ({ ...prev, next: e.target.value }))
-                  }
-                />
-              </Field>
-              <Field label="确认新密码" required htmlFor="pwd-confirm">
-                <TextInput
-                  id="pwd-confirm"
-                  type="password"
-                  autoComplete="new-password"
-                  value={passwords.confirm}
-                  onChange={(e) =>
-                    setPasswords((prev) => ({ ...prev, confirm: e.target.value }))
-                  }
-                />
-              </Field>
-              <div>
-                <Button variant="primary" onClick={() => void handleChangePassword()}>
-                  修改密码
-                </Button>
-              </div>
-            </div>
+            <ChangePasswordForm onSubmit={handleChangePassword} />
           </Card>
 
           <Card title="演示：切换答题者">
