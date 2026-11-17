@@ -96,6 +96,9 @@ public sealed class AttemptPaperSurfaceBuilder
             q => q.Id,
             q => difficultyNames.GetValueOrDefault(q.DifficultyTagId, string.Empty));
 
+        // 标签与难度标签：前端要靠它们渲染题头（领域/知识点/难度片）。
+        var questionTags = loaded.ToDictionary(q => q.Id, q => (q.TagIds, q.DifficultyTagId));
+
         var questions = variant.Items
             .Select(item =>
             {
@@ -103,6 +106,7 @@ public sealed class AttemptPaperSurfaceBuilder
                 var options = source.Options
                     .OrderBy(o => o.Key, StringComparer.Ordinal)
                     .ToDictionary(o => o.Key, o => o.Text);
+                var meta = questionTags.GetValueOrDefault(source.QuestionId);
 
                 return new AttemptQuestionDto(
                     item.QuestionId,
@@ -116,6 +120,11 @@ public sealed class AttemptPaperSurfaceBuilder
                     source.SectionTitle,
                     source.Attachments
                         .Select(a => new AttemptAttachmentDto(a.ObjectKey, a.FileName, a.ContentType, a.SizeBytes))
+                        .ToList(),
+                    meta.TagIds?.ToList() ?? [],
+                    meta.DifficultyTagId,
+                    source.Steps
+                        .Select(s => new AttemptStepDto(s.Code, s.Prompt, s.Score))
                         .ToList());
             })
             .ToList();

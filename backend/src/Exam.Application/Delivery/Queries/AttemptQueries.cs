@@ -107,7 +107,8 @@ public sealed class ListAttemptsHandler : IRequestHandler<ListAttemptsQuery, Att
                 a.AttemptNo,
                 a.StartedAt,
                 a.SubmittedAt,
-                a.DeadlineAt))
+                a.DeadlineAt,
+                a.ExamSessionId))
             .ToList();
 
         return new AttemptListResponse(items, items.Count);

@@ -8649,6 +8649,25 @@
               "$ref": "#/components/schemas/AttemptAttachmentDto"
             },
             "nullable": true
+          },
+          "tagIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "nullable": true
+          },
+          "difficultyTagId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttemptStepDto"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8767,6 +8786,24 @@
         },
         "additionalProperties": false
       },
+      "AttemptStepDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "prompt": {
+            "type": "string",
+            "nullable": true
+          },
+          "score": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
       "AttemptSummaryDto": {
         "type": "object",
         "properties": {
@@ -8807,6 +8844,11 @@
           "deadlineAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "examSessionId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
           }
         },
         "additionalProperties": false

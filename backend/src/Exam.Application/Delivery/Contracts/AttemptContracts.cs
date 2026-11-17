@@ -11,6 +11,15 @@ public sealed record AttemptAttachmentDto(
     string ContentType,
     long SizeBytes);
 
+/// <summary>
+/// 综合题的一个作答步骤。
+/// <para>
+/// 只给「要写什么」与「这一步值多少分」——**不给参考答案与关键词**：
+/// 参考答案属于判分依据，考试进行中绝不能下发。
+/// </para>
+/// </summary>
+public sealed record AttemptStepDto(string Code, string Prompt, decimal Score);
+
 /// <summary>考生卷面里的一道题。选项按该考生的置换顺序给出。</summary>
 public sealed record AttemptQuestionDto(
     long QuestionId,
@@ -22,7 +31,13 @@ public sealed record AttemptQuestionDto(
     decimal Score,
     string Difficulty,
     string? SectionTitle,
-    IReadOnlyList<AttemptAttachmentDto> Attachments);
+    IReadOnlyList<AttemptAttachmentDto> Attachments,
+    /// <summary>知识标签 ID（难度标签不算在内）。前端用来渲染题头标签片。</summary>
+    IReadOnlyList<long> TagIds,
+    /// <summary>难度标签 ID。前端用它认出哪个标签是难度。</summary>
+    long DifficultyTagId,
+    /// <summary>综合题的作答步骤（没有步骤的题型是空列表）。</summary>
+    IReadOnlyList<AttemptStepDto> Steps);
 
 /// <summary>考生已作答的一题。</summary>
 public sealed record AttemptAnswerDto(long QuestionId, AnswerPayload Payload, int ClientSeq);
@@ -79,7 +94,12 @@ public sealed record AttemptSummaryDto(
     int AttemptNo,
     DateTimeOffset? StartedAt,
     DateTimeOffset? SubmittedAt,
-    DateTimeOffset DeadlineAt);
+    DateTimeOffset DeadlineAt,
+    /// <summary>
+    /// 所属场次 ID（练习为空）。
+    /// <para>前端靠它把「我的作答」对应回「考试安排」里的某一场。</para>
+    /// </summary>
+    long? ExamSessionId);
 
 /// <summary>我的会话列表。</summary>
 public sealed record AttemptListResponse(
