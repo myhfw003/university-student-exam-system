@@ -1270,7 +1270,7 @@ P0 基础设施
 |---|---|---|
 | T-P10-01 学生端考试作答（S1+S2） | ✅ 完成 | 后端卷面补 `steps`/`tagIds`/`difficultyTagId`、作答摘要补 `examSessionId`；前端 `attemptApi` 适配层、作答页接后端、上行键换算 |
 | T-P10-02 学生端成绩报告（S3+S4） | ✅ 完成 | 报告页与成绩列表改读 `/attempts/{id}/report` 与 `/my/results`；成绩条目补场次 ID 与开放单 ID |
-| T-P10-03 学生端练习（S5） | ⬜ 未开始 | `POST /attempts`（practiceAssignmentId）+ `/attempts/{id}/feedback` |
+| T-P10-03 学生端练习（S5） | ✅ 完成 | `POST /attempts`（practiceAssignmentId）+ `/attempts/{id}/feedback`；练习中心与练习会话都走真实后端 |
 | T-P10-04 学生端错题本与工作台（S6+S7） | ⬜ 未开始 | `/mistakes`、`/dashboard/summary` |
 | T-P10-05 管理端场次（A1+A2+A3） | ⬜ 未开始 | 场次 CRUD、名单、负责人 |
 | T-P10-06 管理端用户与审计（A4+A5+A6） | ⬜ 未开始 | 用户/角色/组织标签、名单导入、审计日志 |
@@ -1288,6 +1288,26 @@ P0 基础设施
 - **依赖**：T-P10-01。
 - **产出**：成绩报告页与成绩列表在 HTTP 模式下读真实后端。
 - **验收**：场次关闭后报告公布正确答案与解析；答案未到公布时机时前端不显示正确答案。
+
+### T-P10-03 学生端练习
+
+- **依赖**：T-P10-01、T-P10-02。
+- **产出**：练习中心与练习作答页在 HTTP 模式下走真实后端。
+- **验收**：练习作答即时反馈与服务端判分一致；练习卷不置换选项。
+
+**T-P10-03 交付说明**
+
+- **前端新增**：`shared/src/api/practiceApi.ts`（`/practices` 与 `/attempts/{id}/feedback` 的映射）、
+  `shared/src/engine/practice.ts` 的 `gradedPaperFromFeedback`（服务端反馈 → 整卷判分结果）、
+  `student/src/features/practice/usePracticeList.ts`（练习中心列表）、
+  `student/src/features/exam-taking/useRemotePracticeSession.ts`（HTTP 模式的练习会话）。
+- **练习会话的三处差别**（对齐设计文档）：卷面来自服务端且**不置换**选项；判分与解析来自
+  `POST /attempts/{id}/feedback`；错题回流由服务端管，前端不再本地记错题。
+- **即时反馈**：反馈时机是 `immediate` 的练习，作答停下来一会儿就问一次服务端（600ms 防抖），
+  页面显示服务端给的正确与否、得分与解析；`after_submit` 的练习交卷后才给。
+- **实测结论**（真实后端）：练习卷面不置换；反馈 `correct=true`、`score=10`、`correctKeys=["C"]`（**原题键**）；
+  交卷后总分 10/10；成绩条目带 `practiceAssignmentId`。
+- **还差的**：错题回流的结果展示——错题本本身还没接后端（T-P10-04）。
 
 **T-P10-02 交付说明**
 

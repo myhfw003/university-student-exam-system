@@ -161,3 +161,24 @@
 
 **还差的**：综合题逐步得分与简答题要点命中——接口没有给学生端，
 HTTP 模式只显示作答原文；这属于接口能力缺口，不是前端映射问题。
+
+### T-P10-03 学生端练习（已完成）
+
+**前端接线**
+
+- `shared/src/api/practiceApi.ts`：`/practices`（学生可见的开放单）与 `/attempts/{id}/feedback`（即时反馈）。
+- `shared/src/engine/practice.ts` 的 `gradedPaperFromFeedback`：服务端反馈 → 整卷判分结果（练习结果页的渲染逻辑不用改）。
+- `student/src/features/practice/usePracticeList.ts`：练习中心列表（开放单 + 已做过的成绩）。
+- `student/src/features/exam-taking/useRemotePracticeSession.ts`：HTTP 模式的练习会话。
+
+**实测结论（真实后端）**
+
+| 环节 | 结果 |
+|---|---|
+| 练习卷面 | 不置换选项（标准卷），`targetType=practice` |
+| 即时反馈 | `correct=true`、`score=10`、`correctKeys=["C"]`（**原题键**）、`analysis` 给出 |
+| 交卷 | `submitted`，总分 10 / 10 |
+| 成绩条目 | 带 `practiceAssignmentId`（练习）与 `examSessionId=null` |
+
+**口径**：练习的正确答案同样给原题键，前端用卷面的换算表还原成显示字母；
+错题回流由服务端负责，前端不再本地记错题（错题本本身是 T-P10-04）。
