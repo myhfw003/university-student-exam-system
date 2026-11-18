@@ -64,6 +64,12 @@ export {
   type ExamSessionSummary,
 } from "./examSessionApi";
 export {
+  loadAttemptFeedback,
+  loadMyPractices,
+  toPracticeSummary,
+  type PracticeClient,
+} from "./practiceApi";
+export {
   loadAttemptReport,
   loadMyResults,
   toAttemptReport,
@@ -76,6 +82,7 @@ export {
   listMyAttempts,
   reportFocusEvents,
   startExamAttempt,
+  startPracticeAttempt,
   submitAttempt,
   toAttemptSurface,
   type AttemptClient,

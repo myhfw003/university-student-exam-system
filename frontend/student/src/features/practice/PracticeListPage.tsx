@@ -7,18 +7,15 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, Card, Empty, PageHead, SearchInput, TagFilter } from "@exam/shared";
-import { TYPE_LABEL } from "@exam/shared/engine/paper";
 import { useCatalog } from "@exam/shared/mock/catalog";
-import { useStudentRecords, useVisiblePractices } from "@/features/shared/studentData";
 import { TagChips } from "@/features/shared/TagChips";
+import { usePracticeList } from "./usePracticeList";
 
 /** 练习中心。 */
 export function PracticeListPage() {
   const navigate = useNavigate();
-  const practices = useVisiblePractices();
-  const records = useStudentRecords();
+  const { rows: practices } = usePracticeList();
   const tags = useCatalog((state) => state.tags);
-  const questions = useCatalog((state) => state.questions);
 
   const [keyword, setKeyword] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
@@ -117,22 +114,11 @@ export function PracticeListPage() {
       ) : (
         <div className="grid-3" style={{ marginTop: "var(--sp-5)" }}>
           {filtered.map((practice) => {
-            const result = records.find((r) => r.kind === "practice" && r.id === practice.id);
-            const types = practice.questionIds
-              .map((qid) => questions.find((q) => q.id === qid)?.type)
-              .filter((t): t is NonNullable<typeof t> => Boolean(t));
-            const typeStats = Object.entries(
-              types.reduce<Record<string, number>>((acc, t) => {
-                acc[t] = (acc[t] ?? 0) + 1;
-                return acc;
-              }, {}),
-            )
-              .map(([type, count]) => `${TYPE_LABEL[type as keyof typeof TYPE_LABEL] ?? type} ${count}`)
-              .join(" · ");
+            const result = practice.result;
 
             // 原型 student.js:659：完成度条只有「已做 / 没做」两态，
             // 得分率另有一行文字，不是条形图的宽度。
-            const done = result ? practice.questionIds.length : 0;
+            const done = result ? practice.questionCount : 0;
 
             return (
               <Card key={practice.id}>
@@ -140,10 +126,9 @@ export function PracticeListPage() {
                   <div className="list-main">
                     <div className="list-title">{practice.name}</div>
                     <div className="list-sub">
-                      {practice.questionIds.length} 题 · 约 {practice.durationMin} 分钟 · 总分{" "}
+                      {practice.questionCount} 题 · 约 {practice.durationMin} 分钟 · 总分{" "}
                       {practice.totalScore} 分
                     </div>
-                    {typeStats ? <div className="list-sub">{typeStats}</div> : null}
                     <div className="row-tight">
                       <TagChips tags={practice.tags} />
                     </div>
@@ -151,6 +136,7 @@ export function PracticeListPage() {
                   <div className="spacer" />
                   <Button
                     variant="primary"
+                    disabled={!practice.canStart}
                     onClick={() => navigate(`/practice/${practice.id}`)}
                   >
                     {result ? "再练一次" : "开始练习"}
@@ -164,7 +150,7 @@ export function PracticeListPage() {
                   {result ? (
                     <>
                       <span>
-                        已完成 {done}/{practice.questionIds.length} 题
+                        已完成 {done}/{practice.questionCount} 题
                       </span>
                       <span>·</span>
                       <span>

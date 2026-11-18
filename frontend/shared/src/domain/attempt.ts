@@ -292,3 +292,69 @@ export interface MyResult {
   subjectivePending: boolean;
   status: string;
 }
+
+/* ==========================================================================
+   练习
+   --------------------------------------------------------------------------
+   学生端看到的是「练习开放单」：一条开放单挂一份练习卷。
+   开放单有自己的次数上限、反馈时机与错题回流设置。
+   ========================================================================== */
+
+/** 学生可见的练习开放单。 */
+export interface PracticeSummary {
+  /** 开放单 ID（开始作答时用它）。 */
+  id: string;
+  /** 标题。 */
+  title: string;
+  paperId: string;
+  paperName: string;
+  /** 题量。 */
+  questionCount: number;
+  /** 总分。 */
+  totalScore: number;
+  /** 标签名（接口给的是名字，不是 ID）。 */
+  tagNames: string[];
+  /** 最多可做次数；0 表示不限。 */
+  maxAttempts: number;
+  /** 已用次数。 */
+  usedAttempts: number;
+  /** 剩余次数；null 表示不限。 */
+  remainingAttempts: number | null;
+  /** 反馈时机：`immediate`（每题即时反馈）/ `after_submit`（提交后统一给）。 */
+  feedbackTiming: string;
+  /** 答错是否回流错题本。 */
+  reflowMistakes: boolean;
+  /** 预计用时（分钟）。 */
+  suggestedMinutes: number;
+  /** 现在能不能开始。 */
+  canStart: boolean;
+}
+
+/** 即时反馈里的一道题。 */
+export interface AttemptFeedbackQuestion {
+  questionId: string;
+  code: string;
+  type: QuestionType;
+  typeLabel: string;
+  /** 是否已作答。 */
+  answered: boolean;
+  /** 客观题的对错；主观题没有对错这一说。 */
+  correct: boolean | null;
+  score: number;
+  maxScore: number;
+  /** 正确答案键（**原题键**）；主观题为空。 */
+  correctKeys: string[];
+  referenceAnswer: string | null;
+  analysis: string | null;
+  /** 判分明细（命中的要点 / 步骤）。 */
+  details: string[];
+}
+
+/** 练习即时反馈。 */
+export interface AttemptFeedback {
+  attemptId: string;
+  /** 反馈时机。 */
+  feedbackTiming: string;
+  generatedAt: string;
+  questions: AttemptFeedbackQuestion[];
+}

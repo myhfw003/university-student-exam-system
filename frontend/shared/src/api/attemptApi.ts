@@ -224,6 +224,22 @@ export async function startExamAttempt(
   return toAttemptSurface(dto);
 }
 
+/**
+ * 开始（或续上）一次练习作答。
+ *
+ * 服务端幂等：已有进行中的练习会话时返回同一个。
+ * 练习不计时、不置换选项。
+ */
+export async function startPracticeAttempt(
+  assignmentId: string,
+  client: AttemptClient = httpClient,
+): Promise<AttemptSurface> {
+  const dto = await client.post<Dto>(ENDPOINTS.delivery.startAttempt, {
+    practiceAssignmentId: Number(assignmentId),
+  });
+  return toAttemptSurface(dto);
+}
+
 /** 读取一次作答的完整视图。 */
 export async function getAttempt(
   attemptId: string,

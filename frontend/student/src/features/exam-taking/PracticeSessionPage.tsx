@@ -21,6 +21,7 @@ import {
   toast,
 } from "@exam/shared";
 import type { GradedDetail } from "@exam/shared/engine/scoring";
+import type { AttemptFeedbackQuestion } from "@exam/shared/domain/attempt";
 import {
   gradeComprehensive,
   gradeObjective,
@@ -174,10 +175,20 @@ export function PracticeSessionPage() {
                 />
 
                 {practice.feedback === "immediate" ? (
-                  <ImmediateFeedback
-                    question={current.question}
-                    response={responses[current.qid]}
-                  />
+                  controller.feedback ? (
+                    <ServerImmediateFeedback
+                      item={controller.feedback.questions.find(
+                        (q) => q.questionId === current.qid,
+                      )}
+                      fromOriginal={current.fromOriginal}
+                      response={responses[current.qid]}
+                    />
+                  ) : (
+                    <ImmediateFeedback
+                      question={current.question}
+                      response={responses[current.qid]}
+                    />
+                  )
                 ) : null}
 
                 <hr className="divider" />
@@ -370,6 +381,70 @@ function ImmediateFeedback({
       {question.analysis ? (
         <div className="analysis" style={{ marginTop: "var(--sp-2)" }}>
           {question.analysis}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * 服务端给的即时反馈（HTTP 模式）。
+ *
+ * 正确与否、得分与解析都来自服务端（`POST /attempts/{id}/feedback`）：
+ * 前端没有正确答案的副本，也就不自己判。
+ */
+function ServerImmediateFeedback({
+  item,
+  fromOriginal,
+  response,
+}: {
+  item: AttemptFeedbackQuestion | undefined;
+  fromOriginal: Record<string, string>;
+  response: ExamResponses[string] | undefined;
+}) {
+  if (!item) return null;
+
+  const isSubjective = item.type === "short" || item.type === "comprehensive";
+  const picked = response?.choice ?? [];
+  // 正确答案给的是原题键，换回卷面上的显示字母。
+  const correct = item.correctKeys.map((key) => fromOriginal[key] ?? key);
+
+  const tone =
+    item.correct === true ? "ok" : item.correct === false ? "danger" : "info";
+  const label =
+    item.correct === true
+      ? "回答正确"
+      : item.correct === false
+        ? "回答错误"
+        : "已记录，等待阅卷";
+
+  return (
+    <div className={`callout is-${tone}`} role="status">
+      <span className="callout-title">{label}</span>
+      {isSubjective ? (
+        <dl className="kv" style={{ marginTop: "var(--sp-2)" }}>
+          <dt>得分</dt>
+          <dd>
+            {formatScore(item.score)} / {formatScore(item.maxScore)}
+          </dd>
+          <dt>参考答案</dt>
+          <dd>{item.referenceAnswer || "由阅卷人评定"}</dd>
+        </dl>
+      ) : (
+        <dl className="kv" style={{ marginTop: "var(--sp-2)" }}>
+          <dt>你的答案</dt>
+          <dd>{picked.length ? picked.join("、") : "未选择"}</dd>
+          <dt>正确答案</dt>
+          <dd>{correct.length ? correct.join("、") : "—"}</dd>
+          <dt>得分</dt>
+          <dd>
+            {formatScore(item.score)} / {formatScore(item.maxScore)}
+          </dd>
+        </dl>
+      )}
+      {item.analysis ? (
+        <div className="analysis" style={{ marginTop: "var(--sp-2)" }}>
+          {item.analysis}
         </div>
       ) : null}
     </div>
