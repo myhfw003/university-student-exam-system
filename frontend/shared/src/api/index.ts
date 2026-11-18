@@ -64,6 +64,14 @@ export {
   type ExamSessionSummary,
 } from "./examSessionApi";
 export {
+  loadDashboardSummary,
+  loadMistakes,
+  redoMistake,
+  resolveMistake,
+  toMistakeEntry,
+  type LearningClient,
+} from "./learningApi";
+export {
   loadAttemptFeedback,
   loadMyPractices,
   toPracticeSummary,

@@ -10,6 +10,8 @@ import { useNavigate } from "react-router-dom";
 import { Badge, Button, Callout, Card, Empty, LineChart, PageHead, Stat } from "@exam/shared";
 import { formatScore } from "@exam/shared";
 import { getStudent, TAG_GROUP_LABEL, useCatalog } from "@exam/shared/mock/catalog";
+import { useAuth } from "@exam/shared/auth";
+import type { DashboardSummary } from "@exam/shared/domain/learning";
 import { PAPER_MODES, normalizeConfig, variantLabelOf } from "@exam/shared/engine/paper";
 import type { ExamPaper } from "@exam/shared/domain/types";
 import { Icon } from "@/app/Icon";
@@ -24,6 +26,7 @@ import {
   useVisiblePractices,
   weekdayOf,
 } from "@/features/shared/studentData";
+import { useDashboard } from "./useDashboard";
 
 /** 有效卷型的标签 / 短说明 / 长说明（原型取 plumCfg(exam).mode）。 */
 function modeInfo(exam: ExamPaper) {
@@ -32,6 +35,241 @@ function modeInfo(exam: ExamPaper) {
 
 /** 工作台。 */
 export function DashboardPage() {
+  const { summary } = useDashboard();
+
+  // HTTP 模式：统计口径在服务端，整页照服务端的数据呈现。
+  if (summary) return <RemoteDashboard summary={summary} />;
+
+  return <LocalDashboard />;
+}
+
+/** HTTP 模式的工作台。 */
+function RemoteDashboard({ summary }: { summary: DashboardSummary }) {
+  const navigate = useNavigate();
+  const studentId = useStudentStore((state) => state.studentId);
+  const user = useAuth((state) => state.user);
+
+  const now = new Date();
+  const greeting = greetingFor(now.getHours());
+  const studentName = user?.name ?? studentId;
+
+  const trend = summary.scoreTrend.map((point) => ({
+    label: point.date.slice(5),
+    value: point.total > 0 ? Math.round((point.score / point.total) * 100) : 0,
+  }));
+
+  const distribution = [...summary.mistakeDistribution]
+    .sort((a, b) => b.count - a.count)
+    .map((entry) => ({
+      key: entry.tagName,
+      name: entry.tagName,
+      group: entry.group,
+      count: entry.count,
+      tone: "default" as const,
+    }));
+
+  return (
+    <>
+      <PageHead
+        title={`${greeting}，${studentName}`}
+        sub={`编号 ${studentId} · 今天 ${now.getFullYear()} 年 ${now.getMonth() + 1} 月 ${now.getDate()} 日 ${weekdayOf(now)}`}
+        actions={
+          <>
+            <Button onClick={() => navigate("/exams")}>
+              <Icon name="clipboard" />
+              考试安排
+            </Button>
+            <Button variant="primary" onClick={() => navigate("/practice")}>
+              <Icon name="book" />
+              去练习
+            </Button>
+          </>
+        }
+      />
+
+      <div className="stat-row">
+        <Stat label="待完成练习" value={summary.pendingPractices} unit="项" hint="还没做过的练习" />
+        <Stat
+          label="进行中考试"
+          value={summary.ongoingExams}
+          unit="场"
+          hint={summary.ongoingExam?.name ?? "暂无安排"}
+        />
+        <Stat
+          label="学期平均分"
+          value={
+            summary.termAverageScore === null
+              ? "—"
+              : formatScore(Math.round(summary.termAverageScore))
+          }
+          unit="分"
+          hint="按百分制折算"
+        />
+        <Stat
+          label="待订正错题"
+          value={summary.pendingMistakes}
+          unit="题"
+          hint={`来自 ${distribution.length} 个知识点`}
+        />
+      </div>
+
+      <div className="split" style={{ marginTop: "var(--sp-5)" }}>
+        <div className="stack">
+          {summary.ongoingExam ? (
+            <Card title="进行中的考试" actions={<Badge tone="warn">考试进行中</Badge>}>
+              <div className="row">
+                <div className="list-main">
+                  <div className="list-title">{summary.ongoingExam.name}</div>
+                  <div className="list-sub">
+                    开放时间 {summary.ongoingExam.openAt} — {summary.ongoingExam.closeAt}
+                  </div>
+                </div>
+                <div className="spacer" />
+                <Button
+                  variant="primary"
+                  onClick={() => navigate(`/exams/${summary.ongoingExam!.examSessionId}`)}
+                >
+                  {summary.ongoingExam.started ? "继续考试" : "进入考试"}
+                </Button>
+              </div>
+              {summary.ongoingExam.note ? (
+                <div style={{ marginTop: "var(--sp-4)" }}>
+                  <Callout title="考试须知" icon={<Icon name="info" />}>
+                    {summary.ongoingExam.note}
+                  </Callout>
+                </div>
+              ) : null}
+            </Card>
+          ) : null}
+
+          <Card
+            title="推荐练习"
+            actions={
+              <Button size="sm" onClick={() => navigate("/practice")}>
+                全部练习
+              </Button>
+            }
+          >
+            {summary.recommendedPractices.length === 0 ? (
+              <Empty title="暂无练习" body="内容管理员上架练习后会显示在这里。" />
+            ) : (
+              summary.recommendedPractices.slice(0, 4).map((practice) => (
+                <div className="list-row" key={practice.id}>
+                  <div className="list-main">
+                    <div className="list-title">{practice.title}</div>
+                    {practice.tagNames.length > 0 ? (
+                      <div className="list-sub">{practice.tagNames.join(" · ")}</div>
+                    ) : null}
+                  </div>
+                  <div className="spacer" />
+                  <Button size="sm" onClick={() => navigate(`/practice/${practice.id}`)}>
+                    开始练习
+                  </Button>
+                </div>
+              ))
+            )}
+          </Card>
+
+          <Card
+            title="最近成绩"
+            actions={
+              <Button size="sm" onClick={() => navigate("/reports")}>
+                全部报告
+              </Button>
+            }
+          >
+            {summary.recentResults.length === 0 ? (
+              <Empty
+                title="暂无成绩记录"
+                body="完成一次练习或考试后，这里会显示成绩变化曲线。"
+              />
+            ) : (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th scope="col">项目</th>
+                      <th scope="col">日期</th>
+                      <th className="right" scope="col">得分</th>
+                      <th scope="col">状态</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summary.recentResults.slice(0, 5).map((record) => (
+                      <tr key={`${record.kind}-${record.attemptId}`}>
+                        <td>
+                          <div className="strong">{record.name}</div>
+                        </td>
+                        <td className="text-3 text-sm">{record.date}</td>
+                        <td className="num">
+                          {record.score} / {record.total}
+                        </td>
+                        <td>
+                          <Badge tone={record.status === "published" ? "ok" : "warn"}>
+                            {record.status === "published" ? "已完成" : "待阅"}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </div>
+
+        <div className="stack">
+          <Card
+            title="成绩趋势"
+            actions={<span className="text-sm text-3">最近 {trend.length} 次</span>}
+          >
+            {trend.length === 0 ? (
+              <Empty title="暂无成绩记录" body="完成一次练习或考试后，这里会显示成绩变化曲线。" />
+            ) : (
+              <LineChart data={trend} title="趋势图" />
+            )}
+          </Card>
+
+          <Card
+            title="错题分布"
+            actions={
+              <Button size="sm" onClick={() => navigate("/mistakes")}>
+                去订正
+              </Button>
+            }
+          >
+            {distribution.length === 0 ? (
+              <Empty title="错题本是空的" body="做错的题目会自动收录到这里，方便反复订正。" />
+            ) : (
+              distribution.map((entry) => (
+                <div className="bar-row" key={entry.key}>
+                  <span className="od-truncate">
+                    {entry.name}
+                    <span className="text-3 text-xs"> · {entry.group}</span>
+                  </span>
+                  <span className="bar-track">
+                    <span
+                      className="bar-fill"
+                      style={{
+                        width: `${Math.round(
+                          (entry.count / Math.max(1, distribution[0]!.count)) * 100,
+                        )}%`,
+                      }}
+                    />
+                  </span>
+                  <span className="right num text-sm">{entry.count} 题</span>
+                </div>
+              ))
+            )}
+          </Card>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** mock 模式的工作台：本地内容仓库 + 本地统计。 */
+function LocalDashboard() {
   const navigate = useNavigate();
   const studentId = useStudentStore((state) => state.studentId);
   const students = useCatalog((state) => state.students);

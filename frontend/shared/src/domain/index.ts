@@ -5,6 +5,18 @@
 /* 内容域：题目 / 题库 / 试卷 / 练习 / 标签 / 学生等（design 03 §3–§4）。 */
 export * from "./types";
 
+/* 学习域：错题本与学生工作台（design 03 §6）。 */
+export {
+  type DashboardSummary,
+  type MistakeDistribution,
+  type MistakeEntry,
+  type OngoingExam,
+  type RecentResult,
+  type RecommendedPractice,
+  type RedoMistake,
+  type ScoreTrendPoint,
+} from "./learning";
+
 /* 作答域：答案载荷、作答批次、切屏事件（design 03 §5.3–§5.7）。 */
 export {
   isFocusLoss,

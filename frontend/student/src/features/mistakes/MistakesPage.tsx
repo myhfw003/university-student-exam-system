@@ -7,15 +7,14 @@
 import { useNavigate } from "react-router-dom";
 import { Button, Empty, PageHead } from "@exam/shared";
 import { TYPE_LABEL } from "@exam/shared/engine/paper";
-import { useCatalog } from "@exam/shared/mock/catalog";
-import { useStudentMistakes } from "@/features/shared/studentData";
 import { TagChips } from "@/features/shared/TagChips";
+import { useMistakeList, useRedoMistake } from "./useMistakeList";
 
 /** 错题本。 */
 export function MistakesPage() {
   const navigate = useNavigate();
-  const mistakes = useStudentMistakes();
-  const questions = useCatalog((state) => state.questions);
+  const { rows: mistakes } = useMistakeList();
+  const redo = useRedoMistake();
 
   return (
     <>
@@ -37,38 +36,31 @@ export function MistakesPage() {
               }
             />
           ) : (
-            mistakes.map((mistake) => {
-              const question = questions.find((q) => q.id === mistake.qid);
-              if (!question) return null;
-              return (
-                <div
-                  className="list-row"
-                  key={`${mistake.qid}-${mistake.studentId}`}
-                  style={{ gridTemplateColumns: "minmax(0,1fr) 96px 120px 96px" }}
-                >
-                  <div className="list-main">
-                    <div className="list-title">{question.stem}</div>
-                    <div className="list-sub">
-                      {TYPE_LABEL[question.type] ?? question.type}
-                    </div>
-                    <div className="row-tight">
-                      <TagChips tags={question.tags} />
-                    </div>
-                    <div className="list-sub">错因：{mistake.reason}</div>
+            mistakes.map((mistake) => (
+              <div
+                className="list-row"
+                key={mistake.questionId}
+                style={{ gridTemplateColumns: "minmax(0,1fr) 96px 120px 96px" }}
+              >
+                <div className="list-main">
+                  <div className="list-title">{mistake.stem}</div>
+                  <div className="list-sub">
+                    {TYPE_LABEL[mistake.type] ?? mistake.typeLabel}
                   </div>
-                  <div className="text-sm text-3">错 {mistake.wrongCount} 次</div>
-                  <div className="text-sm text-3">{mistake.lastWrongAt}</div>
-                  <div className="right">
-                    <Button
-                      size="sm"
-                      onClick={() => navigate(`/practice/single-${question.id}`)}
-                    >
-                      重做
-                    </Button>
+                  <div className="row-tight">
+                    <TagChips tags={mistake.tags} />
                   </div>
+                  <div className="list-sub">错因：{mistake.reason}</div>
                 </div>
-              );
-            })
+                <div className="text-sm text-3">错 {mistake.wrongCount} 次</div>
+                <div className="text-sm text-3">{mistake.lastWrongAt}</div>
+                <div className="right">
+                  <Button size="sm" onClick={() => redo(mistake.questionId)}>
+                    重做
+                  </Button>
+                </div>
+              </div>
+            ))
           )}
         </div>
       </section>
