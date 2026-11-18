@@ -201,3 +201,45 @@ HTTP 模式只显示作答原文；这属于接口能力缺口，不是前端映
 
 **要注意的**：错题回流是**异步**的——交卷后错题本可能要过一拍才有这一条
 （`ScoreFinalized` 事件走 outbox，由 worker 落本）。前端读错题本是一次性拉取，不做轮询。
+
+### T-P10-05 管理端场次（已完成）
+
+**前端接线**
+
+- `shared/src/domain/admin.ts`：管理域类型（场次摘要 / 规则 / 详情 / 名单 / 成绩 /
+  负责人 / 组织标签 / 用户摘要）。
+- `shared/src/api/adminApi.ts`：`GET /tags`（取 organization 维度）、`GET /users`。
+- `shared/src/api/examSessionApi.ts` 管理端段：场次 CRUD、发布 / 关闭 / 取消、名单、
+  成绩、负责人。
+- `admin/src/features/sessions/useAdminSessions.ts`：列表与详情的统一数据通路
+  （mock 与 HTTP 各一份，策略口径互转）。
+- `admin/src/features/sessions/ExamSessionListPage.tsx` 与 `ExamSessionDetailPage.tsx`：
+  改为消费上述通路。
+
+**三处口径差异由数据通路吸收**（页面不需要知道）
+
+1. mock 的名单按班级 ID 展开；真实后端是**组织维度标签**（院系 → 专业 → 班级）
+   在发布时物化成的考生列表。
+2. mock 的「推进状态」这一步后端没有——后端是「发布即进行中」，再由关闭 / 取消收尾。
+3. mock 叫 `AntiCheatPolicy`，后端叫 `rules`，字段一一对应，转换只在数据通路里做。
+
+**实测结论（真实后端）**
+
+| 环节 | 结果 |
+|---|---|
+| 建场次 | 返回 `{session, rules, note, participantTagIds, participantUserIds}`；`variantRule` 传 `null` 时沿用来源试卷的卷型（传空串会被判非法值） |
+| 列表 | `GET /exam-sessions?status=&keyword=` 按服务端过滤；摘要含 `statusLabel`、`participantModeLabel`、`variantRuleLabel` |
+| 详情 | 与建场次同构；`rules` 与前端防作弊策略一一对应 |
+| 改策略 | `PUT /exam-sessions/{id}` 只对未发布的场次生效；改完后后端存的就是同一套 `rules` |
+| 发布 | 状态 `scheduled → in_progress`，名单在此刻物化 |
+| 名单 | `GET /participants` 返回逐人状态（`invited` / 待入场）、已用次数 |
+| 成绩 | `GET /grades` 返回逐人成绩（客观分、总分、待阅卷标记、交卷时间） |
+| 关闭 | `POST /close` → `closed` |
+
+**要注意的**
+
+- 允许重考是**来源试卷**的属性，不是场次的：HTTP 模式下新建场次不再有「允许重考」勾选。
+- 列表接口不返回名单人数，所以列表页「名单」列显示的是**名单纳入方式**——
+  逐场次去数会把请求数乘上场次数。
+- 「按组织标签」目前还没有标签可选：组织维度标签要等名单导入
+  （`POST /users/import`，属 T-P10-06）之后才会存在。
