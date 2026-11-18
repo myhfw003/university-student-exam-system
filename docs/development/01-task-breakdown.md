@@ -1269,7 +1269,7 @@ P0 基础设施
 | 任务 | 状态 | 说明 |
 |---|---|---|
 | T-P10-01 学生端考试作答（S1+S2） | ✅ 完成 | 后端卷面补 `steps`/`tagIds`/`difficultyTagId`、作答摘要补 `examSessionId`；前端 `attemptApi` 适配层、作答页接后端、上行键换算 |
-| T-P10-02 学生端成绩报告（S3+S4） | ⬜ 未开始 | 报告页与成绩列表改读 `/attempts/{id}/report` 与 `/my/results` |
+| T-P10-02 学生端成绩报告（S3+S4） | ✅ 完成 | 报告页与成绩列表改读 `/attempts/{id}/report` 与 `/my/results`；成绩条目补场次 ID 与开放单 ID |
 | T-P10-03 学生端练习（S5） | ⬜ 未开始 | `POST /attempts`（practiceAssignmentId）+ `/attempts/{id}/feedback` |
 | T-P10-04 学生端错题本与工作台（S6+S7） | ⬜ 未开始 | `/mistakes`、`/dashboard/summary` |
 | T-P10-05 管理端场次（A1+A2+A3） | ⬜ 未开始 | 场次 CRUD、名单、负责人 |
@@ -1282,6 +1282,29 @@ P0 基础设施
 - **依赖**：P9 全部完成。
 - **产出**：作答页在 HTTP 模式下走真实后端：卷面来自服务端快照置换、截止时间以服务端为准、答案上行前把显示字母换算成原题键、焦点事件与心跳上报、交卷走服务端。
 - **验收**：小梅花卷整卷判分正确（显示字母换算到位）；学生端看不到正确答案与解析；刷新后从服务端恢复答案。
+
+### T-P10-02 学生端成绩报告
+
+- **依赖**：T-P10-01。
+- **产出**：成绩报告页与成绩列表在 HTTP 模式下读真实后端。
+- **验收**：场次关闭后报告公布正确答案与解析；答案未到公布时机时前端不显示正确答案。
+
+**T-P10-02 交付说明**
+
+- **后端契约补了两处**：`MyResultDto` 补 `ExamSessionId` 与 `PracticeAssignmentId`——
+  成绩条目要能对应回「考试安排」里的某一场与「练习」里的某一条，否则列表点不进去。
+- **前端新增**：`shared/src/api/reportApi.ts`（`/my/results` 与 `/attempts/{id}/report` 的映射）、
+  `shared/src/engine/report.ts` 的 `gradedPaperFromReport`（服务端成绩 → 逐题判分明细）、
+  `student/src/features/reports/useExamReport.ts` 与 `useReportList.ts`（两个页面的数据通路）。
+- **前端不重算**：成绩是服务端判的，前端只做映射。正确答案受**答案公布策略**约束——
+  场次没关闭时接口一律不给正确答案与解析，前端显示「未公布」，不自己补。
+- **选择键口径照旧**：报告里的正确答案与考生作答都是**原题键**，
+  前端用考生卷面的换算表（`fromOriginal`）还原成显示字母。
+- **实测结论**（真实后端）：场次进行中 `answersRevealed=false`、`correctKeys=[]`、`analysis=null`；
+  关闭场次后 `answersRevealed=true`、`correctKeys=["C"]`（原题键），
+  成绩条目带 `examSessionId` 与 `practiceAssignmentId`。
+- **还差的**：综合题逐步得分与简答题要点命中——接口没给学生端，
+  HTTP 模式下只显示作答原文，不显示逐要点得分（mock 模式不受影响）。
 
 **T-P10-01 交付说明**
 

@@ -136,3 +136,28 @@
 现在落盘只写盘不清条目，成批与上行交给 `flush`；单批按服务端上限 50 条拆批。
 
 **仍未接后端**：成绩报告页与成绩列表（T-P10-02）。交卷后跳转到报告页会看到「成绩报告尚未接入」的空状态。
+
+### T-P10-02 学生端成绩报告（已完成）
+
+**后端契约补齐**：`MyResultDto` 补 `ExamSessionId` 与 `PracticeAssignmentId`——
+成绩条目要能对应回「考试安排」里的某一场与「练习」里的某一条，否则列表点不进去。
+
+**前端接线**
+
+- `shared/src/api/reportApi.ts`：`/my/results` 与 `/attempts/{id}/report` 的 DTO 映射。
+- `shared/src/engine/report.ts` 的 `gradedPaperFromReport`：服务端成绩 → 逐题判分明细（复用引擎的 `GradedDetail`，页面渲染不动）。
+- `student/src/features/reports/useExamReport.ts`：报告页的数据通路（场次 + 成绩条目 + 卷面 + 报告）。
+- `student/src/features/reports/useReportList.ts`：成绩列表的数据通路。
+
+**实测结论（真实后端）**
+
+| 时点 | 接口表现 |
+|---|---|
+| 场次进行中 | `answersRevealed=false`、`correctKeys=[]`、`analysis=null` |
+| 场次关闭后 | `answersRevealed=true`、`correctKeys=["C"]`（**原题键**）、`analysis` 给出 |
+
+两条口径因此定死：**成绩由服务端判，前端不重算**；**正确答案与作答都是原题键**，
+前端用考生卷面的换算表还原成显示字母。未到公布时机时前端显示「未公布」，不自己补答案。
+
+**还差的**：综合题逐步得分与简答题要点命中——接口没有给学生端，
+HTTP 模式只显示作答原文；这属于接口能力缺口，不是前端映射问题。
