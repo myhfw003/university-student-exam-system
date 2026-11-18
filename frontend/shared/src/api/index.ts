@@ -78,6 +78,15 @@ export {
   type ExamSessionSummary,
 } from "./examSessionApi";
 export {
+  createAdminTag,
+  deleteAdminTag,
+  loadAdminTags,
+  toAdminTag,
+  updateAdminTag,
+  type AdminTag,
+  type TagClient,
+} from "./tagApi";
+export {
   assignUserRoles,
   assignUserTags,
   countUsers,
