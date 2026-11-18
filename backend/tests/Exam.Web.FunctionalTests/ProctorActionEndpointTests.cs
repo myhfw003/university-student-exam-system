@@ -115,6 +115,26 @@ public sealed class ProctorActionEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task 已经交卷的作答再强制交卷会被拒绝()
+    {
+        var attemptId = await StartAttemptAsync();
+
+        // 考生先自己交卷。
+        await LoginAsync(StudentUsername, StudentPassword);
+        var submit = await _client.PostAsJsonAsync($"/api/v1/attempts/{attemptId}/submit", new { });
+        submit.StatusCode.ShouldBe(HttpStatusCode.OK, await submit.Content.ReadAsStringAsync());
+
+        // 监考再点强制交卷：不能再判一次分（会撞「一次作答一题一条成绩」的唯一约束），
+        // 也不能 500，要给明确的业务错误。
+        await LoginAsync(ProctorUsername, ProctorPassword);
+        var action = await _client.PostAsJsonAsync(
+            $"/api/v1/attempts/{attemptId}/proctor-actions",
+            new { actionType = "force_submit", message = "强制交卷", reason = "切屏超限" });
+
+        action.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+    }
+
+    [Fact]
     public async Task 强制交卷后会话被交掉且拒绝保存()
     {
         var attemptId = await StartAttemptAsync();

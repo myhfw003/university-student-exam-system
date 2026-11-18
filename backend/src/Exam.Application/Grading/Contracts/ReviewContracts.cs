@@ -21,7 +21,11 @@ public sealed record ReviewTaskDto(
     decimal? FinalScore,
     string? Comment,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? ReviewedAt);
+    DateTimeOffset? ReviewedAt,
+    /// <summary>答题者账号。队列要显示「谁交的卷」，不能只显示题号。</summary>
+    string? StudentUsername,
+    /// <summary>答题者姓名。</summary>
+    string? StudentDisplayName);
 
 /// <summary>阅卷任务列表。</summary>
 public sealed record ReviewTaskListResponse(

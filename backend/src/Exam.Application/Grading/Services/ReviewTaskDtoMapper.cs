@@ -2,6 +2,7 @@ using Exam.Application.Common.Interfaces;
 using Exam.Application.Grading.Contracts;
 using Exam.Domain.Catalog;
 using Exam.Domain.Grading;
+using Exam.Domain.Identity;
 
 namespace Exam.Application.Grading.Services;
 
@@ -18,6 +19,7 @@ public static class ReviewTaskDtoMapper
         IAttemptRepository attempts,
         IExamSessionRepository sessions,
         IQuestionRepository questions,
+        IUserRepository users,
         CancellationToken cancellationToken = default)
     {
         if (tasks.Count == 0)
@@ -46,6 +48,14 @@ public static class ReviewTaskDtoMapper
             cancellationToken);
         var questionById = loadedQuestions.ToDictionary(q => q.Id);
 
+        // 队列要显示「谁交的卷」：按作答的用户批量取一次姓名与账号。
+        var loadedUsers = loadedAttempts.Count == 0
+            ? []
+            : await users.GetByIdsAsync(
+                loadedAttempts.Select(a => a.UserId).Distinct().ToList(),
+                cancellationToken);
+        var userById = loadedUsers.ToDictionary(u => u.Id);
+
         return tasks.Select(task =>
         {
             var attempt = attemptById.GetValueOrDefault(task.AttemptId);
@@ -73,7 +83,9 @@ public static class ReviewTaskDtoMapper
                 task.FinalScore?.Value,
                 task.Comment,
                 task.CreatedAt,
-                task.ReviewedAt);
+                task.ReviewedAt,
+                attempt is null ? null : userById.GetValueOrDefault(attempt.UserId)?.Username,
+                attempt is null ? null : userById.GetValueOrDefault(attempt.UserId)?.DisplayName);
         }).ToList();
     }
 }

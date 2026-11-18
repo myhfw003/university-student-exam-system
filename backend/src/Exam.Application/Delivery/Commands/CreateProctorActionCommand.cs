@@ -93,7 +93,14 @@ public sealed class CreateProctorActionHandler : IRequestHandler<CreateProctorAc
         if (actionType == ProctorActionType.ForceSubmit)
         {
             var fromStatus = attempt.Status.ToStorage();
-            attempt.Submit(SubmitReason.ProctorForce, now);
+
+            // 已经交卷的作答不再重复判分：再落一条成绩会撞「一次作答一题一条成绩」
+            // 的唯一约束，监考点一下强制交卷就会变成 500。
+            if (!attempt.Submit(SubmitReason.ProctorForce, now))
+            {
+                throw new BusinessRuleException("该次作答已经交卷，无需再强制交卷。");
+            }
+
             _attempts.Update(attempt);
 
             // 监考强制交卷同样要判分：考生的答卷不能因为是被强制结束的就没有成绩。

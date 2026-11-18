@@ -35,6 +35,7 @@ public sealed class ClaimReviewTaskHandler : IRequestHandler<ClaimReviewTaskComm
     private readonly IAttemptRepository _attempts;
     private readonly IExamSessionRepository _sessions;
     private readonly IQuestionRepository _questions;
+    private readonly IUserRepository _users;
     private readonly IAuditRecorder _audit;
     private readonly IClock _clock;
     private readonly ICurrentUser _currentUser;
@@ -44,6 +45,7 @@ public sealed class ClaimReviewTaskHandler : IRequestHandler<ClaimReviewTaskComm
         IAttemptRepository attempts,
         IExamSessionRepository sessions,
         IQuestionRepository questions,
+        IUserRepository users,
         IAuditRecorder audit,
         IClock clock,
         ICurrentUser currentUser)
@@ -52,6 +54,7 @@ public sealed class ClaimReviewTaskHandler : IRequestHandler<ClaimReviewTaskComm
         _attempts = attempts;
         _sessions = sessions;
         _questions = questions;
+        _users = users;
         _audit = audit;
         _clock = clock;
         _currentUser = currentUser;
@@ -89,6 +92,7 @@ public sealed class ClaimReviewTaskHandler : IRequestHandler<ClaimReviewTaskComm
             _attempts,
             _sessions,
             _questions,
+            _users,
             cancellationToken);
 
         return dtos[0];
@@ -194,6 +198,7 @@ public sealed class AssignReviewTaskHandler : IRequestHandler<AssignReviewTaskCo
             _attempts,
             _sessions,
             _questions,
+            _users,
             cancellationToken);
 
         return dtos[0];

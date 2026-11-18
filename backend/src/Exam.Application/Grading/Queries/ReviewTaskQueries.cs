@@ -32,6 +32,7 @@ public sealed class ListReviewTasksHandler : IRequestHandler<ListReviewTasksQuer
     private readonly IAttemptRepository _attempts;
     private readonly IExamSessionRepository _sessions;
     private readonly IQuestionRepository _questions;
+    private readonly IUserRepository _users;
     private readonly ICurrentUser _currentUser;
 
     public ListReviewTasksHandler(
@@ -39,12 +40,14 @@ public sealed class ListReviewTasksHandler : IRequestHandler<ListReviewTasksQuer
         IAttemptRepository attempts,
         IExamSessionRepository sessions,
         IQuestionRepository questions,
+        IUserRepository users,
         ICurrentUser currentUser)
     {
         _tasks = tasks;
         _attempts = attempts;
         _sessions = sessions;
         _questions = questions;
+        _users = users;
         _currentUser = currentUser;
     }
 
@@ -85,6 +88,7 @@ public sealed class ListReviewTasksHandler : IRequestHandler<ListReviewTasksQuer
             _attempts,
             _sessions,
             _questions,
+            _users,
             cancellationToken);
 
         return new ReviewTaskListResponse(items, total, page, size);
@@ -215,6 +219,7 @@ public sealed class GetReviewTaskDetailHandler : IRequestHandler<GetReviewTaskDe
             _attempts,
             _sessions,
             _questions,
+            _users,
             cancellationToken);
 
         var question = item is null

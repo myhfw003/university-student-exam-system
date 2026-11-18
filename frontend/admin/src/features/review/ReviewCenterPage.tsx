@@ -3,9 +3,12 @@
    --------------------------------------------------------------------------
    对应原型 admin.review。主观题由系统按关键词给出初判建议，管理端复核后给出
    最终分数与评语。
+
+   数据通路见 `useReviewTasks.ts`：真实后端模式下，初判建议、要点命中与
+   步骤命中都由服务端给，前端不重算。
    ========================================================================== */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Badge,
   Button,
@@ -19,38 +22,26 @@ import {
   toast,
 } from "@exam/shared";
 import { formatScore } from "@exam/shared";
-import {
-  className as classNameOf,
-  getExam,
-  getQuestion,
-  getTag,
-  updateReview,
-  useCatalog,
-} from "@exam/shared/mock/catalog";
-import {
-  gradeShort,
-  gradeStep,
-  stepScores,
-  type KeypointGrade,
-} from "@exam/shared/engine/scoring";
-import { TYPE_LABEL, itemScoreOf } from "@exam/shared/engine/paper";
-import type { QuestionStep, ReviewItem } from "@exam/shared/domain/types";
+import { isBackendEnabled } from "@exam/shared/api";
+import { getTag } from "@exam/shared/mock/catalog";
+import { TYPE_LABEL } from "@exam/shared/engine/paper";
+import type { QuestionType } from "@exam/shared/domain/types";
 import { DifficultyChip, TagChips, TypeBadge } from "../shared/bits";
+import { useReviewQueue, type ReviewDetailView } from "./useReviewTasks";
 
 /** 阅卷筛选。 */
-type ReviewFilter = "pending" | "reviewed" | "all";
+type ReviewFilter = "pending" | "in_review" | "reviewed" | "all";
 
 /**
  * 实体在「知识点」分组中的标签；无知识点时回退到「领域」。
  * 对应原型 admin.js:97-108 knowledgeTag。
  */
 function knowledgeTagOf(entity: { tags: readonly string[] }): { name: string } | null {
-  const tags = entity.tags;
-  for (const id of tags) {
+  for (const id of entity.tags) {
     const tag = getTag(id);
     if (tag && tag.group === "knowledge_point") return tag;
   }
-  for (const id of tags) {
+  for (const id of entity.tags) {
     const tag = getTag(id);
     if (tag && tag.group === "domain") return tag;
   }
@@ -59,133 +50,105 @@ function knowledgeTagOf(entity: { tags: readonly string[] }): { name: string } |
 
 /** 阅卷中心。 */
 export function ReviewCenterPage() {
-  const reviews = useCatalog((state) => state.reviews);
-  const students = useCatalog((state) => state.students);
-  const exams = useCatalog((state) => state.exams);
+  const remote = isBackendEnabled();
 
   const [filter, setFilter] = useState<ReviewFilter>("pending");
   const [currentId, setCurrentId] = useState("");
+  const [detail, setDetail] = useState<ReviewDetailView | null>(null);
   const [score, setScore] = useState(0);
   const [comment, setComment] = useState("");
-  const [hydratedFor, setHydratedFor] = useState("");
   /** 批量采纳初判建议的二次确认。 */
   const [batchAdoptOpen, setBatchAdoptOpen] = useState(false);
 
-  const pendingCount = reviews.filter((r) => r.status === "pending").length;
-  const reviewedCount = reviews.filter((r) => r.status === "reviewed").length;
+  const queue = useReviewQueue({ status: filter });
+  const { items, counts, loadDetail, saveGrade, batchAdopt, refresh } = queue;
 
-  const list = useMemo(() => {
-    if (filter === "pending") return reviews.filter((r) => r.status === "pending");
-    if (filter === "reviewed") return reviews.filter((r) => r.status === "reviewed");
-    return reviews;
-  }, [reviews, filter]);
-
-  const current = useMemo(() => {
-    const found = list.find((r) => r.id === currentId);
-    return found ?? list[0] ?? null;
-  }, [list, currentId]);
-
-  // 切换卷宗时载入教师评分与评语。
-  useMemo(() => {
-    if (!current || hydratedFor === current.id) return;
-    const auto = autoScoreOf(current);
-    setScore(auto?.score ?? 0);
-    setComment(current.comment ?? "");
-    setHydratedFor(current.id);
-  }, [current, hydratedFor]);
-
-  /** 系统初判：按题型走判分引擎，与答题端口径一致。 */
-  function autoScoreOf(review: ReviewItem): {
-    score: number;
-    max: number;
-    /** 简答题：各评分要点的命中情况。 */
-    points?: KeypointGrade[];
-    /** 综合操作题：是否命中该步骤（原型 admin.js:483 的 hit）。 */
-    hit?: boolean;
-    /** 综合操作题：命中的步骤本体（原型 admin.js:483 的 step，含 prompt）。 */
-    step?: QuestionStep;
-  } | null {
-    const question = getQuestion(review.qid);
-    if (!question) return null;
-    const exam = getExam(review.examId);
-    const paperMax = exam ? itemScoreOf(exam.items, review.qid, question) : question.score;
-
-    if (review.stepId) {
-      const step = (question.steps ?? []).find((s) => s.id === review.stepId);
-      if (!step) return null;
-      const scales = stepScores(question, paperMax);
-      const index = (question.steps ?? []).indexOf(step);
-      const stepMax = scales[index] ?? step.score;
-      const result = gradeStep(step, review.answerText, stepMax);
-      return { score: result.score, max: result.max, hit: result.hit, step };
-    }
-
-    if (question.type === "short") {
-      const result = gradeShort(question, review.answerText, paperMax);
-      return { score: result.score, max: result.max, points: result.points };
-    }
-
-    return null;
-  }
-
-  const auto = current ? autoScoreOf(current) : null;
-  const maxScore = auto?.max ?? (current ? getQuestion(current.qid)?.score ?? 0 : 0);
-  const question = current ? getQuestion(current.qid) : undefined;
-  const exam = current ? getExam(current.examId) : undefined;
-  const student = current ? students.find((s) => s.id === current.studentId) : undefined;
-
-  const handleSave = () => {
-    if (!current) return;
-    const result = updateReview(current.id, {
-      teacherScore: score,
-      comment,
-      status: "reviewed",
-    });
-    if (!result.ok) {
-      toast.error(result.message ?? "保存失败");
+  // 队列变化或换卷宗时同步当前卷宗。
+  useEffect(() => {
+    if (items.length === 0) {
+      setDetail(null);
       return;
     }
-    toast.ok(`已保存评分：${formatScore(score)} / ${formatScore(maxScore)} 分`);
+    const target = items.find((item) => item.id === currentId) ?? items[0];
+    if (!target) return;
+    if (target.id !== currentId) setCurrentId(target.id);
+    if (remote) {
+      // HTTP 模式：列表只给摘要，卷宗细节（题干、参考答案、命中）另取。
+      void loadDetail(target.id).then((loaded) => {
+        if (loaded) setDetail(loaded);
+      });
+    } else {
+      setDetail(target);
+    }
+  }, [items, currentId, remote, loadDetail]);
+
+  // 载入教师评分与评语：换卷宗时按服务端给的分数与评语重置。
+  useEffect(() => {
+    if (!detail) return;
+    setScore(detail.finalScore ?? detail.suggestedScore ?? 0);
+    setComment(detail.comment);
+  }, [detail]);
+
+  const maxScore = detail?.maxScore ?? 0;
+
+  const handleSave = async () => {
+    if (!detail) return;
+    try {
+      await saveGrade(detail.id, score, comment);
+      toast.ok(`已保存评分：${formatScore(score)} / ${formatScore(maxScore)} 分`);
+      refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败");
+    }
   };
 
   /** 批量采纳：空队列直接提示，否则走二次确认。 */
   const handleBatchAdopt = () => {
-    if (reviews.filter((r) => r.status === "pending").length === 0) {
+    if (counts.pending === 0 && items.filter((i) => i.status === "pending").length === 0) {
       toast.ok("没有待阅卷的作答");
       return;
     }
     setBatchAdoptOpen(true);
   };
 
-  const confirmBatchAdopt = () => {
+  const confirmBatchAdopt = async () => {
     setBatchAdoptOpen(false);
-    const targets = reviews.filter((r) => r.status === "pending");
-    let count = 0;
-    for (const target of targets) {
-      const suggestion = autoScoreOf(target);
-      if (!suggestion) continue;
-      updateReview(target.id, {
-        teacherScore: suggestion.score,
-        comment: "系统初判，已批量采纳",
-        status: "reviewed",
-      });
-      count += 1;
+    const pendingIds = items.filter((i) => i.status === "pending").map((i) => i.id);
+    try {
+      const result = await batchAdopt(pendingIds);
+      if (result.skipped > 0) {
+        toast.error(`已批量采纳 ${result.adopted} 份，跳过 ${result.skipped} 份`);
+      } else {
+        toast.ok(`已批量采纳 ${result.adopted} 份卷宗的初判建议`);
+      }
+      refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "批量采纳失败");
     }
-    toast.ok(`已批量采纳 ${count} 份卷宗的初判建议`);
   };
 
+  /** 上一份 / 下一份。 */
   const step = (delta: number) => {
-    if (!current || list.length === 0) return;
-    const index = list.findIndex((r) => r.id === current.id);
-    const next = list[(index + delta + list.length) % list.length];
+    if (items.length === 0) return;
+    const index = items.findIndex((item) => item.id === currentId);
+    const next = items[(index + delta + items.length) % items.length];
     if (next) setCurrentId(next.id);
   };
+
+  const statusBadge = useMemo(() => {
+    if (!detail) return null;
+    return (
+      <Badge tone={detail.status === "reviewed" ? "ok" : "warn"}>
+        {detail.status === "reviewed" ? "已阅卷" : detail.status === "in_review" ? "阅卷中" : "待阅卷"}
+      </Badge>
+    );
+  }, [detail]);
 
   return (
     <>
       <PageHead
         title="阅卷中心"
-        sub={`主观题由系统按关键词给出初判建议，管理端复核后给出最终分数与评语。当前待阅 ${pendingCount} 份，已阅 ${reviewedCount} 份。`}
+        sub={`主观题由系统按关键词给出初判建议，管理端复核后给出最终分数与评语。当前待阅 ${counts.pending} 份，已阅 ${counts.reviewed} 份。`}
         actions={
           <Button onClick={handleBatchAdopt}>批量采纳初判建议</Button>
         }
@@ -202,161 +165,180 @@ export function ReviewCenterPage() {
               value={filter}
               onChange={(next) => setFilter(next)}
               options={[
-                { value: "pending", label: `待阅卷 ${pendingCount}` },
-                { value: "reviewed", label: `已阅卷 ${reviewedCount}` },
-                { value: "all", label: `全部 ${reviews.length}` },
+                { value: "pending", label: `待阅卷 ${counts.pending}` },
+                { value: "reviewed", label: `已阅卷 ${counts.reviewed}` },
+                { value: "all", label: `全部 ${items.length}` },
               ]}
             />
           </div>
           <div className="card-body is-flush">
-            {list.length === 0 ? (
+            {items.length === 0 ? (
               <Empty title="队列为空" body="答题者在答题端交卷后，主观题作答会自动进入阅卷队列。" />
             ) : (
-              list.map((r) => {
-                const rStudent = students.find((s) => s.id === r.studentId);
-                const rQuestion = getQuestion(r.qid);
-                const rExam = exams.find((e) => e.id === r.examId);
-                return (
-                  <div
-                    className={`list-row${r.id === current?.id ? " is-active" : ""}`}
-                    key={r.id}
-                    data-enter
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setCurrentId(r.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        setCurrentId(r.id);
-                      }
-                    }}
-                  >
-                    <div className="list-main">
-                      <div className="list-title">
-                        {rStudent?.name ?? r.studentId}
-                        <Badge
-                          tone={r.status === "pending" ? "warn" : "ok"}
-                          className="badge"
-                        >
-                          {r.status === "pending" ? "待阅" : "已阅"}
-                        </Badge>
-                      </div>
-                      <div className="list-sub">
-                        {rExam?.name ?? r.examId} ·{" "}
-                        {rQuestion ? (
-                          <TypeBadge type={rQuestion.type} />
-                        ) : (
-                          ""
-                        )}
-                        {r.stepId ? ` · 步骤 ${r.stepId}` : ""}
-                        {Number(r.attempt) > 1 ? ` · 第 ${r.attempt} 次作答` : ""}
-                      </div>
+              items.map((item) => (
+                <div
+                  className={`list-row${item.id === currentId ? " is-active" : ""}`}
+                  key={item.id}
+                  data-enter
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setCurrentId(item.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setCurrentId(item.id);
+                    }
+                  }}
+                >
+                  <div className="list-main">
+                    <div className="list-title">
+                      {item.studentName || item.studentUsername}
+                      <Badge
+                        tone={item.status === "reviewed" ? "ok" : "warn"}
+                        className="badge"
+                      >
+                        {item.status === "reviewed" ? "已阅" : "待阅"}
+                      </Badge>
                     </div>
-                    <div className="spacer" />
-                    <div className="text-xs text-3 nowrap">{r.submittedAt}</div>
+                    <div className="list-sub">
+                      {item.examName} ·{" "}
+                      <TypeBadge type={item.questionType} />
+                      {item.stepCode ? ` · 步骤 ${item.stepCode}` : ""}
+                      {item.attemptNo > 1 ? ` · 第 ${item.attemptNo} 次作答` : ""}
+                    </div>
                   </div>
-                );
-              })
+                  <div className="spacer" />
+                  <div className="text-xs text-3 nowrap">{item.submittedAt}</div>
+                </div>
+              ))
             )}
           </div>
         </section>
 
         <div>
-          {!current ? (
+          {!detail ? (
             <section className="card">
               <Empty
                 title="没有需要阅卷的作答"
                 body="答题者在答题端交卷后，主观题作答会自动进入阅卷队列。"
               />
             </section>
-          ) : !question ? (
-            <section className="card">
-              <Empty title="题目已不存在" />
-            </section>
           ) : (
             <>
               <div className="card" style={{ marginBottom: "var(--sp-4)" }}>
                 <div className="card-head">
                   <h2 className="card-title">答题者作答</h2>
-                  <span className="text-sm text-3">{current.submittedAt}</span>
+                  <span className="text-sm text-3">{detail.submittedAt}</span>
                 </div>
                 <div className="card-body">
                   <div className="kv" style={{ marginBottom: "var(--sp-3)" }}>
                     <dt>答题者</dt>
                     <dd>
-                      {student
-                        ? `${student.name} · ${classNameOf(student.classId)} · ${student.id}`
-                        : current.studentId}
+                      {detail.studentName || detail.studentUsername || "—"}
+                      {detail.studentUsername ? ` · ${detail.studentUsername}` : ""}
                     </dd>
                     <dt>试卷</dt>
-                    <dd>{exam?.name ?? current.examId}</dd>
+                    <dd>{detail.examName}</dd>
                     <dt>题目</dt>
                     <dd>
-                      {question.id} · {TYPE_LABEL[question.type]} ·{" "}
+                      {detail.questionCode} ·{" "}
+                      {detail.questionTypeLabel ||
+                        TYPE_LABEL[detail.questionType as QuestionType] ||
+                        detail.questionType}{" "}
                       {maxScore} 分
-                      {current.stepId ? ` · 步骤 ${current.stepId}` : ""}
+                      {detail.stepCode ? ` · 步骤 ${detail.stepCode}` : ""}
                     </dd>
                     <dt>作答次序</dt>
-                    <dd>第 {Number(current.attempt) || 1} 次作答</dd>
-                    <dt>标签</dt>
-                    <dd>
-                      <div className="row-tight">
-                        <DifficultyChip tags={question.tags} />
-                        <TagChips tags={question.tags} limit={3} />
-                      </div>
-                    </dd>
+                    <dd>第 {detail.attemptNo} 次作答</dd>
+                    {detail.tags.length > 0 ? (
+                      <>
+                        <dt>标签</dt>
+                        <dd>
+                          <div className="row-tight">
+                            <DifficultyChip tags={detail.tags} />
+                            <TagChips tags={detail.tags} limit={3} />
+                          </div>
+                        </dd>
+                      </>
+                    ) : null}
                   </div>
                   <div className="q-stem" style={{ marginBottom: "var(--sp-3)" }}>
-                    {question.stem}
+                    {detail.stem}
                   </div>
-                  {knowledgeTagOf(question) ? (
+                  {knowledgeTagOf(detail) ? (
                     <div className="row-tight" style={{ marginBottom: "var(--sp-3)" }}>
                       <span className="text-sm text-3">知识点</span>
                       <TagChip group="knowledge_point" className="is-知识点" title="知识点">
-                        {knowledgeTagOf(question)?.name}
+                        {knowledgeTagOf(detail)?.name}
                       </TagChip>
                     </div>
                   ) : null}
                   <div className="analysis" style={{ whiteSpace: "pre-wrap" }}>
-                    {current.answerText || "（未作答）"}
+                    {detail.answerText || "（未作答）"}
                   </div>
                 </div>
               </div>
 
-              {question.reference ? (
+              {detail.reference ? (
                 <section className="card" style={{ marginBottom: "var(--sp-4)" }}>
                   <div className="card-head">
                     <h2 className="card-title">参考答案</h2>
                   </div>
                   <div className="card-body">
                     <div className="analysis" style={{ whiteSpace: "pre-wrap" }}>
-                      {question.reference}
+                      {detail.reference}
                     </div>
-                    {question.analysis ? (
+                    {detail.analysis ? (
                       <p className="section-note" style={{ marginTop: "var(--sp-3)" }}>
-                        {question.analysis}
+                        {detail.analysis}
                       </p>
                     ) : null}
                   </div>
                 </section>
               ) : null}
 
-              {auto?.points ? (
+              {detail.points.length > 0 ? (
                 <section className="card" style={{ marginBottom: "var(--sp-4)" }}>
                   <div className="card-head">
                     <h2 className="card-title">评分要点命中</h2>
                     <span className="text-sm text-3">
-                      系统初判 {formatScore(auto.score)} / {formatScore(auto.max)} 分
+                      系统初判 {formatScore(detail.suggestedScore ?? 0)} / {formatScore(maxScore)} 分
                     </span>
                   </div>
                   <div className="card-body">
                     <div className="kp-list">
-                      {auto.points.map((p) => (
-                        <div className={`kp${p.hit ? " is-hit" : ""}`} key={p.text}>
-                          <span className="kp-mark">{p.hit ? "✓" : "○"}</span>
-                          <span>{p.text}</span>
+                      {detail.points.map((point) => (
+                        <div className={`kp${point.hit ? " is-hit" : ""}`} key={point.text}>
+                          <span className="kp-mark">{point.hit ? "✓" : "○"}</span>
+                          <span>{point.text}</span>
+                          {point.score !== undefined && point.max !== undefined ? (
+                            <span className="text-xs text-3 num">
+                              {formatScore(point.score)} / {formatScore(point.max)}
+                            </span>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+              ) : null}
+
+              {detail.steps.length > 0 ? (
+                <section className="card" style={{ marginBottom: "var(--sp-4)" }}>
+                  <div className="card-head">
+                    <h2 className="card-title">步骤评分</h2>
+                    <span className="text-sm text-3">
+                      系统初判 {formatScore(detail.suggestedScore ?? 0)} / {formatScore(maxScore)} 分
+                    </span>
+                  </div>
+                  <div className="card-body">
+                    <div className="kp-list">
+                      {detail.steps.map((step) => (
+                        <div className={`kp${step.hit ? " is-hit" : ""}`} key={step.code}>
+                          <span className="kp-mark">{step.hit ? "✓" : "○"}</span>
+                          <span>{step.prompt}</span>
                           <span className="text-xs text-3 num">
-                            {formatScore(p.score)} / {formatScore(p.max)}
+                            {formatScore(step.score)} / {formatScore(maxScore)}
                           </span>
                         </div>
                       ))}
@@ -365,34 +347,10 @@ export function ReviewCenterPage() {
                 </section>
               ) : null}
 
-              {auto?.step ? (
-                <section className="card" style={{ marginBottom: "var(--sp-4)" }}>
-                  <div className="card-head">
-                    <h2 className="card-title">步骤评分</h2>
-                    <span className="text-sm text-3">
-                      系统初判 {formatScore(auto.score)} / {formatScore(auto.max)} 分
-                    </span>
-                  </div>
-                  <div className="card-body">
-                    <div className="kp-list">
-                      <div className={`kp${auto.hit ? " is-hit" : ""}`}>
-                        <span className="kp-mark">{auto.hit ? "✓" : "○"}</span>
-                        <span>{auto.step.prompt}</span>
-                        <span className="text-xs text-3 num">
-                          {formatScore(auto.score)} / {formatScore(auto.max)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-              ) : null}
-
               <section className="card">
                 <div className="card-head">
                   <h2 className="card-title">评分与评语</h2>
-                  <Badge tone={current.status === "reviewed" ? "ok" : "warn"}>
-                    {current.status === "reviewed" ? "已阅卷" : "待阅卷"}
-                  </Badge>
+                  {statusBadge}
                 </div>
                 <div className="card-body">
                   <div className="field" style={{ marginBottom: "var(--sp-4)" }}>
@@ -440,7 +398,7 @@ export function ReviewCenterPage() {
                     />
                   </div>
                   <div className="row">
-                    <Button variant="primary" onClick={handleSave}>
+                    <Button variant="primary" onClick={() => void handleSave()}>
                       保存评分
                     </Button>
                     <Button onClick={() => step(-1)}>上一份</Button>
@@ -456,10 +414,10 @@ export function ReviewCenterPage() {
       <ConfirmDialog
         open={batchAdoptOpen}
         title="批量采纳初判建议"
-        message={`将对 ${pendingCount} 份待阅卷宗采用系统按关键词给出的初判分数，并标记为已阅卷。仍可在队列中逐份复核修改。`}
+        message={`将对 ${counts.pending} 份待阅卷宗采用系统按关键词给出的初判分数，并标记为已阅卷。仍可在队列中逐份复核修改。`}
         confirmText="批量采纳"
         onCancel={() => setBatchAdoptOpen(false)}
-        onConfirm={confirmBatchAdopt}
+        onConfirm={() => void confirmBatchAdopt()}
       />
     </>
   );

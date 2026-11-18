@@ -13263,6 +13263,14 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "studentUsername": {
+            "type": "string",
+            "nullable": true
+          },
+          "studentDisplayName": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false

@@ -58,6 +58,8 @@ export const ENDPOINTS = {
     monitoring: (id: string | number) => `/exam-sessions/${id}/monitoring`,
     /** 场次负责人：被指派的人看得到这场考试的作答与成绩。 */
     examSessionAssignments: (id: string | number) => `/exam-sessions/${id}/assignments`,
+    /** 监考处置：警告 / 备注 / 强制交卷，按**一次作答**维度。 */
+    attemptProctorActions: (id: string | number) => `/attempts/${id}/proctor-actions`,
   },
   learning: {
     /** 学生自己的成绩列表。 */
@@ -76,6 +78,8 @@ export const ENDPOINTS = {
     permissions: "/permissions",
     auditLogs: "/audit-logs",
     reviewTasks: "/review-tasks",
+    /** 阅卷任务计数（待领取 / 阅卷中 / 已阅完 / 我的）。 */
+    reviewTaskCount: "/review-tasks/count",
     statisticsBySession: (id: string | number) => `/statistics/exam-sessions/${id}`,
     statisticsByQuestion: (id: string | number) => `/statistics/questions/${id}`,
   },

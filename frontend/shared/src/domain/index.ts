@@ -22,6 +22,21 @@ export {
   type SessionParticipant,
 } from "./admin";
 
+/* 阅卷与监考域：阅卷任务、卷宗详情与监考处置。 */
+export {
+  type BatchAdoptItem,
+  type BatchAdoptResult,
+  type ProctorActionEntry,
+  type ProctorActionKind,
+  type ReviewCounts,
+  type ReviewGradeResult,
+  type ReviewKeypoint,
+  type ReviewStep,
+  type ReviewTask,
+  type ReviewTaskDetail,
+  type ReviewTaskStatus,
+} from "./review";
+
 /* 学习域：错题本与学生工作台（design 03 §6）。 */
 export {
   type DashboardSummary,

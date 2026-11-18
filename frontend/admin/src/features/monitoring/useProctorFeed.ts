@@ -83,6 +83,10 @@ function toCandidate(sessionId: string, dto: CandidateDto): ProctorCandidate {
     forcedReason: null,
   };
 
+  // 处置是按作答下发的：没有 attemptId 就不知道该往哪次作答上写。
+  if (dto.attemptId !== undefined && dto.attemptId !== null) {
+    candidate.attemptId = String(dto.attemptId);
+  }
   if (dto.displayName) candidate.displayName = dto.displayName;
   if (dto.username) candidate.username = dto.username;
   return candidate;

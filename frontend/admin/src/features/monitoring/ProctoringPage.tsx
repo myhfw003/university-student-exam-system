@@ -32,9 +32,12 @@ import {
   writeAudit,
 } from "@exam/shared/mock/adminOps";
 import { useCatalog } from "@exam/shared/mock/catalog";
+import { createProctorAction, isBackendEnabled } from "@exam/shared/api";
+import type { ProctorActionEntry } from "@exam/shared/domain/review";
 import type { CandidateStatus, ProctorActionKind } from "@exam/shared/domain/types";
 import { Icon } from "@/app/Icon";
 import { SessionStatusBadge } from "../shared/bits";
+import { useAdminSessionDetail } from "../sessions/useAdminSessions";
 import { useProctorFeed } from "./useProctorFeed";
 
 const STATUS_TONE: Record<CandidateStatus, "ok" | "warn" | "danger" | "neutral"> = {
@@ -49,11 +52,33 @@ const STATUS_TONE: Record<CandidateStatus, "ok" | "warn" | "danger" | "neutral">
 export function ProctoringPage() {
   const { sessionId = "" } = useParams();
   const navigate = useNavigate();
+  const remote = isBackendEnabled();
   const sessions = useAdminOps((state) => state.sessions);
-  const actions = useAdminOps((state) => state.proctorActions);
+  const mockActions = useAdminOps((state) => state.proctorActions);
   const students = useCatalog((state) => state.students);
 
-  const session = useMemo(() => sessions.find((s) => s.id === sessionId), [sessions, sessionId]);
+  const mockSession = useMemo(
+    () => sessions.find((s) => s.id === sessionId),
+    [sessions, sessionId],
+  );
+  // HTTP 模式：场次配置（策略上限、名单）读真实后端。
+  const detail = useAdminSessionDetail(sessionId);
+  const session = useMemo(() => {
+    if (!remote) return mockSession;
+    if (detail.missing) return undefined;
+    return {
+      id: detail.id,
+      name: detail.name,
+      status: detail.status,
+      openAt: detail.openAt,
+      closeAt: detail.closeAt,
+      roster: detail.roster.map((entry) => entry.userId),
+      policy: detail.policy,
+    };
+  }, [remote, mockSession, detail]);
+
+  /** 本屏下发的处置（HTTP 模式：服务端只按**作答**维度存历史，没有场次级列表）。 */
+  const [issued, setIssued] = useState<ProctorActionEntry[]>([]);
   const feed = useProctorFeed(sessionId || undefined);
 
   const [statusFilter, setStatusFilter] = useState<"all" | CandidateStatus>("all");
@@ -91,8 +116,63 @@ export function ProctoringPage() {
     (c) => session && c.focusLossCount >= session.policy.maxFocusLoss,
   ).length;
 
-  const handleAct = () => {
+  /** 处置记录的一行（mock 与 HTTP 同一形状）。 */
+  const historyRows = useMemo(() => {
+    if (remote) {
+      return issued.map((entry) => ({
+        id: entry.id,
+        studentName:
+          candidates.find((c) => c.attemptId === entry.attemptId)?.displayName ?? entry.attemptId,
+        kind: entry.kind,
+        reason: entry.reason,
+        operator: entry.operator,
+        createdAt: entry.createdAt,
+      }));
+    }
+    return mockActions.map((action) => ({
+      id: action.id,
+      studentName:
+        students.find((s) => s.id === action.studentId)?.name ??
+        candidates.find((c) => c.studentId === action.studentId)?.displayName ??
+        action.studentId,
+      kind: action.kind,
+      reason: action.reason,
+      operator: action.operator,
+      createdAt: action.createdAt,
+    }));
+  }, [remote, issued, mockActions, candidates, students]);
+
+  const handleAct = async () => {
     if (!dialog || !session) return;
+    const candidate = candidates.find((c) => c.studentId === dialog.studentId);
+    const displayName =
+      candidate?.displayName ??
+      students.find((s) => s.id === dialog.studentId)?.name ??
+      dialog.studentId;
+
+    if (remote) {
+      // 处置按**作答**下发：考生还没开始作答就没有可处置的对象。
+      if (!candidate?.attemptId) {
+        toast.error("该考生还没有开始作答，没有可处置的作答记录");
+        return;
+      }
+      try {
+        const entry = await createProctorAction(candidate.attemptId, {
+          kind: dialog.kind,
+          reason,
+        });
+        setIssued((prev) => [{ ...entry, attemptId: candidate.attemptId as string }, ...prev]);
+        toast.ok(`${PROCTOR_ACTION_LABEL[dialog.kind]}已下发`);
+        setDialog(null);
+        setReason("");
+        // 强制交卷由服务端真正结束作答：下一次轮询就能看到新状态。
+        feed.refresh();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "处置失败");
+      }
+      return;
+    }
+
     const result = recordProctorAction({
       sessionId: session.id,
       studentId: dialog.studentId,
@@ -123,11 +203,9 @@ export function ProctoringPage() {
       action: "attempt.force_submit",
       targetType: "exam_session",
       targetId: session.id,
-      summary: `对考生「${
-        candidates.find((c) => c.studentId === dialog.studentId)?.displayName ??
-        students.find((s) => s.id === dialog.studentId)?.name ??
-        dialog.studentId
-      }」执行${PROCTOR_ACTION_LABEL[dialog.kind]}${reason ? `：${reason}` : ""}`,
+      summary: `对考生「${displayName}」执行${PROCTOR_ACTION_LABEL[dialog.kind]}${
+        reason ? `：${reason}` : ""
+      }`,
       ip: "10.12.0.21",
       userAgent: "Chrome 131 / Windows",
     });
@@ -420,19 +498,19 @@ export function ProctoringPage() {
         </div>
       </section>
 
-      {actions.length > 0 ? (
+      {historyRows.length > 0 ? (
         <section className="card" style={{ marginTop: "var(--sp-4)" }}>
           <div className="card-head">
-            <h2 className="card-title">处置记录</h2>
-            <span className="text-sm text-3">{actions.length} 条</span>
+            <h2 className="card-title">{remote ? "本屏处置记录" : "处置记录"}</h2>
+            <span className="text-sm text-3">{historyRows.length} 条</span>
           </div>
           <div className="card-body is-flush">
             <ul className="list">
-              {actions.slice(0, 20).map((a) => (
+              {historyRows.slice(0, 20).map((a) => (
                 <li className="list-row" key={a.id}>
                   <div className="list-main">
                     <div className="list-title">
-                      {students.find((s) => s.id === a.studentId)?.name ?? a.studentId}
+                      {a.studentName}
                       <Badge tone="info" className="badge">
                         {PROCTOR_ACTION_LABEL[a.kind]}
                       </Badge>
@@ -445,6 +523,14 @@ export function ProctoringPage() {
               ))}
             </ul>
           </div>
+          {remote ? (
+            <div className="card-foot">
+              <span className="text-xs text-3">
+                完整处置历史按**作答**维度记录在服务端（{"GET /attempts/{id}/proctor-actions"}），
+                这里只列本屏下发的。
+              </span>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -465,7 +551,7 @@ export function ProctoringPage() {
             <Button variant="secondary" onClick={() => setDialog(null)}>
               取消
             </Button>
-            <Button variant="primary" onClick={handleAct}>
+            <Button variant="primary" onClick={() => void handleAct()}>
               确认
             </Button>
           </>

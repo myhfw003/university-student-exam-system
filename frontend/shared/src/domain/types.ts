@@ -382,6 +382,14 @@ export type CandidateStatus =
 export interface ProctorCandidate {
   sessionId: string;
   studentId: string;
+  /**
+   * 这一次作答的主键。
+   * <para>
+   * 监考处置（警告 / 备注 / 强制交卷）是**按作答**下发的，
+   * 没有它就不知道该往哪个 attempt 上写。
+   * </para>
+   */
+  attemptId?: string;
   /** 后端监考快照返回的姓名（真实后端才有，mock 从名单解析）。 */
   displayName?: string;
   /** 后端监考快照返回的登录账号（真实后端才有）。 */

@@ -105,6 +105,27 @@ export {
   type LearningClient,
 } from "./learningApi";
 export {
+  assignReviewTask,
+  batchAdoptReviewTasks,
+  claimReviewTask,
+  gradeReviewTask,
+  loadReviewCounts,
+  loadReviewTaskDetail,
+  loadReviewTaskNeighbors,
+  loadReviewTasks,
+  toReviewStatus,
+  toReviewTask,
+  type ReviewClient,
+  type ReviewTaskPage,
+} from "./reviewApi";
+export {
+  createProctorAction,
+  loadProctorActions,
+  toProctorAction,
+  toProctorActionKind,
+  type ProctorClient,
+} from "./proctorApi";
+export {
   loadAttemptFeedback,
   loadMyPractices,
   toPracticeSummary,
