@@ -26,7 +26,8 @@ export function AnswerSummary({ detail }: AnswerSummaryProps) {
     return (
       <div className="list-sub">
         你的作答：<span className="strong">{picked}</span> · 正确答案：
-        <span className="strong">{correct}</span>
+        {/* 答案未到公布时机时，正确答案本来就没有——说清楚，别留空。 */}
+        <span className="strong">{correct || "未公布"}</span>
       </div>
     );
   }
@@ -39,15 +40,26 @@ export function AnswerSummary({ detail }: AnswerSummaryProps) {
     );
   }
 
-  if (type === "comprehensive" && detail.steps) {
-    const lines = detail.steps.map((step) =>
-      `${step.prompt}：${step.answer && step.answer.trim() ? step.answer : "未作答"}`,
-    );
-    return (
-      <div className="list-sub">
-        你的作答：<span className="strong">{lines.join(" ／ ")}</span>
-      </div>
-    );
+  if (type === "comprehensive") {
+    if (detail.steps) {
+      const lines = detail.steps.map((step) =>
+        `${step.prompt}：${step.answer && step.answer.trim() ? step.answer : "未作答"}`,
+      );
+      return (
+        <div className="list-sub">
+          你的作答：<span className="strong">{lines.join(" ／ ")}</span>
+        </div>
+      );
+    }
+
+    // HTTP 模式的报告拿不到逐步得分，只有作答原文——照样把考生写的内容显示出来。
+    if (detail.answerText) {
+      return (
+        <div className="list-sub">
+          你的作答：<span className="strong">{detail.answerText}</span>
+        </div>
+      );
+    }
   }
 
   return null;

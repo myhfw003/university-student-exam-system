@@ -49,7 +49,17 @@ public sealed record MyResultDto(
     decimal TotalScore,
     decimal TotalMax,
     bool SubjectivePending,
-    string Status);
+    string Status,
+    /// <summary>
+    /// 所属场次 ID（练习为空）。
+    /// <para>前端要靠它把成绩条目对应回「考试安排」里的某一场。</para>
+    /// </summary>
+    long? ExamSessionId,
+    /// <summary>
+    /// 所属练习开放单 ID（考试为空）。
+    /// <para>前端要靠它把成绩条目对应回「练习」里的某一条。</para>
+    /// </summary>
+    long? PracticeAssignmentId);
 
 /// <summary>我的成绩列表。</summary>
 public sealed record MyResultListResponse(

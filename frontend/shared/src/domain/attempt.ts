@@ -226,3 +226,69 @@ export interface AttemptSummary {
   /** 所属场次 ID（练习为空）。 */
   examSessionId: string | null;
 }
+
+/* ==========================================================================
+   成绩报告
+   --------------------------------------------------------------------------
+   成绩由服务端判完再下发：前端不重算，只把结果映射成能渲染的形状。
+
+   正确答案与解析受**答案公布策略**约束：没到公布时机，`correctKeys` 为空、
+   `revealed` 为 false——前端不能自己把答案补出来。
+   ========================================================================== */
+
+/** 成绩报告里的一道题。 */
+export interface ReportDetail {
+  questionId: string;
+  questionCode: string;
+  type: QuestionType;
+  typeLabel: string;
+  stem: string;
+  /** 考生的作答（选择键是原题键）。 */
+  yourAnswer: AnswerPayload | null;
+  /** 正确答案键（原题键）；未公布时为空。 */
+  correctKeys: string[];
+  referenceAnswer: string | null;
+  analysis: string | null;
+  /** 得分；null 表示还没定分（待阅）。 */
+  score: number | null;
+  maxScore: number;
+  /** 答案与解析是否已公布。 */
+  revealed: boolean;
+}
+
+/** 成绩报告。 */
+export interface AttemptReport {
+  attemptId: string;
+  attemptNo: number;
+  examName: string | null;
+  submittedAt: string | null;
+  objectiveScore: number;
+  objectiveMax: number;
+  /** 主观题得分；null 表示还没定分（待阅）。 */
+  subjectiveScore: number | null;
+  subjectiveMax: number;
+  totalScore: number;
+  totalMax: number;
+  status: string;
+  /** 答案与解析是否已公布。 */
+  answersRevealed: boolean;
+  answerPolicy: string;
+  details: ReportDetail[];
+}
+
+/** 我的成绩列表里的一条。 */
+export interface MyResult {
+  attemptId: string;
+  examName: string | null;
+  /** 所属场次 ID（练习为空）。 */
+  examSessionId: string | null;
+  /** 所属练习开放单 ID（考试为空）。 */
+  practiceAssignmentId: string | null;
+  attemptNo: number;
+  submittedAt: string | null;
+  totalScore: number;
+  totalMax: number;
+  /** 主观题是否还在待阅。 */
+  subjectivePending: boolean;
+  status: string;
+}

@@ -7,12 +7,12 @@
 import { useNavigate } from "react-router-dom";
 import { Badge, Button, Empty, PageHead } from "@exam/shared";
 import { formatPercent } from "@exam/shared";
-import { useStudentRecords } from "@/features/shared/studentData";
+import { useReportList } from "./useReportList";
 
 /** 成绩报告列表。 */
 export function ReportListPage() {
   const navigate = useNavigate();
-  const records = useStudentRecords();
+  const { rows } = useReportList();
 
   return (
     <>
@@ -23,7 +23,7 @@ export function ReportListPage() {
 
       <section className="card">
         <div className="card-body is-flush">
-          {records.length === 0 ? (
+          {rows.length === 0 ? (
             <Empty
               title="暂无成绩记录"
               body="完成一次练习或考试后，成绩、得分率与逐题解析会汇总到这里。"
@@ -52,7 +52,7 @@ export function ReportListPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {records.map((record) => {
+                  {rows.map((record) => {
                     const rate =
                       record.total > 0 ? (record.score / record.total) * 100 : 0;
                     return (

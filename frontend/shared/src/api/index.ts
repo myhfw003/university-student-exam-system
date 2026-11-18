@@ -64,6 +64,12 @@ export {
   type ExamSessionSummary,
 } from "./examSessionApi";
 export {
+  loadAttemptReport,
+  loadMyResults,
+  toAttemptReport,
+  type ReportClient,
+} from "./reportApi";
+export {
   buildOptionKeyMap,
   getAttempt,
   heartbeatAttempt,

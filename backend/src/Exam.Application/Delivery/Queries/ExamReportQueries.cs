@@ -301,7 +301,9 @@ public sealed class GetMyResultsHandler : IRequestHandler<GetMyResultsQuery, MyR
                 summary.TotalScore,
                 summary.TotalMax,
                 summary.SubjectivePending,
-                summary.GradeVisibility));
+                summary.GradeVisibility,
+                attempt.ExamSessionId,
+                attempt.PracticeAssignmentId));
         }
 
         return new MyResultListResponse(items, items.Count);

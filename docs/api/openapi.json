@@ -11191,6 +11191,16 @@
           "status": {
             "type": "string",
             "nullable": true
+          },
+          "examSessionId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "practiceAssignmentId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
           }
         },
         "additionalProperties": false

@@ -5,6 +5,11 @@
      A. 有本次作答记录 → 客观/主观得分、题型得分、逐题明细；
      B. 无记录但考试已结束 → 试卷回顾（题目与解析，无个人作答）；
      C. 都没有 → 暂未参加该考试。
+
+   两条数据通路：
+     - mock 模式：读本地内容仓库，**本地重算**成绩；
+     - HTTP 模式：读服务端成绩（`useExamReport`），**不重算**——
+       正确答案受答案公布策略约束，前端补不出来。
    ========================================================================== */
 
 import { useMemo } from "react";
@@ -13,16 +18,174 @@ import { Button, Card, Empty, PageHead, Stat } from "@exam/shared";
 import { formatPercent, formatScore, formatTime } from "@exam/shared";
 import { buildPaper, TYPE_LABEL } from "@exam/shared/engine/paper";
 import { applyTeacherScores, scorePaper } from "@exam/shared/engine/scoring";
+import type { GradedWithTeacher } from "@exam/shared/engine/scoring";
 import { difficultyLevels, getQuestion, itemsOf, useCatalog } from "@exam/shared/mock/catalog";
-import type { Question } from "@exam/shared/domain/types";
+import type { PaperMode, Question } from "@exam/shared/domain/types";
 import { dataSourceMode } from "@exam/shared/api";
 import { useStudentStore } from "@/stores/studentStore";
 import { GradedDetailRow } from "@/features/shared/GradedDetailRow";
 import { TagChips } from "@/features/shared/TagChips";
+import { useExamReport, type ExamReportData } from "./useExamReport";
+
+/** 卷型标签与一句话说明。 */
+function modeLabels(mode: PaperMode): { label: string; short: string } {
+  if (mode === "small") return { label: "小梅花", short: "选项随机 · 题序保留" };
+  if (mode === "large") return { label: "大梅花", short: "题型分块 · 组内题序随机" };
+  return { label: "标准卷", short: "题序 · 选项均固定" };
+}
+
+/** 题型得分条。 */
+function TypeScoreBars({ graded }: { graded: GradedWithTeacher }) {
+  const typeScores = new Map<string, { score: number; max: number }>();
+  for (const detail of graded.details) {
+    const entry = typeScores.get(detail.type) ?? { score: 0, max: 0 };
+    entry.score += detail.score;
+    entry.max += detail.max;
+    typeScores.set(detail.type, entry);
+  }
+
+  return (
+    <section className="card" style={{ marginTop: "var(--sp-5)" }}>
+      <div className="card-head">
+        <h2 className="card-title">题型得分</h2>
+      </div>
+      <div className="card-body">
+        {[...typeScores.entries()].map(([type, value]) => {
+          const rate = value.max > 0 ? (value.score / value.max) * 100 : 0;
+          return (
+            <div className="bar-row" key={type}>
+              <span className="od-truncate">{TYPE_LABEL[type as keyof typeof TYPE_LABEL] ?? type}</span>
+              <span className="bar-track">
+                <span
+                  className={`bar-fill${rate >= 80 ? "" : rate >= 60 ? " is-warn" : " is-danger"}`}
+                  style={{ width: `${Math.round(rate)}%` }}
+                />
+              </span>
+              <span className="right num text-sm">
+                {value.score}/{value.max}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 /** 成绩报告详情。 */
 export function ExamReportPage() {
   const { sessionId = "" } = useParams();
+  const remote = useExamReport(sessionId);
+
+  // HTTP 模式：成绩在服务端，这里只负责呈现。
+  if (dataSourceMode() === "http") {
+    if (remote.loading) {
+      return (
+        <Card>
+          <Empty title="成绩报告加载中" body="正在读取服务端成绩…" />
+        </Card>
+      );
+    }
+
+    if (remote.error) {
+      return (
+        <Card>
+          <Empty title="成绩报告读取失败" body={remote.error} />
+        </Card>
+      );
+    }
+
+    if (!remote.data) {
+      return (
+        <Card>
+          <Empty
+            title="暂未参加该考试"
+            body="本场考试未开放给当前答题者，或尚未生成成绩。"
+          />
+        </Card>
+      );
+    }
+
+    return <RemoteExamReport data={remote.data} />;
+  }
+
+  return <LocalExamReport sessionId={sessionId} />;
+}
+
+/** HTTP 模式的成绩报告。 */
+function RemoteExamReport({ data }: { data: ExamReportData }) {
+  const navigate = useNavigate();
+  const studentId = useStudentStore((state) => state.studentId);
+  const papers = useCatalog((state) => state.exams);
+
+  const paper = papers.find((p) => p.id === data.paperId);
+  const { label: modeLabel, short: modeShort } = modeLabels(data.mode);
+  const graded = data.graded;
+
+  return (
+    <>
+      <PageHead
+        title={data.examName}
+        sub={`${paper?.batch || "—"} · 卷型：${modeLabel}（${modeShort}） · ${studentId}`}
+        actions={
+          <>
+            <div className="row-tight">
+              <TagChips tags={paper?.tags ?? []} />
+            </div>
+            <Button onClick={() => navigate("/reports")}>返回报告列表</Button>
+          </>
+        }
+      />
+
+      <div className="stat-row">
+        <Stat
+          label="客观题得分"
+          value={formatScore(graded.objective.score)}
+          unit="分"
+          hint={`满分 ${graded.objective.max} 分，自动判分`}
+        />
+        <Stat
+          label="主观题得分"
+          value={formatScore(graded.subjective.score)}
+          unit="分"
+          hint={
+            graded.pendingQuestions.length > 0
+              ? `满分 ${graded.subjective.max} 分，${graded.pendingQuestions.length} 题待阅`
+              : `满分 ${graded.subjective.max} 分，已复核`
+          }
+        />
+        <Stat
+          label="当前总分"
+          value={formatScore(graded.total)}
+          unit="分"
+          hint={`满分 ${graded.totalMax} 分`}
+        />
+        <Stat
+          label="交卷时间"
+          value={formatTime(data.submittedAt)}
+          hint={`第 ${data.attemptNo} 次作答 · ${modeLabel}`}
+        />
+      </div>
+
+      <TypeScoreBars graded={graded} />
+
+      <section className="card" style={{ marginTop: "var(--sp-5)" }}>
+        <div className="card-head">
+          <h2 className="card-title">逐题明细</h2>
+          <span className="text-sm text-3">共 {graded.details.length} 题</span>
+        </div>
+        <div className="card-body is-flush">
+          {graded.details.map((detail) => (
+            <GradedDetailRow key={detail.qid} detail={detail} variant="report" />
+          ))}
+        </div>
+      </section>
+    </>
+  );
+}
+
+/** mock 模式的成绩报告：本地内容仓库 + 本地重算。 */
+function LocalExamReport({ sessionId }: { sessionId: string }) {
   const navigate = useNavigate();
   const studentId = useStudentStore((state) => state.studentId);
 
@@ -62,20 +225,14 @@ export function ExamReportPage() {
   }, [exam, attempt, studentId, reviews]);
 
   if (!exam) {
-    // HTTP 模式下报告页还没接后端（任务 T-P10-02）：说清楚，别报「报告不存在」。
-    const pending = dataSourceMode() === "http";
     return (
       <Card>
         <Empty
-          title={pending ? "成绩报告尚未接入" : "报告不存在"}
-          body={
-            pending
-              ? "本场考试已交卷，成绩报告的数据正在接入；在此之前可先返回考试安排。"
-              : "请返回成绩报告列表重新选择。"
-          }
+          title="报告不存在"
+          body="请返回成绩报告列表重新选择。"
           action={
-            <Button variant="primary" onClick={() => navigate("/exams")}>
-              返回考试安排
+            <Button variant="primary" onClick={() => navigate("/reports")}>
+              返回列表
             </Button>
           }
         />
@@ -208,14 +365,6 @@ export function ExamReportPage() {
 
   /* ------------------------------------------------- A. 有本次作答记录 */
 
-  const typeScores = new Map<string, { score: number; max: number }>();
-  for (const detail of graded?.details ?? []) {
-    const entry = typeScores.get(detail.type) ?? { score: 0, max: 0 };
-    entry.score += detail.score;
-    entry.max += detail.max;
-    typeScores.set(detail.type, entry);
-  }
-
   return (
     <>
       <PageHead
@@ -261,30 +410,7 @@ export function ExamReportPage() {
         />
       </div>
 
-      <section className="card" style={{ marginTop: "var(--sp-5)" }}>
-        <div className="card-head">
-          <h2 className="card-title">题型得分</h2>
-        </div>
-        <div className="card-body">
-          {[...typeScores.entries()].map(([type, value]) => {
-            const rate = value.max > 0 ? (value.score / value.max) * 100 : 0;
-            return (
-              <div className="bar-row" key={type}>
-                <span className="od-truncate">{TYPE_LABEL[type as keyof typeof TYPE_LABEL] ?? type}</span>
-                <span className="bar-track">
-                  <span
-                    className={`bar-fill${rate >= 80 ? "" : rate >= 60 ? " is-warn" : " is-danger"}`}
-                    style={{ width: `${Math.round(rate)}%` }}
-                  />
-                </span>
-                <span className="right num text-sm">
-                  {value.score}/{value.max}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </section>
+      {graded ? <TypeScoreBars graded={graded} /> : null}
 
       <section className="card" style={{ marginTop: "var(--sp-5)" }}>
         <div className="card-head">

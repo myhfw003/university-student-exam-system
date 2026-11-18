@@ -17,7 +17,7 @@
      选项：exam.id + "|" + seed + "|" + variantKey + "|" + questionId + "|opt"
    ========================================================================== */
 
-import type { AttemptSurface } from "../domain/attempt";
+import type { AttemptSurface, SurfaceQuestion } from "../domain/attempt";
 import type { DifficultyLevel, ExamPaper, PaperItem, PaperMode, Question } from "../domain/types";
 import { autoSeed, hash32, rng, shuffle } from "./random";
 
@@ -341,15 +341,70 @@ export function buildPaper(
   };
 }
 
+/** 服务端卷面里的一道题 → 前端题目与选项键换算表。 */
+export interface SurfaceItem {
+  /** 前端题目。 */
+  question: Question;
+  /** 按显示顺序排列的原题选项键。 */
+  displayKeys: string[];
+  /** 显示字母 → 原题键。 */
+  toOriginal: Record<string, string>;
+  /** 原题键 → 显示字母。 */
+  fromOriginal: Record<string, string>;
+  /** 选项顺序是否与原题不同。 */
+  changed: boolean;
+}
+
+/**
+ * 服务端卷面题目 → 前端题目 + 选项键换算表。
+ *
+ * 服务端已经按考生派生了选项顺序（标准卷不动，梅花卷置换），
+ * 并且**每个选项的键仍是原题键**。前端按卷面上的位置把选项重新编号成
+ * 显示字母（A/B/C…），并记下「显示字母 ↔ 原题键」——
+ * 判分、上行、成绩报告都靠它还原。
+ */
+export function surfaceItem(question: SurfaceQuestion): SurfaceItem {
+  // displayKeys 是**按显示顺序排列的原题选项键**。
+  const displayKeys = question.options.map((option) => option.key);
+  const toOriginal: Record<string, string> = {};
+  const fromOriginal: Record<string, string> = {};
+  displayKeys.forEach((originalKey, position) => {
+    const displayLetter = LETTERS[position];
+    if (!displayLetter) return;
+    toOriginal[displayLetter] = originalKey;
+    fromOriginal[originalKey] = displayLetter;
+  });
+
+  // 服务端的标准顺序是选项键升序：与它不同即视为置换过。
+  const canonical = [...displayKeys].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const changed = displayKeys.some((key, i) => key !== canonical[i]);
+
+  const built: Question = {
+    id: question.id,
+    type: question.type,
+    score: question.score,
+    status: "published",
+    source: "manual",
+    tags: [...question.tagIds, question.difficultyTagId].filter((id) => id !== ""),
+    stem: question.stem,
+    options: question.options.map((option) => ({ key: option.key, text: option.text })),
+    // 考试进行中不下发答案与解析，这里也不臆造。
+    answer: [],
+    analysis: "",
+    steps: question.steps.map((step) => ({
+      id: step.code,
+      prompt: step.prompt,
+      answer: "",
+      keywords: [],
+      score: step.score,
+    })),
+  };
+
+  return { question: built, displayKeys, toOriginal, fromOriginal, changed };
+}
+
 /**
  * 由服务端卷面构建答题者卷面。
- *
- * HTTP 模式下卷面来自服务端：服务端已经按考生派生了选项顺序
- * （标准卷不动，梅花卷置换），并且**每个选项的键仍是原题键**。
- * 前端只做两件事：
- *
- * 1. 按卷面上的位置把选项重新编号成显示字母（A/B/C…）；
- * 2. 记下「显示字母 → 原题键」，判分与上行都靠它还原。
  *
  * 卷面里没有正确答案、解析与参考答案——考试进行中不能有。
  */
@@ -358,53 +413,18 @@ export function buildPaperFromSurface(
   params: { examId: string; studentId: string; mode: PaperMode },
 ): BuiltPaper {
   const items: BuiltPaperItem[] = surface.questions.map((question, index) => {
-    // displayKeys 是**按显示顺序排列的原题选项键**。
-    const displayKeys = question.options.map((option) => option.key);
-    const toOriginal: Record<string, string> = {};
-    const fromOriginal: Record<string, string> = {};
-    displayKeys.forEach((originalKey, position) => {
-      const displayLetter = LETTERS[position];
-      if (!displayLetter) return;
-      toOriginal[displayLetter] = originalKey;
-      fromOriginal[originalKey] = displayLetter;
-    });
-
-    // 服务端的标准顺序是选项键升序：与它不同即视为置换过。
-    const canonical = [...displayKeys].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-    const changed = displayKeys.some((key, i) => key !== canonical[i]);
-
-    const built: Question = {
-      id: question.id,
-      type: question.type,
-      score: question.score,
-      status: "published",
-      source: "manual",
-      tags: [...question.tagIds, question.difficultyTagId].filter((id) => id !== ""),
-      stem: question.stem,
-      options: question.options.map((option) => ({ key: option.key, text: option.text })),
-      // 考试进行中不下发答案与解析，这里也不臆造。
-      answer: [],
-      analysis: "",
-      steps: question.steps.map((step) => ({
-        id: step.code,
-        prompt: step.prompt,
-        answer: "",
-        keywords: [],
-        score: step.score,
-      })),
-    };
-
+    const item = surfaceItem(question);
     return {
       slot: index + 1,
-      qid: question.id,
-      question: built,
-      score: question.score,
+      qid: item.question.id,
+      question: item.question,
+      score: item.question.score,
       originalIndex: index + 1,
-      displayKeys,
-      toOriginal,
-      fromOriginal,
-      orderText: displayKeys.join("·"),
-      changed,
+      displayKeys: item.displayKeys,
+      toOriginal: item.toOriginal,
+      fromOriginal: item.fromOriginal,
+      orderText: item.displayKeys.join("·"),
+      changed: item.changed,
     };
   });
 

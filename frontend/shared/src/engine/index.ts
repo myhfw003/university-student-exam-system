@@ -5,4 +5,5 @@
 export * from "./random";
 export * from "./paper";
 export * from "./scoring";
+export * from "./report";
 export * from "./blueprint";
