@@ -14,7 +14,7 @@
    ========================================================================== */
 
 import type { AnswerBatch, AnswerPayload } from "@exam/shared/domain/attempt";
-import { toServerAnswerBatch } from "@exam/shared/api";
+import { toServerAnswerBatch, type OptionKeyMap } from "@exam/shared/api";
 import {
   countPending,
   deleteBatchesUpTo,
@@ -62,6 +62,9 @@ const BACKOFF_MS = [1000, 2000, 4000, 8000] as const;
 /** 最大重试次数。 */
 const MAX_RETRIES = 5;
 
+/** 单批上限：与服务端 `SaveAnswersCommandValidator.MaxBatchSize` 一致。 */
+const MAX_BATCH_SIZE = 50;
+
 /** L2 写 IndexedDB 的防抖时长。 */
 const DRAFT_DEBOUNCE_MS = 300;
 
@@ -91,6 +94,13 @@ export interface SyncEngineOptions {
   onStatusChange?: (status: SyncStatus) => void;
   /** 批次上行成功回调（用于清理内存态）。 */
   onBatchAccepted?: (acceptedClientSeq: number) => void;
+  /**
+   * 选择键换算表（题目 ID → 显示字母 → 原题键）。
+   *
+   * 页面关闭前的最后一搏不走传输层（要带 keepalive），
+   * 这里自己组装请求体，所以也要拿得到换算表。
+   */
+  keyMap?: () => OptionKeyMap;
 }
 
 /**
@@ -108,6 +118,7 @@ export class SyncEngine {
   private readonly transport: AnswerTransport;
   private readonly onStatusChange: ((status: SyncStatus) => void) | undefined;
   private readonly onBatchAccepted: ((acceptedClientSeq: number) => void) | undefined;
+  private readonly keyMap: (() => OptionKeyMap) | undefined;
 
   /** 已写入但尚未形成批次的答案（等待防抖成批）。 */
   private pendingItems = new Map<string, AnswerPayload>();
@@ -138,6 +149,7 @@ export class SyncEngine {
     this.transport = options.transport;
     this.onStatusChange = options.onStatusChange;
     this.onBatchAccepted = options.onBatchAccepted;
+    this.keyMap = options.keyMap;
   }
 
   /* ---------------------------------------------------------------- 状态 */
@@ -190,9 +202,9 @@ export class SyncEngine {
     if (this.draftTimer !== null) clearTimeout(this.draftTimer);
     this.draftTimer = setTimeout(() => {
       this.draftTimer = null;
-      const items = new Map(this.pendingItems);
-      this.pendingItems.clear();
-      void this.writeDraft(items);
+      // **只落盘，不清空待成批条目**：成批与上行由 flush 负责。
+      // 提前清掉的话，3 秒后的上传防抖就永远无批可发，答案只留在 L2 上、传不到服务器。
+      void this.writeDraft(new Map(this.pendingItems));
     }, wait);
   }
 
@@ -259,9 +271,16 @@ export class SyncEngine {
         payload,
       }));
 
-      const clientSeq = this.nextSeq;
-      this.nextSeq += 1;
-      await enqueueBatch(this.attemptId, clientSeq, items);
+      // 一批最多 50 条（服务端上限）：超了拆成多批，各自有 clientSeq。
+      for (let index = 0; index < items.length; index += MAX_BATCH_SIZE) {
+        const clientSeq = this.nextSeq;
+        this.nextSeq += 1;
+        await enqueueBatch(
+          this.attemptId,
+          clientSeq,
+          items.slice(index, index + MAX_BATCH_SIZE),
+        );
+      }
       await this.emitStatus();
     }
 
@@ -432,7 +451,7 @@ export class SyncEngine {
       const response = await fetch(endpoint, {
         method: "POST",
         headers,
-        body: JSON.stringify(toServerAnswerBatch(batch)),
+        body: JSON.stringify(toServerAnswerBatch(batch, this.keyMap?.())),
         credentials: "include",
         keepalive: true,
       });

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AnswerBatch } from "@exam/shared/domain/attempt";
 import { NetworkUnavailableError, SyncEngine } from "../syncEngine";
 import { MockAnswerTransport } from "../transports";
 import {
@@ -172,5 +173,38 @@ describe("SyncEngine · 上行同步", () => {
 
     await clearDraft(ATTEMPT_ID);
     expect(await loadDraft(ATTEMPT_ID)).toBeNull();
+  });
+
+  it("答案在上行防抖到期后自动上行，不必等切题", async () => {
+    engine.recordAnswer("q-1", { selectedOptionKey: "A" });
+
+    // 上行防抖 3 秒（落盘防抖 300ms 不该把待发条目带走）。
+    await new Promise((resolve) => setTimeout(resolve, 3500));
+
+    const remote = await transport.fetchRemote(ATTEMPT_ID);
+    expect(remote.answers["q-1"]).toEqual({ selectedOptionKey: "A" });
+  }, 15_000);
+
+  it("单批最多 50 条，超出拆成多批", async () => {
+    const sentSizes: number[] = [];
+    const recording = {
+      async send(batch: AnswerBatch) {
+        sentSizes.push(batch.items.length);
+        return batch.clientSeq;
+      },
+      async fetchRemote() {
+        return { lastClientSeq: 0, answers: {}, submitted: false };
+      },
+    };
+    const splitter = new SyncEngine({ attemptId: ATTEMPT_ID, transport: recording });
+
+    for (let i = 0; i < 60; i += 1) {
+      splitter.recordAnswer(`q-${i}`, { selectedOptionKey: "A" });
+    }
+    await splitter.flush();
+
+    // 60 条要拆成 50 + 10 两批（服务端单批上限 50）。
+    expect(sentSizes).toEqual([50, 10]);
+    splitter.dispose();
   });
 });

@@ -18,6 +18,7 @@ import {
   ENDPOINTS,
   toDomainPayload,
   toServerAnswerBatch,
+  type OptionKeyMap,
   type ServerAnswerPayload,
 } from "@exam/shared/api";
 import {
@@ -42,11 +43,21 @@ interface ServerAttemptResponse {
   }>;
 }
 
-/** HTTP 传输实现。 */
+/**
+ * HTTP 传输实现。
+ *
+ * **选择键的口径在这一层换算**：前端会话里存的是显示字母（A/B/C…），
+ * 服务端判分用的是原题键。梅花卷置换过选项，两者不是一回事——
+ * 换算表由服务端卷面派生（见 `api/attemptApi.ts` 的 `buildOptionKeyMap`）。
+ *
+ * 上行时显示字母 → 原题键，对账回填时原题键 → 显示字母。
+ */
 export class HttpAnswerTransport implements AnswerTransport {
   constructor(
     private readonly baseUrl = apiBaseUrl(),
     private readonly getAccessToken: () => string | null = () => null,
+    /** 选择键换算表：题目 ID →（显示字母 → 原题键）。 */
+    private readonly keyMap: () => OptionKeyMap = () => ({}),
   ) {}
 
   /** 上行一批答案。 */
@@ -62,7 +73,7 @@ export class HttpAnswerTransport implements AnswerTransport {
         {
           method: "POST",
           headers,
-          body: JSON.stringify(toServerAnswerBatch(batch)),
+          body: JSON.stringify(toServerAnswerBatch(batch, this.keyMap())),
         },
       );
     } catch {
@@ -99,11 +110,14 @@ export class HttpAnswerTransport implements AnswerTransport {
     const data = (await response.json()) as ServerAttemptResponse;
 
     // 后端返回数组形式的 answers，这里按题目 ID 建索引。
+    // 服务端存的是原题键，回填本地要换回显示字母。
+    const keyMap = this.keyMap();
     const answers: Record<string, AnswerPayload> = {};
     for (const answer of data.answers ?? []) {
       if (answer.questionId === undefined || answer.questionId === null) continue;
       if (!answer.payload) continue;
-      answers[String(answer.questionId)] = toDomainPayload(answer.payload);
+      const questionId = String(answer.questionId);
+      answers[questionId] = toDomainPayload(answer.payload, keyMap[questionId]);
     }
 
     const status = data.status ?? "";

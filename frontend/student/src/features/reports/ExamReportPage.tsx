@@ -15,6 +15,7 @@ import { buildPaper, TYPE_LABEL } from "@exam/shared/engine/paper";
 import { applyTeacherScores, scorePaper } from "@exam/shared/engine/scoring";
 import { difficultyLevels, getQuestion, itemsOf, useCatalog } from "@exam/shared/mock/catalog";
 import type { Question } from "@exam/shared/domain/types";
+import { dataSourceMode } from "@exam/shared/api";
 import { useStudentStore } from "@/stores/studentStore";
 import { GradedDetailRow } from "@/features/shared/GradedDetailRow";
 import { TagChips } from "@/features/shared/TagChips";
@@ -61,14 +62,20 @@ export function ExamReportPage() {
   }, [exam, attempt, studentId, reviews]);
 
   if (!exam) {
+    // HTTP 模式下报告页还没接后端（任务 T-P10-02）：说清楚，别报「报告不存在」。
+    const pending = dataSourceMode() === "http";
     return (
       <Card>
         <Empty
-          title="报告不存在"
-          body="请返回成绩报告列表重新选择。"
+          title={pending ? "成绩报告尚未接入" : "报告不存在"}
+          body={
+            pending
+              ? "本场考试已交卷，成绩报告的数据正在接入；在此之前可先返回考试安排。"
+              : "请返回成绩报告列表重新选择。"
+          }
           action={
-            <Button variant="primary" onClick={() => navigate("/reports")}>
-              返回列表
+            <Button variant="primary" onClick={() => navigate("/exams")}>
+              返回考试安排
             </Button>
           }
         />

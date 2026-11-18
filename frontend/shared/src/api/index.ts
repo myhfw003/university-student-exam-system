@@ -39,17 +39,42 @@ export {
 export { ENDPOINTS } from "./endpoints";
 export { refreshAccessToken } from "./authRefresh";
 export {
+  toDisplayKeys,
   toDomainPayload,
+  toOriginalKeys,
   toServerAnswerBatch,
   toServerPayload,
+  type OptionKeyMap,
   type ServerAnswerBatch,
   type ServerAnswerPayload,
   type ServerAnswerStep,
 } from "./answerPayload";
 export { apiBaseUrl, dataSourceMode, isBackendEnabled, type DataSourceMode } from "./dataSource";
-export { loadCatalogSnapshot, type CatalogClient, type CatalogSnapshot } from "./catalogApi";
 export {
+  loadCatalogSnapshot,
+  toPaperMode,
+  type CatalogClient,
+  type CatalogSnapshot,
+} from "./catalogApi";
+export {
+  loadExamSession,
   loadMyExamSessions,
+  type ExamSessionDetail,
   type ExamSessionStatus,
   type ExamSessionSummary,
 } from "./examSessionApi";
+export {
+  buildOptionKeyMap,
+  getAttempt,
+  heartbeatAttempt,
+  listMyAttempts,
+  reportFocusEvents,
+  startExamAttempt,
+  submitAttempt,
+  toAttemptSurface,
+  type AttemptClient,
+  type FocusEventInput,
+  type FocusEventsResult,
+  type HeartbeatResult,
+  type SubmitResult,
+} from "./attemptApi";

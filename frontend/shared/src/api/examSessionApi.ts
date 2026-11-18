@@ -9,6 +9,7 @@
 import { ENDPOINTS } from "./endpoints";
 import { httpClient } from "./httpClient";
 import type { CatalogClient } from "./catalogApi";
+import type { AttemptRules } from "../domain/attempt";
 
 /** 场次状态（与后端 ExamSessionStatuses 一致）。 */
 export type ExamSessionStatus = "scheduled" | "in_progress" | "closed" | "cancelled";
@@ -26,6 +27,7 @@ export interface ExamSessionSummary {
   durationMinutes: number;
   participantMode: string;
   variantRule: string;
+  variantRuleLabel: string;
   publishedAt: string | null;
 }
 
@@ -41,6 +43,7 @@ interface SessionDto {
   durationMinutes?: number;
   participantMode?: string;
   variantRule?: string;
+  variantRuleLabel?: string;
   publishedAt?: string | null;
 }
 
@@ -70,6 +73,7 @@ function toSummary(dto: SessionDto): ExamSessionSummary {
     durationMinutes: dto.durationMinutes ?? 0,
     participantMode: dto.participantMode ?? "",
     variantRule: dto.variantRule ?? "standard",
+    variantRuleLabel: dto.variantRuleLabel ?? "",
     publishedAt: dto.publishedAt ?? null,
   };
 }
@@ -88,4 +92,72 @@ export async function loadMyExamSessions(
 
   const items = Array.isArray(res) ? res : (res.items ?? []);
   return items.map(toSummary);
+}
+
+/** 场次详情：考试规则与考生须知都在这里。 */
+export interface ExamSessionDetail {
+  id: string;
+  name: string;
+  paperId: string;
+  paperName: string;
+  status: ExamSessionStatus;
+  statusLabel: string;
+  openAt: string;
+  closeAt: string;
+  durationMinutes: number;
+  participantMode: string;
+  variantRule: string;
+  variantRuleLabel: string;
+  /** 考生须知。 */
+  note: string;
+  /** 考试规则（切屏上限、心跳间隔等）。 */
+  rules: AttemptRules;
+}
+
+/** 后端场次详情 DTO。 */
+interface SessionDetailDto {
+  session?: SessionDto;
+  rules?: Record<string, unknown>;
+  note?: string | null;
+}
+
+function toRules(dto: Record<string, unknown> | undefined): AttemptRules {
+  const rules = dto ?? {};
+  const maxFocusLoss = rules.maxFocusLoss;
+  return {
+    maxFocusLoss: typeof maxFocusLoss === "number" ? maxFocusLoss : null,
+    onMaxFocusLoss: typeof rules.onMaxFocusLoss === "string" ? rules.onMaxFocusLoss : "force_submit",
+    requireFullScreen: rules.requireFullScreen === true,
+    blockCopyPaste: rules.blockCopyPaste === true,
+    blockContextMenu: rules.blockContextMenu === true,
+    showWatermark: rules.showWatermark === true,
+    enableHeartbeatCheck: rules.enableHeartbeatCheck === true,
+    heartbeatIntervalSeconds:
+      typeof rules.heartbeatIntervalSeconds === "number" ? rules.heartbeatIntervalSeconds : 30,
+    heartbeatTimeoutSeconds:
+      typeof rules.heartbeatTimeoutSeconds === "number" ? rules.heartbeatTimeoutSeconds : 90,
+    maxDisconnect: typeof rules.maxDisconnect === "number" ? rules.maxDisconnect : 3,
+    earlyEntryMinutes: typeof rules.earlyEntryMinutes === "number" ? rules.earlyEntryMinutes : 0,
+  };
+}
+
+/**
+ * 读取一场考试场次的详情。
+ *
+ * 答题页要用到两样列表里没有的东西：考试规则（切屏上限、心跳间隔）
+ * 与考生须知（考试须知区块）。
+ */
+export async function loadExamSession(
+  id: string,
+  client: CatalogClient = httpClient,
+): Promise<ExamSessionDetail> {
+  const dto = await client.get<SessionDetailDto>(`${ENDPOINTS.delivery.examSessions}/${id}`);
+  const session = dto.session ?? {};
+  const summary = toSummary(session);
+
+  return {
+    ...summary,
+    note: dto.note ?? "",
+    rules: toRules(dto.rules),
+  };
 }

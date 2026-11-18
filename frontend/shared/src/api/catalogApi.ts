@@ -108,7 +108,7 @@ function toPublishAnswer(raw: string): ExamPaper["publishAnswer"] {
 }
 
 /** 后端卷型规则 → 前端卷型。 */
-function toPaperMode(raw: string): PaperMode {
+export function toPaperMode(raw: string): PaperMode {
   if (raw === "small_plum") return "small";
   if (raw === "large_plum") return "large";
   return "standard";

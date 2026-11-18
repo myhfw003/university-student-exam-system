@@ -35,6 +35,25 @@ export const ENDPOINTS = {
     /** 管理端练习开放单。 */
     practiceAssignments: "/practice-assignments",
     attempts: "/attempts",
+    /**
+     * 开始作答。
+     *
+     * 与 `attempts` 同路径：幂等——已有进行中的会话时服务端返回同一个，
+     * 不会新建，因此前端刷新后重新进入即可续上。
+     */
+    startAttempt: "/attempts",
+    /** 一次作答的完整视图（卷面 + 已有答案 + 服务端时间）。 */
+    attempt: (id: string | number) => `/attempts/${id}`,
+    /** 批量保存答案。 */
+    attemptAnswers: (id: string | number) => `/attempts/${id}/answers`,
+    /** 交卷。 */
+    attemptSubmit: (id: string | number) => `/attempts/${id}/submit`,
+    /** 上报焦点事件（切屏采集）。 */
+    attemptFocusEvents: (id: string | number) => `/attempts/${id}/focus-events`,
+    /** 心跳。 */
+    attemptHeartbeat: (id: string | number) => `/attempts/${id}/heartbeat`,
+    /** 练习即时反馈。 */
+    attemptFeedback: (id: string | number) => `/attempts/${id}/feedback`,
     /** 监考快照（轮询；2 秒一批）。 */
     monitoring: (id: string | number) => `/exam-sessions/${id}/monitoring`,
     /** 场次负责人：被指派的人看得到这场考试的作答与成绩。 */

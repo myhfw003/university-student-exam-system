@@ -2,6 +2,9 @@
    知行测评 · 学生端考试安排
    --------------------------------------------------------------------------
    对应原型 student.exams：状态徽标矩阵 + 操作按钮 + 考试规则。
+
+   数据来自 `useExamList`：mock 模式读本地内容仓库，HTTP 模式读后端场次，
+   页面只认一种行（`ExamListRow`），不感知当前走的是哪条数据通路。
    ========================================================================== */
 
 import { useMemo, useState } from "react";
@@ -15,22 +18,18 @@ import {
   RuleList,
   SearchInput,
   TagFilter,
-  toast,
 } from "@exam/shared";
 import { useCatalog } from "@exam/shared/mock/catalog";
 import { MULTI_POLICY } from "@exam/shared/engine/scoring";
-import { useStudentStore } from "@/stores/studentStore";
 import { TagChips } from "@/features/shared/TagChips";
-import { useExamSessionStore } from "@/stores/examSessionStore";
-import { useVisibleExams } from "@/features/shared/studentData";
+import { useExamList, useRetakeExam, type ExamListRow } from "./useExamList";
 
 /** 考试安排。 */
 export function ExamListPage() {
   const navigate = useNavigate();
-  const exams = useVisibleExams();
-  const studentId = useStudentStore((state) => state.studentId);
+  const { rows } = useExamList();
+  const retake = useRetakeExam();
   const tags = useCatalog((state) => state.tags);
-  const attempts = useCatalog((state) => state.attempts);
 
   const [keyword, setKeyword] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
@@ -50,29 +49,20 @@ export function ExamListPage() {
 
   const filtered = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
-    return exams.filter((exam) => {
-      if (selected.length > 0 && !exam.tags.some((tagId) => selected.includes(tagId))) return false;
+    return rows.filter((row) => {
+      if (selected.length > 0 && !row.tags.some((tagId) => selected.includes(tagId))) return false;
       if (!kw) return true;
-      const tagNames = exam.tags
+      const tagNames = row.tags
         .map((tagId) => tags.find((t) => t.id === tagId)?.name ?? "")
         .join(" ")
         .toLowerCase();
       return (
-        exam.name.toLowerCase().includes(kw) ||
-        exam.batch.toLowerCase().includes(kw) ||
+        row.name.toLowerCase().includes(kw) ||
+        row.subtitle.toLowerCase().includes(kw) ||
         tagNames.includes(kw)
       );
     });
-  }, [exams, keyword, selected, tags]);
-
-  const attemptMap = useMemo(() => {
-    const map = new Map<string, (typeof attempts)[string]>();
-    for (const attempt of Object.values(attempts)) {
-      if (attempt.studentId !== studentId) continue;
-      map.set(attempt.examId, attempt);
-    }
-    return map;
-  }, [attempts, studentId]);
+  }, [rows, keyword, selected, tags]);
 
   const toggleTag = (tagId: string) => {
     setSelected((prev) => (prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]));
@@ -136,114 +126,9 @@ export function ExamListPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((exam) => {
-                    const attempt = attemptMap.get(exam.id);
-                    const submitted = Boolean(attempt);
-                    const ended = exam.status === "ended";
-
-                    // 状态徽标与操作按钮按「已交卷 × 是否可重考 × 是否已结束」三维取值。
-                    let statusText: string;
-                    let tone: "ok" | "info" | "warn" | "neutral";
-                    if (submitted && !exam.allowRetake) {
-                      statusText = "已交卷";
-                      tone = "ok";
-                    } else if (submitted && exam.allowRetake) {
-                      statusText = "已交卷 · 可重考";
-                      tone = "info";
-                    } else if (!ended) {
-                      statusText = "进行中";
-                      tone = "warn";
-                    } else if (exam.allowRetake) {
-                      statusText = "已结束 · 可补考";
-                      tone = "info";
-                    } else {
-                      statusText = "已结束";
-                      tone = "neutral";
-                    }
-
-                    return (
-                      <tr key={exam.id}>
-                        <td>
-                          <div className="strong">{exam.name}</div>
-                          <div className="text-xs text-3">{exam.batch || "—"}</div>
-                        </td>
-                        <td>
-                          <TagChips tags={exam.tags} />
-                        </td>
-                        <td className="num">{exam.durationMin} 分钟</td>
-                        <td className="num">{exam.totalScore} 分</td>
-                        <td>
-                          <span className="variant-tag">
-                            {exam.plum.mode === "standard"
-                              ? "标准卷"
-                              : exam.plum.mode === "small"
-                                ? "小梅花"
-                                : "大梅花"}
-                          </span>
-                        </td>
-                        <td className="text-3 text-sm">{exam.openAt}</td>
-                        <td>
-                          <Badge tone={tone}>{statusText}</Badge>
-                        </td>
-                        <td className="col-actions">
-                          <div className="row-tight" style={{ justifyContent: "flex-end" }}>
-                            {submitted ? (
-                              <Button
-                                size="sm"
-                                onClick={() => navigate(`/exams/${exam.id}/report`)}
-                              >
-                                查看报告
-                              </Button>
-                            ) : null}
-                            {submitted && exam.allowRetake ? (
-                              <Button
-                                size="sm"
-                                onClick={() => {
-                                  // 重考：清空本次作答与计时，再进入答题页。
-                                  useExamSessionStore.getState().resetForRetake({
-                                    examId: exam.id,
-                                    studentId,
-                                    durationMin: exam.durationMin,
-                                  });
-                                  // 原型 student.js:1836：开启重考后提示。
-                                  toast.ok("已开启重考，成绩按最高分计入");
-                                  navigate(`/exams/${exam.id}`);
-                                }}
-                              >
-                                再考一次
-                              </Button>
-                            ) : null}
-                            {!submitted && !ended ? (
-                              <Button
-                                size="sm"
-                                variant="primary"
-                                onClick={() => navigate(`/exams/${exam.id}`)}
-                              >
-                                进入考试
-                              </Button>
-                            ) : null}
-                            {!submitted && ended && exam.allowRetake ? (
-                              <Button
-                                size="sm"
-                                variant="primary"
-                                onClick={() => navigate(`/exams/${exam.id}`)}
-                              >
-                                进入考试
-                              </Button>
-                            ) : null}
-                            {!submitted && ended ? (
-                              <Button
-                                size="sm"
-                                onClick={() => navigate(`/exams/${exam.id}/report`)}
-                              >
-                                回顾试卷
-                              </Button>
-                            ) : null}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {filtered.map((row) => (
+                    <ExamRow key={row.id} row={row} onRetake={retake} onNavigate={navigate} />
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -267,5 +152,87 @@ export function ExamListPage() {
         </div>
       </section>
     </>
+  );
+}
+
+/** 考试安排的一行：状态徽标与操作按钮按「已交卷 × 是否可重考 × 是否已结束」取值。 */
+function ExamRow({
+  row,
+  onRetake,
+  onNavigate,
+}: {
+  row: ExamListRow;
+  onRetake: (row: ExamListRow) => void;
+  onNavigate: (path: string) => void;
+}) {
+  let statusText: string;
+  let tone: "ok" | "info" | "warn" | "neutral";
+  if (row.submitted && !row.allowRetake) {
+    statusText = "已交卷";
+    tone = "ok";
+  } else if (row.submitted && row.allowRetake) {
+    statusText = "已交卷 · 可重考";
+    tone = "info";
+  } else if (!row.ended) {
+    statusText = "进行中";
+    tone = "warn";
+  } else if (row.allowRetake) {
+    statusText = "已结束 · 可补考";
+    tone = "info";
+  } else {
+    statusText = "已结束";
+    tone = "neutral";
+  }
+
+  return (
+    <tr>
+      <td>
+        <div className="strong">{row.name}</div>
+        <div className="text-xs text-3">{row.subtitle || "—"}</div>
+      </td>
+      <td>
+        <TagChips tags={row.tags} />
+      </td>
+      <td className="num">{row.durationMin} 分钟</td>
+      <td className="num">{row.totalScore > 0 ? `${row.totalScore} 分` : "—"}</td>
+      <td>
+        <span className="variant-tag">
+          {row.mode === "standard" ? "标准卷" : row.mode === "small" ? "小梅花" : "大梅花"}
+        </span>
+      </td>
+      <td className="text-3 text-sm">{row.openAt}</td>
+      <td>
+        <Badge tone={tone}>{statusText}</Badge>
+      </td>
+      <td className="col-actions">
+        <div className="row-tight" style={{ justifyContent: "flex-end" }}>
+          {row.submitted ? (
+            <Button size="sm" onClick={() => onNavigate(`/exams/${row.id}/report`)}>
+              查看报告
+            </Button>
+          ) : null}
+          {row.submitted && row.allowRetake ? (
+            <Button size="sm" onClick={() => onRetake(row)}>
+              再考一次
+            </Button>
+          ) : null}
+          {!row.submitted && !row.ended ? (
+            <Button size="sm" variant="primary" onClick={() => onNavigate(`/exams/${row.id}`)}>
+              进入考试
+            </Button>
+          ) : null}
+          {!row.submitted && row.ended && row.allowRetake ? (
+            <Button size="sm" variant="primary" onClick={() => onNavigate(`/exams/${row.id}`)}>
+              进入考试
+            </Button>
+          ) : null}
+          {!row.submitted && row.ended ? (
+            <Button size="sm" onClick={() => onNavigate(`/exams/${row.id}/report`)}>
+              回顾试卷
+            </Button>
+          ) : null}
+        </div>
+      </td>
+    </tr>
   );
 }
