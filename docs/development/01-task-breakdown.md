@@ -1271,7 +1271,7 @@ P0 基础设施
 | T-P10-01 学生端考试作答（S1+S2） | ✅ 完成 | 后端卷面补 `steps`/`tagIds`/`difficultyTagId`、作答摘要补 `examSessionId`；前端 `attemptApi` 适配层、作答页接后端、上行键换算 |
 | T-P10-02 学生端成绩报告（S3+S4） | ✅ 完成 | 报告页与成绩列表改读 `/attempts/{id}/report` 与 `/my/results`；成绩条目补场次 ID 与开放单 ID |
 | T-P10-03 学生端练习（S5） | ✅ 完成 | `POST /attempts`（practiceAssignmentId）+ `/attempts/{id}/feedback`；练习中心与练习会话都走真实后端 |
-| T-P10-04 学生端错题本与工作台（S6+S7） | ⬜ 未开始 | `/mistakes`、`/dashboard/summary` |
+| T-P10-04 学生端错题本与工作台（S6+S7） | ✅ 完成 | `/mistakes`、`/dashboard/summary`；统计口径一律由服务端给，前端不重算 |
 | T-P10-05 管理端场次（A1+A2+A3） | ⬜ 未开始 | 场次 CRUD、名单、负责人 |
 | T-P10-06 管理端用户与审计（A4+A5+A6） | ⬜ 未开始 | 用户/角色/组织标签、名单导入、审计日志 |
 | T-P10-07 管理端阅卷与监考（A7+A8） | ⬜ 未开始 | 阅卷队列、处置（需先给候选人模型补 `attemptId`） |
@@ -1294,6 +1294,30 @@ P0 基础设施
 - **依赖**：T-P10-01、T-P10-02。
 - **产出**：练习中心与练习作答页在 HTTP 模式下走真实后端。
 - **验收**：练习作答即时反馈与服务端判分一致；练习卷不置换选项。
+
+### T-P10-04 学生端错题本与工作台
+
+- **依赖**：T-P10-01 ~ T-P10-03。
+- **产出**：错题本与学生工作台在 HTTP 模式下走真实后端。
+- **验收**：错题本读服务端的题面与错因；工作台的统计口径与服务端一致。
+
+**T-P10-04 交付说明**
+
+- **前端新增**：`shared/src/api/learningApi.ts`（`/mistakes`、`/mistakes/{id}/redo`、
+  `/mistakes/{id}/resolve`、`/dashboard/summary` 的映射）、
+  `shared/src/domain/learning.ts`（错题与工作台的领域类型）、
+  `student/src/features/mistakes/useMistakeList.ts`、
+  `student/src/features/dashboard/useDashboard.ts`。
+- **统计口径一律由服务端给**：错题分布、学期平均分、待完成练习、推荐练习都在服务端算，
+  前端不重算——两套口径不一致时，学生看到的两套数会对不上。
+- **单题重做**：mock 模式跳伪练习路由；HTTP 模式先 `POST /mistakes/{questionId}/redo`
+  让服务端把单题练习与作答会话开好，再跳练习页（练习页再开会话时服务端返回同一个）。
+- **实测结论**（真实后端）：答错的题进错题本（`wrongCount`、`reasonLabel`、`sourceTypeLabel` 都有）；
+  单题重做返回 `practiceAssignmentId` 与 `attemptId`；
+  工作台返回待完成练习、进行中考试、学期平均分、待订正错题、推荐练习、最近成绩、
+  成绩趋势与错题分布。
+- **要注意的**：错题回流是**异步**的（`ScoreFinalized` 事件走 outbox，由 worker 落本）——
+  交卷后立刻看错题本可能还没这一条，过一拍才有。
 
 **T-P10-03 交付说明**
 

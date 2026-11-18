@@ -182,3 +182,22 @@ HTTP 模式只显示作答原文；这属于接口能力缺口，不是前端映
 
 **口径**：练习的正确答案同样给原题键，前端用卷面的换算表还原成显示字母；
 错题回流由服务端负责，前端不再本地记错题（错题本本身是 T-P10-04）。
+
+### T-P10-04 学生端错题本与工作台（已完成）
+
+**前端接线**
+
+- `shared/src/api/learningApi.ts`：`/mistakes`、`/mistakes/{id}/redo`、`/mistakes/{id}/resolve`、`/dashboard/summary`。
+- `shared/src/domain/learning.ts`：错题与工作台的领域类型。
+- `student/src/features/mistakes/useMistakeList.ts`、`student/src/features/dashboard/useDashboard.ts`。
+
+**实测结论（真实后端）**
+
+| 环节 | 结果 |
+|---|---|
+| 错题本 | 题面、题型、错因（`单选错选`）、错次、来源（练习 / 考试）都有 |
+| 单题重做 | 返回 `practiceAssignmentId` 与 `attemptId`——服务端把单题练习与会话开好了 |
+| 工作台 | 待完成练习、进行中考试、学期平均分、待订正错题、推荐练习、最近成绩、成绩趋势、错题分布全部有 |
+
+**要注意的**：错题回流是**异步**的——交卷后错题本可能要过一拍才有这一条
+（`ScoreFinalized` 事件走 outbox，由 worker 落本）。前端读错题本是一次性拉取，不做轮询。
