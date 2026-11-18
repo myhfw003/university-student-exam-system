@@ -77,9 +77,28 @@ public sealed class OrganizationTagProvisioner
         return tag;
     }
 
+    /// <summary>
+    /// 把标签名转成编码允许的字符集。
+    /// <para>
+    /// 编码允许字母（含中文）、数字、下划线、点与中划线。班级名里常有空格
+    /// （「计科 2301 班」），这些字符要换成中划线——否则整行名单会因为
+    /// 「编码非法」被跳过，而组织标签本来就该由名单自动创建。
+    /// </para>
+    /// </summary>
+    private static string SanitizeForCode(string name)
+    {
+        var chars = name.Select(ch =>
+            char.IsAsciiLetterOrDigit(ch)
+            || ch is '_' or '.' or '-'
+            || (char.IsLetter(ch) && !char.IsAscii(ch))
+                ? ch
+                : '-');
+        return new string(chars.ToArray());
+    }
+
     private async Task<string> BuildUniqueCodeAsync(string name, CancellationToken cancellationToken)
     {
-        var baseCode = CodePrefix + name;
+        var baseCode = CodePrefix + SanitizeForCode(name);
         if (baseCode.Length > Tag.MaxCodeLength)
         {
             baseCode = baseCode[..Tag.MaxCodeLength];

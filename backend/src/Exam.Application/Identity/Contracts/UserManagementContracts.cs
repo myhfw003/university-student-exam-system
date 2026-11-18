@@ -19,12 +19,22 @@ public sealed record UserDetailDto(
     IReadOnlyList<long> RoleIds,
     IReadOnlyList<string> Permissions);
 
+/// <summary>
+/// 用户的组织归属摘要。
+/// <para>与用户条目平行返回：管理端列表要展示每个人的组织标签与完整路径。</para>
+/// </summary>
+public sealed record UserOrganizationSummaryDto(
+    long UserId,
+    IReadOnlyList<long> TagIds,
+    string? OrganizationPath);
+
 /// <summary>分页的用户列表。</summary>
 public sealed record UserListResponse(
     IReadOnlyList<UserSummaryDto> Items,
     int Total,
     int Page,
-    int Size);
+    int Size,
+    IReadOnlyList<UserOrganizationSummaryDto> Organizations);
 
 /// <summary>角色视图。</summary>
 public sealed record RoleDto(

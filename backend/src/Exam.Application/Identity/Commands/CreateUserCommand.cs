@@ -153,7 +153,7 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, UserD
                 user.DisplayName,
                 user.Email,
                 user.Phone,
-                user.Status.ToString(),
+                user.Status.ToStorage(),
                 user.MustChangePassword,
                 roleCodes,
                 user.CreatedAt,

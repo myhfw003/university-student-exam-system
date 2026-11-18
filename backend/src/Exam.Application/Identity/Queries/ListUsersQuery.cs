@@ -2,6 +2,7 @@ using Exam.Application.Common.Attributes;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
 using Exam.Application.Identity.Contracts;
+using Exam.Application.Identity.Services;
 using Exam.Domain.Identity;
 using Exam.Domain.SharedKernel.Exceptions;
 using MediatR;
@@ -24,12 +25,18 @@ public sealed class ListUsersHandler : IRequestHandler<ListUsersQuery, UserListR
     private readonly IUserRepository _users;
     private readonly IUserRoleRepository _userRoles;
     private readonly IRoleRepository _roles;
+    private readonly UserOrganizationResolver _organization;
 
-    public ListUsersHandler(IUserRepository users, IUserRoleRepository userRoles, IRoleRepository roles)
+    public ListUsersHandler(
+        IUserRepository users,
+        IUserRoleRepository userRoles,
+        IRoleRepository roles,
+        UserOrganizationResolver organization)
     {
         _users = users;
         _userRoles = userRoles;
         _roles = roles;
+        _organization = organization;
     }
 
     public async Task<UserListResponse> Handle(ListUsersQuery request, CancellationToken cancellationToken)
@@ -48,7 +55,22 @@ public sealed class ListUsersHandler : IRequestHandler<ListUsersQuery, UserListR
             items.Add(await ToSummaryAsync(user, cancellationToken));
         }
 
-        return new UserListResponse(items, total, page, size);
+        // 组织归属一次批量推导：列表要展示每个人的组织标签与完整路径。
+        var organizations = await _organization.ResolveManyAsync(
+            users.Select(u => u.Id).ToList(),
+            cancellationToken);
+
+        return new UserListResponse(
+            items,
+            total,
+            page,
+            size,
+            organizations.Values
+                .Select(o => new UserOrganizationSummaryDto(
+                    o.UserId,
+                    o.Tags.Select(t => t.Id).ToList(),
+                    o.OrganizationPath))
+                .ToList());
     }
 
     internal static UserStatus? ParseStatus(string? status)
@@ -86,7 +108,7 @@ public sealed class ListUsersHandler : IRequestHandler<ListUsersQuery, UserListR
             user.DisplayName,
             user.Email,
             user.Phone,
-            user.Status.ToString(),
+            user.Status.ToStorage(),
             user.MustChangePassword,
             roleCodes,
             user.CreatedAt,

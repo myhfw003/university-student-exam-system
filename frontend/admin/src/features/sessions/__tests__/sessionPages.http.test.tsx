@@ -17,7 +17,7 @@ const api = {
   loadSessionParticipants: vi.fn(),
   loadSessionGrades: vi.fn(),
   loadOrgTags: vi.fn(),
-  loadUsers: vi.fn(),
+  loadUserPage: vi.fn(),
   publishAdminSession: vi.fn(),
   cancelAdminSession: vi.fn(),
   closeAdminSession: vi.fn(),
@@ -107,9 +107,12 @@ describe("管理端场次页面 · HTTP 模式", () => {
     api.loadOrgTags.mockResolvedValue([
       { id: "5", code: "cs-2024", name: "计算机 2024 级", parentId: null },
     ]);
-    api.loadUsers.mockResolvedValue([
-      { id: "101", username: "s101", displayName: "林知遥", status: "Active", roles: ["student"] },
-    ]);
+    api.loadUserPage.mockResolvedValue({
+      items: [
+        { id: "101", username: "s101", displayName: "林知遥", status: "active", roles: ["student"] },
+      ],
+      total: 1,
+    });
   });
 
   it("列表页显示后端场次与名单纳入方式", async () => {

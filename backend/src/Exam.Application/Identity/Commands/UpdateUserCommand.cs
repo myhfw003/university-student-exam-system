@@ -110,7 +110,7 @@ public sealed class UpdateUserHandler : IRequestHandler<UpdateUserCommand, UserD
             new Dictionary<string, object?>
             {
                 ["displayName"] = user.DisplayName,
-                ["status"] = user.Status.ToString(),
+                ["status"] = user.Status.ToStorage(),
             },
             cancellationToken);
 
@@ -134,7 +134,7 @@ public sealed class UpdateUserHandler : IRequestHandler<UpdateUserCommand, UserD
                 user.DisplayName,
                 user.Email,
                 user.Phone,
-                user.Status.ToString(),
+                user.Status.ToStorage(),
                 user.MustChangePassword,
                 roleCodes,
                 user.CreatedAt,

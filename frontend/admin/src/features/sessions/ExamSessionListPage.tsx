@@ -39,10 +39,10 @@ import {
   cancelAdminSession,
   isBackendEnabled,
   loadOrgTags,
-  loadUsers,
+  loadUserPage,
   publishAdminSession,
 } from "@exam/shared/api";
-import type { OrgTag, UserSummary } from "@exam/shared/domain/admin";
+import type { AdminUser, OrgTag } from "@exam/shared/domain/admin";
 import type { ExamSessionStatus } from "@exam/shared/domain/types";
 import { Icon } from "@/app/Icon";
 import { SessionStatusBadge } from "../shared/bits";
@@ -83,7 +83,7 @@ export function ExamSessionListPage() {
 
   // HTTP 模式的名单素材：组织维度标签与用户清单。
   const [orgTags, setOrgTags] = useState<OrgTag[]>([]);
-  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
 
   useEffect(() => {
     if (!remote) return;
@@ -91,7 +91,9 @@ export function ExamSessionListPage() {
     void (async () => {
       const [tags, userList] = await Promise.all([
         loadOrgTags().catch(() => []),
-        loadUsers().catch(() => []),
+        loadUserPage({ size: 200 })
+          .then((page) => page.items)
+          .catch(() => []),
       ]);
       if (cancelled) return;
       setOrgTags(tags);

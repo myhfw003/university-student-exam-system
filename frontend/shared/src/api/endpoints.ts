@@ -70,6 +70,8 @@ export const ENDPOINTS = {
   admin: {
     users: "/users",
     resetPassword: (id: string | number) => `/users/${id}/reset-password`,
+    /** 用户的组织归属标签。 */
+    userTags: (id: string | number) => `/users/${id}/tags`,
     roles: "/roles",
     permissions: "/permissions",
     auditLogs: "/audit-logs",

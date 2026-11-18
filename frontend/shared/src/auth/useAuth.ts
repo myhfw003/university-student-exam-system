@@ -218,9 +218,9 @@ export const useAuth = create<AuthState>((set, get) => ({
     if (!next || next.length < 8) return { ok: false, message: "新密码至少 8 位" };
     if (get().mode === "http") {
       try {
+        // 后端一律置「必须改密」，这里只需要给新密码。
         await httpClient.post(ENDPOINTS.admin.resetPassword(userId), {
           newPassword: next,
-          mustChangeOnNextLogin: true,
         });
         return { ok: true };
       } catch (error) {

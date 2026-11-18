@@ -120,7 +120,7 @@ public sealed class AssignUserRolesHandler : IRequestHandler<AssignUserRolesComm
                 user.DisplayName,
                 user.Email,
                 user.Phone,
-                user.Status.ToString(),
+                user.Status.ToStorage(),
                 user.MustChangePassword,
                 roleCodes,
                 user.CreatedAt,

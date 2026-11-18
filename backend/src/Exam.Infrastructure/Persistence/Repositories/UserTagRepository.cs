@@ -23,6 +23,21 @@ public sealed class UserTagRepository : IUserTagRepository
             .Where(x => x.UserId == userId)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<UserTag>> GetByUsersAsync(
+        IReadOnlyCollection<long> userIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (userIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await _db.UserTags
+            .AsNoTracking()
+            .Where(x => userIds.Contains(x.UserId))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<long>> GetUserIdsByTagAsync(
         long tagId,
         CancellationToken cancellationToken = default) =>

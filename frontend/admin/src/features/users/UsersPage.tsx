@@ -5,6 +5,8 @@
 
    账号 = 账号 + 密码（不限学号），角色权限取并集。
    组织归属用**组织维度标签**表达，不存独立字段（FR-IAM-04）。
+
+   数据通路见 `useAdminUsers.ts`：mock 与真实后端各一份，页面只认统一形状。
    ========================================================================== */
 
 import { useMemo, useState } from "react";
@@ -24,34 +26,29 @@ import {
   toast,
   useAuth,
 } from "@exam/shared";
+import { isBackendEnabled } from "@exam/shared/api";
 import {
-  USER_ROLE_LABEL,
-  USER_STATUS_LABEL,
-  setUserRoles,
-  updateUser,
-  useAdminOps,
-  writeAudit,
-} from "@exam/shared/mock/adminOps";
-import {
-  importRoster,
   parseRosterCsv,
   validateRosterRows,
   type RosterImportResult,
   type RosterPreviewRow,
 } from "@exam/shared/mock/roster";
-import type { AppUser, UserRole } from "@exam/shared/domain/types";
 import { Icon } from "@/app/Icon";
+import {
+  importRosterFile,
+  useAdminOrgTags,
+  useAdminRoles,
+  useAdminUserActions,
+  useAdminUserList,
+  writeUserAudit,
+  type AdminUserRow,
+} from "./useAdminUsers";
 
-const ALL_ROLES: UserRole[] = [
-  "system_admin",
-  "content_admin",
-  "author_teacher",
-  "grader_teacher",
-  "student",
-  "general_user",
-];
+/** 教职类角色码（统计用）。 */
+const STAFF_ROLE_CODES = ["author_teacher", "grader_teacher", "content_admin", "system_admin"];
 
-const ROLE_TONE: Record<UserRole, "primary" | "info" | "ok" | "warn" | "neutral"> = {
+/** 角色徽标色调。 */
+const ROLE_TONE: Record<string, "primary" | "info" | "ok" | "warn" | "neutral"> = {
   system_admin: "primary",
   content_admin: "info",
   author_teacher: "ok",
@@ -62,66 +59,71 @@ const ROLE_TONE: Record<UserRole, "primary" | "info" | "ok" | "warn" | "neutral"
 
 /** 角色文本（角色码或中文名）→ 中文名；无法识别时原样返回。 */
 function roleLabelOf(text: string): string {
-  const hit = ALL_ROLES.find((role) => role === text || USER_ROLE_LABEL[role] === text);
-  return hit ? USER_ROLE_LABEL[hit] : text;
+  return text;
 }
 
 /** 用户管理页。 */
 export function UsersPage() {
-  const users = useAdminOps((state) => state.users);
-  // 组织维度标签已进 store（名单导入会按层级自动创建），这里要读最新的。
-  const orgTags = useAdminOps((state) => state.orgTags);
+  const remote = isBackendEnabled();
+
   const [keyword, setKeyword] = useState("");
-  const [roleFilter, setRoleFilter] = useState<"all" | UserRole>("all");
-  const [editing, setEditing] = useState<AppUser | null>(null);
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [editing, setEditing] = useState<AdminUserRow | null>(null);
   // 重置密码（FR-IAM-03）：管理员重置任意用户密码并强制其下次登录修改。
-  const [resetTarget, setResetTarget] = useState<AppUser | null>(null);
+  const [resetTarget, setResetTarget] = useState<AdminUserRow | null>(null);
   const [resetPassword, setResetPassword] = useState("");
   const [resetError, setResetError] = useState<string | null>(null);
   // 名单批量导入（FR-IAM-05）。
   const [importOpen, setImportOpen] = useState(false);
   const [rosterRows, setRosterRows] = useState<RosterPreviewRow[]>([]);
+  const [rosterFile, setRosterFile] = useState<File | null>(null);
   const [rosterError, setRosterError] = useState<string | null>(null);
   const [rosterResult, setRosterResult] = useState<RosterImportResult | null>(null);
   const [rosterFileName, setRosterFileName] = useState("");
+  const [importing, setImporting] = useState(false);
+
   const doResetPassword = useAuth((state) => state.resetPassword);
 
-  const filtered = useMemo(() => {
-    return users.filter((u) => {
-      if (roleFilter !== "all" && !u.roles.includes(roleFilter)) return false;
-      if (keyword) {
-        const kw = keyword.toLowerCase();
-        if (!`${u.account} ${u.name} ${u.email}`.toLowerCase().includes(kw)) return false;
-      }
-      return true;
-    });
-  }, [users, keyword, roleFilter]);
+  const { roles, byCode } = useAdminRoles();
+  const orgTags = useAdminOrgTags();
 
-  const activeCount = users.filter((u) => u.status === "active").length;
-  const generalCount = users.filter((u) => u.roles.includes("general_user")).length;
-  const staffCount = users.filter((u) =>
-    u.roles.some((r) => r === "author_teacher" || r === "grader_teacher" || r === "content_admin" || r === "system_admin"),
+  // 角色过滤传给服务端的是**角色 ID**；页面上的下拉用的是角色码。
+  const roleId = roleFilter === "all" ? "" : (byCode[roleFilter]?.id ?? "");
+  const roleNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const role of roles) map[role.code] = role.name;
+    return map;
+  }, [roles]);
+  const { rows, total, refresh } = useAdminUserList({ keyword, roleId, roleNames, orgTags });
+
+  const { setRoles, setStatus, setOrgTags } = useAdminUserActions({
+    roleIdOf: (code) => byCode[code]?.id ?? "",
+    refresh,
+    audit: (userId, summary) => writeUserAudit(userId, summary),
+  });
+
+  const activeCount = rows.filter((u) => u.status === "active").length;
+  const staffCount = rows.filter((u) =>
+    u.roles.some((code) => STAFF_ROLE_CODES.includes(code)),
   ).length;
+  const studentCount = rows.filter((u) => u.roles.includes("student")).length;
+  const generalCount = rows.filter((u) => u.roles.includes("general_user")).length;
 
-  const toggleRole = (user: AppUser, role: UserRole) => {
+  const toggleRole = async (user: AdminUserRow, role: string) => {
     const next = user.roles.includes(role)
       ? user.roles.filter((r) => r !== role)
       : [...user.roles, role];
-    const result = setUserRoles(user.id, next);
-    if (!result.ok) {
-      toast.error(result.message ?? "角色变更失败");
-      return;
+    try {
+      await setRoles(user.id, next);
+      setEditing({
+        ...user,
+        roles: next,
+        roleLabels: next.map((code) => byCode[code]?.name ?? code),
+      });
+      toast.ok("角色已更新，变更即时生效");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "角色变更失败");
     }
-    writeAudit({
-      operator: "陈砚之",
-      action: "user.role_changed",
-      targetType: "user",
-      targetId: user.id,
-      summary: `为「${user.name}」调整角色：${user.roles.map((r) => USER_ROLE_LABEL[r]).join("、")} → ${next.map((r) => USER_ROLE_LABEL[r]).join("、")}`,
-      ip: "10.12.0.21",
-      userAgent: "Chrome 131 / Windows",
-    });
-    toast.ok("角色已更新，变更即时生效");
   };
 
   const handleResetPassword = async () => {
@@ -132,15 +134,6 @@ export function UsersPage() {
       setResetError(result.message ?? "重置失败，请重试");
       return;
     }
-    writeAudit({
-      operator: "陈砚之",
-      action: "user.password_reset",
-      targetType: "user",
-      targetId: resetTarget.id,
-      summary: `重置「${resetTarget.name}」的密码，强制下次登录修改`,
-      ip: "10.12.0.21",
-      userAgent: "Chrome 131 / Windows",
-    });
     toast.ok("密码已重置");
     setResetTarget(null);
     setResetPassword("");
@@ -156,6 +149,7 @@ export function UsersPage() {
       const parsed = parseRosterCsv(text);
       const checked = validateRosterRows(parsed);
       setRosterRows(checked);
+      setRosterFile(file);
       setRosterFileName(file.name);
       const bad = checked.filter((row) => row.error).length;
       toast.ok(
@@ -165,44 +159,46 @@ export function UsersPage() {
       );
     } catch (error) {
       setRosterRows([]);
+      setRosterFile(null);
       setRosterError(error instanceof Error ? error.message : "文件解析失败");
     }
   };
 
   /** 执行导入：逐行写入，失败行跳过并给出明细。 */
-  const handleRosterImport = (): void => {
-    if (rosterRows.length === 0) {
+  const handleRosterImport = async (): Promise<void> => {
+    if (!rosterFile) {
       toast.error("请先选择名单文件");
       return;
     }
-    const result = importRoster(rosterRows);
-    setRosterResult(result);
-    if (result.failed > 0) {
-      toast.error(`导入完成：成功 ${result.succeeded} 行，失败 ${result.failed} 行`);
-    } else {
-      toast.ok(`导入完成：成功 ${result.succeeded} 行`);
-    }
-    setRosterRows([]);
-    setRosterFileName("");
-  };
-
-  const toggleStatus = (user: AppUser) => {
-    const next = user.status === "active" ? "disabled" : "active";
-    const result = updateUser(user.id, { status: next });
-    if (!result.ok) {
-      toast.error(result.message ?? "状态更新失败");
+    if (!remote && rosterRows.length === 0) {
+      toast.error("没有可导入的数据行");
       return;
     }
-    writeAudit({
-      operator: "陈砚之",
-      action: "user.update",
-      targetType: "user",
-      targetId: user.id,
-      summary: `将「${user.name}」置为${USER_STATUS_LABEL[next]}`,
-      ip: "10.12.0.21",
-      userAgent: "Chrome 131 / Windows",
-    });
-    toast.ok(next === "active" ? "账号已启用" : "账号已停用");
+    setImporting(true);
+    try {
+      const result = await importRosterFile(rosterFile, rosterRows);
+      setRosterResult(result);
+      if (result.failed > 0) {
+        toast.error(`导入完成：成功 ${result.succeeded} 行，失败 ${result.failed} 行`);
+      } else {
+        toast.ok(`导入完成：成功 ${result.succeeded} 行`);
+      }
+      refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "导入失败");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const toggleStatus = async (user: AdminUserRow) => {
+    const next = user.status === "active" ? "disabled" : "active";
+    try {
+      await setStatus(user, next);
+      toast.ok(next === "active" ? "账号已启用" : "账号已停用");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "状态更新失败");
+    }
   };
 
   return (
@@ -219,16 +215,36 @@ export function UsersPage() {
       />
 
       <div className="stat-row" style={{ marginBottom: "var(--sp-4)" }}>
-        <Stat label="账号总数" value={users.length} unit="个" hint={`${activeCount} 个正常`} />
-        <Stat label="教职账号" value={staffCount} unit="个" hint="出题 / 阅卷 / 管理" />
-        <Stat label="在校学生" value={users.filter((u) => u.roles.includes("student")).length} unit="个" hint="挂组织标签" />
-        <Stat label="社会人士" value={generalCount} unit="个" hint="不依赖组织归属" />
+        <Stat
+          label="账号总数"
+          value={total}
+          unit="个"
+          hint={remote ? "服务端统计" : `${activeCount} 个正常`}
+        />
+        <Stat
+          label="教职账号"
+          value={staffCount}
+          unit="个"
+          hint={remote ? "本页" : "出题 / 阅卷 / 管理"}
+        />
+        <Stat
+          label="在校学生"
+          value={studentCount}
+          unit="个"
+          hint={remote ? "本页" : "挂组织标签"}
+        />
+        <Stat
+          label="社会人士"
+          value={generalCount}
+          unit="个"
+          hint={remote ? "本页" : "不依赖组织归属"}
+        />
       </div>
 
       <section className="card">
         <div className="card-head">
           <h2 className="card-title">账号清单</h2>
-          <span className="text-sm text-3">{filtered.length} 个账号</span>
+          <span className="text-sm text-3">{rows.length} 个账号</span>
         </div>
         <div className="card-body">
           <div className="row" style={{ marginBottom: "var(--sp-3)" }}>
@@ -238,7 +254,7 @@ export function UsersPage() {
               onChange={setRoleFilter}
               options={[
                 { value: "all" as const, label: "全部" },
-                ...ALL_ROLES.map((r) => ({ value: r, label: USER_ROLE_LABEL[r] })),
+                ...roles.map((role) => ({ value: role.code, label: role.name })),
               ]}
             />
             <SearchInput
@@ -268,7 +284,7 @@ export function UsersPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
+                {rows.length === 0 ? (
                   <tr>
                     <td colSpan={7}>
                       <div className="empty">
@@ -277,7 +293,7 @@ export function UsersPage() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((u) => (
+                  rows.map((u) => (
                     <tr key={u.id}>
                       <td>
                         <div className="strong" style={{ fontWeight: 500 }}>
@@ -288,9 +304,9 @@ export function UsersPage() {
                       <td>{u.name}</td>
                       <td>
                         <div className="row-tight">
-                          {u.roles.map((r) => (
-                            <Badge key={r} tone={ROLE_TONE[r]}>
-                              {USER_ROLE_LABEL[r]}
+                          {u.roles.map((code) => (
+                            <Badge key={code} tone={ROLE_TONE[code] ?? "neutral"}>
+                              {byCode[code]?.name ?? roleLabelOf(code)}
                             </Badge>
                           ))}
                         </div>
@@ -300,9 +316,9 @@ export function UsersPage() {
                           <span className="text-3 text-sm">—</span>
                         ) : (
                           <div className="row-tight">
-                            {u.orgTags.map((tagId) => (
-                              <span className="tag-chip is-organization" key={tagId}>
-                                {orgTags.find((t) => t.id === tagId)?.name ?? tagId}
+                            {u.orgTags.map((tag) => (
+                              <span className="tag-chip is-organization" key={tag.id}>
+                                {tag.name}
                               </span>
                             ))}
                           </div>
@@ -311,7 +327,7 @@ export function UsersPage() {
                       <td>
                         <div className="row-tight">
                           <Badge tone={u.status === "active" ? "ok" : "neutral"}>
-                            {USER_STATUS_LABEL[u.status]}
+                            {u.status === "active" ? "正常" : u.status === "locked" ? "已锁定" : "已停用"}
                           </Badge>
                           {u.mustChangePassword ? (
                             <Badge tone="warn">待改密码</Badge>
@@ -333,7 +349,7 @@ export function UsersPage() {
                         >
                           重置密码
                         </Button>{" "}
-                        <Button size="sm" variant="danger" onClick={() => toggleStatus(u)}>
+                        <Button size="sm" variant="danger" onClick={() => void toggleStatus(u)}>
                           {u.status === "active" ? "停用" : "启用"}
                         </Button>
                       </td>
@@ -388,6 +404,7 @@ export function UsersPage() {
         onClose={() => {
           setImportOpen(false);
           setRosterRows([]);
+          setRosterFile(null);
           setRosterError(null);
           setRosterResult(null);
           setRosterFileName("");
@@ -400,6 +417,7 @@ export function UsersPage() {
               onClick={() => {
                 setImportOpen(false);
                 setRosterRows([]);
+                setRosterFile(null);
                 setRosterError(null);
                 setRosterResult(null);
                 setRosterFileName("");
@@ -409,10 +427,10 @@ export function UsersPage() {
             </Button>
             <Button
               variant="primary"
-              disabled={rosterRows.length === 0 || rosterResult !== null}
-              onClick={handleRosterImport}
+              disabled={rosterFile === null || rosterResult !== null || importing}
+              onClick={() => void handleRosterImport()}
             >
-              确认导入
+              {importing ? "导入中…" : "确认导入"}
             </Button>
           </>
         }
@@ -557,23 +575,23 @@ export function UsersPage() {
               账号 <span className="mono">{editing.account}</span> · 勾选即生效，权限按并集计算。
             </p>
             <div className="grid-2">
-              {ALL_ROLES.map((role) => (
-                <label className="checkline" key={role}>
+              {roles.map((role) => (
+                <label className="checkline" key={role.code}>
                   <input
                     type="checkbox"
-                    checked={editing.roles.includes(role)}
-                    onChange={() => toggleRole(editing, role)}
+                    checked={editing.roles.includes(role.code)}
+                    onChange={() => void toggleRole(editing, role.code)}
                   />
                   <span className="checkline-text">
-                    {USER_ROLE_LABEL[role]}
+                    {role.name}
                     <span className="checkline-hint">
-                      {role === "system_admin"
+                      {role.code === "system_admin"
                         ? "拥有全部权限"
-                        : role === "general_user"
+                        : role.code === "general_user"
                           ? "面向社会人士，不依赖组织归属"
-                          : role === "student"
+                          : role.code === "student"
                             ? "可参加考试与练习，查看自己的成绩与错题本"
-                            : "按权限矩阵授予"}
+                            : role.description || "按权限矩阵授予"}
                     </span>
                   </span>
                 </label>
@@ -584,20 +602,22 @@ export function UsersPage() {
                 <SelectInput
                   id="user-org-tag"
                   aria-label="组织归属标签"
-                  value={editing.orgTags[0] ?? ""}
+                  value={editing.orgTags[0]?.id ?? ""}
                   onChange={(event) => {
                     const value = event.target.value;
-                    updateUser(editing.id, { orgTags: value ? [value] : [] });
-                    writeAudit({
-                      operator: "陈砚之",
-                      action: "user.tag_changed",
-                      targetType: "user",
-                      targetId: editing.id,
-                      summary: `为「${editing.name}」调整组织标签`,
-                      ip: "10.12.0.21",
-                      userAgent: "Chrome 131 / Windows",
+                    const tagIds = value ? [value] : [];
+                    void setOrgTags(editing.id, tagIds).then(() => {
+                      setEditing({
+                        ...editing,
+                        orgTags: tagIds.map((id) => ({
+                          id,
+                          name: orgTags.find((tag) => tag.id === id)?.name ?? id,
+                        })),
+                      });
+                      toast.ok("组织归属已更新");
+                    }).catch((error: unknown) => {
+                      toast.error(error instanceof Error ? error.message : "组织标签更新失败");
                     });
-                    setEditing({ ...editing, orgTags: value ? [value] : [] });
                   }}
                 >
                   <option value="">不挂组织标签（社会人士）</option>

@@ -140,7 +140,10 @@ export function createHttpClient(config: HttpClientConfig = {}) {
       ...config.headers,
       ...options.headers,
     };
-    if (options.body !== undefined && headers["Content-Type"] === undefined) {
+    // FormData 由浏览器自己带 multipart boundary，不能手动设 Content-Type。
+    const isFormData =
+      typeof FormData !== "undefined" && options.body instanceof FormData;
+    if (options.body !== undefined && headers["Content-Type"] === undefined && !isFormData) {
       headers["Content-Type"] = "application/json";
     }
     if (options.auth !== false) {
@@ -157,7 +160,9 @@ export function createHttpClient(config: HttpClientConfig = {}) {
         credentials: "include",
       };
       if (options.body !== undefined) {
-        init.body = typeof options.body === "string" ? options.body : JSON.stringify(options.body);
+        if (typeof options.body === "string") init.body = options.body;
+        else if (isFormData) init.body = options.body as BodyInit;
+        else init.body = JSON.stringify(options.body);
       }
       return await fetch(buildUrl(baseUrl, path, options.query), init);
     } catch (error) {

@@ -7,14 +7,19 @@ export * from "./types";
 
 /* 管理域：场次、名单、成绩与组织标签。 */
 export {
+  type AdminAuditLog,
+  type AdminRole,
   type AdminSessionDetail,
   type AdminSessionRules,
   type AdminSessionSummary,
+  type AdminUser,
+  type AdminUserImportResult,
+  type AdminUserOrganization,
+  type AdminUserStatus,
   type OrgTag,
   type SessionAssignment,
   type SessionGrade,
   type SessionParticipant,
-  type UserSummary,
 } from "./admin";
 
 /* 学习域：错题本与学生工作台（design 03 §6）。 */

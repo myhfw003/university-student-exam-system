@@ -78,10 +78,23 @@ export {
   type ExamSessionSummary,
 } from "./examSessionApi";
 export {
+  assignUserRoles,
+  assignUserTags,
   countUsers,
+  importUserRoster,
+  loadAdminUser,
+  loadAuditLogs,
   loadOrgTags,
-  loadUsers,
+  loadRoles,
+  loadUserOrganization,
+  loadUserPage,
+  revokeUserRole,
+  toAdminUser,
+  toUserStatus,
+  updateAdminUser,
+  type AdminAuditPage,
   type AdminClient,
+  type AdminUserPage,
 } from "./adminApi";
 export {
   loadDashboardSummary,
