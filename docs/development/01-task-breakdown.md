@@ -1268,7 +1268,7 @@ P0 基础设施
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
-| T-P10-01 学生端考试作答（S1+S2） | 🔄 进行中 | 后端卷面补 `steps`/`tagIds`/`difficultyTagId`、作答摘要补 `examSessionId`；前端 `attemptApi` 适配层、作答页接后端、上行键换算 |
+| T-P10-01 学生端考试作答（S1+S2） | ✅ 完成 | 后端卷面补 `steps`/`tagIds`/`difficultyTagId`、作答摘要补 `examSessionId`；前端 `attemptApi` 适配层、作答页接后端、上行键换算 |
 | T-P10-02 学生端成绩报告（S3+S4） | ⬜ 未开始 | 报告页与成绩列表改读 `/attempts/{id}/report` 与 `/my/results` |
 | T-P10-03 学生端练习（S5） | ⬜ 未开始 | `POST /attempts`（practiceAssignmentId）+ `/attempts/{id}/feedback` |
 | T-P10-04 学生端错题本与工作台（S6+S7） | ⬜ 未开始 | `/mistakes`、`/dashboard/summary` |
@@ -1282,6 +1282,21 @@ P0 基础设施
 - **依赖**：P9 全部完成。
 - **产出**：作答页在 HTTP 模式下走真实后端：卷面来自服务端快照置换、截止时间以服务端为准、答案上行前把显示字母换算成原题键、焦点事件与心跳上报、交卷走服务端。
 - **验收**：小梅花卷整卷判分正确（显示字母换算到位）；学生端看不到正确答案与解析；刷新后从服务端恢复答案。
+
+**T-P10-01 交付说明**
+
+- **后端契约补了三处**（否则前端接不上）：作答卷面补 `Steps`（综合题步骤，不含参考答案与关键词）、
+  `TagIds` 与 `DifficultyTagId`（题头标签片）；作答摘要补 `ExamSessionId`（把作答对应回场次）。
+- **前端新增**：`shared/src/api/attemptApi.ts`（作答会话的读写与 DTO 映射）、
+  `shared/src/engine/paper.ts` 的 `buildPaperFromSurface`（服务端卷面 → 答题者卷面）、
+  `student/src/features/exam-taking/useRemoteExamSession.ts`（HTTP 模式的考试会话）、
+  `student/src/features/exam/useExamList.ts`（HTTP 模式的考试安排列表）。
+- **选择键口径是这一轮最要紧的一件事**：卷面上给考生看的是显示字母，服务端判分用的是原题键，
+  梅花卷置换过选项，两者不是一回事。换算统一放在 `api/answerPayload.ts`，上行换原题键、对账换回显示字母。
+  真实后端实测：小梅花卷换算后 10/10，不换算 0/10。
+- **顺带修掉一个真 bug**：同步引擎的落盘防抖提前清空了待成批条目，3 秒上行防抖因此永远无批可发，
+  答案只落本地传不到服务器。现在落盘只写盘，成批与上行交给 `flush`，单批按 50 条上限拆批。
+- **还没接后端**：成绩报告页与成绩列表（T-P10-02）。交卷后跳转报告页会看到「成绩报告尚未接入」的空状态。
 
 ---
 

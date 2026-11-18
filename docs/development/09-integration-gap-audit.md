@@ -101,3 +101,38 @@
 | 7 | 管理端阅卷与监考（A7+A8） | 阅卷队列、处置（需补 attemptId） |
 | 8 | 管理端内容生产（A9+A10+A11） | 题库、题目、组卷、标签 |
 | 9 | 管理端统计与概览（A12+A13） | 成绩分析、看板拼装 |
+
+## 6. 推进记录
+
+### T-P10-01 学生端考试作答（已完成）
+
+**后端契约补齐**
+
+| 补什么 | 为什么 |
+|---|---|
+| `AttemptQuestionDto.Steps` | 综合题没有步骤，学生在卷面上无从作答（只给题干与分值，**不含参考答案与关键词**） |
+| `AttemptQuestionDto.TagIds` / `DifficultyTagId` | 题头的领域/知识点/难度片要靠标签 ID 渲染 |
+| `AttemptSummaryDto.ExamSessionId` | 前端要靠它把「我的作答」对应回「考试安排」里的某一场 |
+
+**前端接线**
+
+- `shared/src/api/attemptApi.ts`：开始作答、取会话、交卷、焦点事件、心跳、我的作答列表（DTO → 前端口径的映射都在这一层）。
+- `shared/src/api/answerPayload.ts`：**选择键口径换算**——上行时显示字母 → 原题键，对账回填时原题键 → 显示字母。
+- `shared/src/engine/paper.ts` 的 `buildPaperFromSurface`：服务端卷面 → 答题者卷面（按位置重编号显示字母，记下 `toOriginal`/`fromOriginal`）。
+- `student/src/features/exam-taking/useRemoteExamSession.ts`：HTTP 模式的考试会话（服务端卷面、服务端截止时间、服务端切屏计数、服务端交卷）。
+- `student/src/features/exam/useExamList.ts`：HTTP 模式的考试安排列表（场次 + 我的作答 + 内容目录里的试卷信息）。
+
+**实测结论（真实后端，小梅花卷）**
+
+服务端给的选项顺序是置换过的（例：`[C(TCP), B(以太网帧), A(IP), D(ARP)]`），正确项原题键 `C` 在卷面上的显示字母是 `A`：
+
+| 上行内容 | 客观题得分 |
+|---|---|
+| 原题键 `C`（换算后） | 10 / 10 |
+| 显示字母 `A`（不换算） | 0 / 10 |
+
+**顺带修掉的一个真 bug**：`SyncEngine` 的落盘防抖（300ms）把「待成批条目」提前清空了，
+3 秒后的上行防抖因此永远无批可发——答案只落在 L2（IndexedDB），传不到服务器。
+现在落盘只写盘不清条目，成批与上行交给 `flush`；单批按服务端上限 50 条拆批。
+
+**仍未接后端**：成绩报告页与成绩列表（T-P10-02）。交卷后跳转到报告页会看到「成绩报告尚未接入」的空状态。
