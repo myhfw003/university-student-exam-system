@@ -2,9 +2,13 @@
    知行测评 · 管理端场次详情
    --------------------------------------------------------------------------
    展示场次配置、防作弊策略、名单与考生状态，并提供监考入口。
+
+   数据来源：
+   - 场次配置 / 策略 / 名单 / 成绩：`useAdminSessionDetail`（mock 与 HTTP 各一份）；
+   - 考生实时状态：`useProctorFeed`（HTTP 模式轮询真实监考快照）。
    ========================================================================== */
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Badge,
@@ -17,53 +21,39 @@ import {
   downloadCsv,
   toast,
 } from "@exam/shared";
-import {
-  SESSION_STATUS_LABEL,
-  advanceSession,
-  cancelSession,
-  proctorSnapshot,
-  updateSession,
-  useAdminOps,
-  writeAudit,
-} from "@exam/shared/mock/adminOps";
-import { className as classNameOf, getExam, useCatalog } from "@exam/shared/mock/catalog";
+import { SESSION_STATUS_LABEL } from "@exam/shared/mock/adminOps";
 import { Icon } from "@/app/Icon";
+import { useProctorFeed } from "../monitoring/useProctorFeed";
+import { useAdminSessionDetail } from "./useAdminSessions";
 
 /** 场次详情页。 */
 export function ExamSessionDetailPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
-  const sessions = useAdminOps((state) => state.sessions);
-  const students = useCatalog((state) => state.students);
-  const attempts = useCatalog((state) => state.attempts);
-  const records = useCatalog((state) => state.records);
+  const view = useAdminSessionDetail(id);
+  const feed = useProctorFeed(id);
 
   const [maxFocusLoss, setMaxFocusLoss] = useState<number | null>(null);
 
-  const session = useMemo(() => sessions.find((s) => s.id === id), [sessions, id]);
-  const exam = session ? getExam(session.paperId) : undefined;
+  const candidates = feed.candidates;
+  const submitted = candidates.filter((c) => c.status === "submitted" || c.status === "forced_submitted");
+  const answering = candidates.filter((c) => c.status === "answering");
+  const disconnected = candidates.filter((c) => c.status === "disconnected");
+  const focusLossTotal = candidates.reduce((sum, c) => sum + c.focusLossCount, 0);
 
   /** 导出单场次成绩 CSV（FR-AUD-03）。 */
   const handleExportScores = () => {
-    if (!session) return;
     const rows: Array<Array<string | number>> = [
-      ["学号", "姓名", "名单组", "状态", "得分", "满分", "交卷时间"],
+      ["学号", "姓名", "状态", "得分", "满分", "交卷时间"],
     ];
-    for (const studentId of session.roster) {
-      const student = students.find((s) => s.id === studentId);
-      const attempt = Object.values(attempts).find(
-        (a) => a.examId === session.paperId && a.studentId === studentId,
-      );
-      const record = records.find(
-        (r) => r.examId === session.paperId && r.studentId === studentId,
-      );
-      const candidate = proctorSnapshot(session.id, 0).find(
-        (c) => c.studentId === studentId,
-      );
+    const gradeByUser = new Map(view.grades.map((grade) => [grade.userId, grade]));
+    const roster = view.roster.length > 0 ? view.roster : [];
+    for (const entry of roster) {
+      const grade = gradeByUser.get(entry.userId);
+      const candidate = candidates.find((c) => c.studentId === entry.userId);
       rows.push([
-        studentId,
-        student?.name ?? studentId,
-        student ? classNameOf(student.classId) : "",
+        grade?.username || entry.userId,
+        grade?.displayName || entry.displayName || entry.userId,
         candidate?.status === "submitted"
           ? "已交卷"
           : candidate?.status === "forced_submitted"
@@ -73,20 +63,32 @@ export function ExamSessionDetailPage() {
               : candidate?.status === "disconnected"
                 ? "断连中"
                 : "未开始",
-        attempt?.score ?? record?.score ?? "",
-        attempt?.total ?? record?.total ?? "",
-        attempt?.submittedAt ?? record?.date ?? "",
+        grade?.score ?? "",
+        grade?.total ?? "",
+        grade?.submittedAt ?? "",
       ]);
     }
-    downloadCsv(`场次成绩_${exam?.name ?? session.id}.csv`, rows);
+    // 有成绩但不在名单里的（名单口径与成绩口径不一致时）也要导出，否则会丢行。
+    for (const grade of view.grades) {
+      if (roster.some((entry) => entry.userId === grade.userId)) continue;
+      rows.push([
+        grade.username || grade.userId,
+        grade.displayName || grade.userId,
+        "已交卷",
+        grade.score ?? "",
+        grade.total ?? "",
+        grade.submittedAt ?? "",
+      ]);
+    }
+    downloadCsv(`场次成绩_${view.paperName || view.id}.csv`, rows);
     toast.ok("场次成绩已导出");
   };
 
-  if (!session) {
+  if (view.missing) {
     return (
       <PageHead
         title="场次不存在"
-        sub="该场次可能已被删除。"
+        sub="该场次可能已被删除，或你还没有它的查看权限。"
         actions={
           <Button variant="primary" onClick={() => navigate("/exam-sessions")}>
             返回场次列表
@@ -96,76 +98,63 @@ export function ExamSessionDetailPage() {
     );
   }
 
-  const policy = session.policy;
-  const candidates = proctorSnapshot(session.id, 0);
-  const submitted = candidates.filter((c) => c.status === "submitted" || c.status === "forced_submitted");
-  const answering = candidates.filter((c) => c.status === "answering");
-  const disconnected = candidates.filter((c) => c.status === "disconnected");
-  const focusLossTotal = candidates.reduce((sum, c) => sum + c.focusLossCount, 0);
+  const policy = view.policy;
+  const statusLabel = view.statusLabel || SESSION_STATUS_LABEL[view.status];
 
-  const savePolicy = (patch: Partial<typeof policy>) => {
-    const result = updateSession(session.id, { policy: { ...policy, ...patch } });
-    if (!result.ok) {
-      toast.error(result.message ?? "保存失败");
-      return;
+  const savePolicy = async (patch: Partial<typeof policy>) => {
+    try {
+      await view.savePolicy(patch);
+      toast.ok("防作弊策略已更新");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败");
     }
-    toast.ok("防作弊策略已更新");
   };
 
-  const handleAdvance = () => {
-    const result = advanceSession(session.id);
-    if (!result.ok) {
-      toast.error(result.message ?? "状态流转被拒绝");
-      return;
+  const handlePublish = async () => {
+    try {
+      await view.publish();
+      toast.ok("场次已发布，名单已物化");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "发布失败");
     }
-    writeAudit({
-      operator: "陈砚之",
-      action: "session.publish",
-      targetType: "exam_session",
-      targetId: session.id,
-      summary: `场次「${session.name}」状态推进为「${SESSION_STATUS_LABEL[result.status!]}」`,
-      ip: "10.12.0.21",
-      userAgent: "Chrome 131 / Windows",
-    });
-    toast.ok(`场次状态已推进为「${SESSION_STATUS_LABEL[result.status!]}」`);
   };
 
-  const handleCancel = () => {
-    const result = cancelSession(session.id, "管理员取消");
-    if (!result.ok) {
-      toast.error(result.message ?? "取消失败");
-      return;
+  const handleClose = async () => {
+    try {
+      await view.close();
+      toast.ok("场次已结束");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "结束失败");
     }
-    writeAudit({
-      operator: "陈砚之",
-      action: "session.cancel",
-      targetType: "exam_session",
-      targetId: session.id,
-      summary: `取消场次「${session.name}」`,
-      ip: "10.12.0.21",
-      userAgent: "Chrome 131 / Windows",
-    });
-    toast.ok("场次已取消");
+  };
+
+  const handleCancel = async () => {
+    try {
+      await view.cancel();
+      toast.ok("场次已取消");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "取消失败");
+    }
   };
 
   return (
     <>
       <PageHead
-        title={session.name}
-        sub={`场次 ${session.id} · 来源试卷：${exam?.name ?? session.paperId} · ${session.openAt} 至 ${session.closeAt}`}
+        title={view.name}
+        sub={`场次 ${view.id} · 来源试卷：${view.paperName} · ${view.openAt} 至 ${view.closeAt}`}
         actions={
           <>
             <Button onClick={() => navigate("/exam-sessions")}>返回场次列表</Button>
-            <Button onClick={() => navigate(`/monitoring/${session.id}`)}>
+            <Button onClick={() => navigate(`/monitoring/${view.id}`)}>
               <Icon name="eye" />
               实时监考
             </Button>
-            {session.status === "scheduled" ? (
-              <Button variant="primary" onClick={handleAdvance}>
-                开考
+            {view.status === "scheduled" ? (
+              <Button variant="primary" onClick={handlePublish}>
+                发布场次
               </Button>
-            ) : session.status === "in_progress" ? (
-              <Button variant="primary" onClick={handleAdvance}>
+            ) : view.status === "in_progress" ? (
+              <Button variant="primary" onClick={handleClose}>
                 结束考试
               </Button>
             ) : null}
@@ -174,7 +163,7 @@ export function ExamSessionDetailPage() {
       />
 
       <div className="stat-row" style={{ marginBottom: "var(--sp-4)" }}>
-        <Stat label="名单人数" value={session.roster.length} unit="人" hint="发布时物化" />
+        <Stat label="名单人数" value={view.roster.length} unit="人" hint="发布时物化" />
         <Stat label="已交卷" value={submitted.length} unit="人" hint="含强制交卷" />
         <Stat label="作答中" value={answering.length} unit="人" hint="实时快照" />
         <Stat label="断连中" value={disconnected.length} unit="人" hint="超过心跳阈值" />
@@ -185,38 +174,40 @@ export function ExamSessionDetailPage() {
         <section className="card">
           <div className="card-head">
             <h2 className="card-title">场次配置</h2>
-            <Badge tone={session.status === "in_progress" ? "ok" : session.status === "cancelled" ? "danger" : "warn"}>
-              {SESSION_STATUS_LABEL[session.status]}
+            <Badge
+              tone={
+                view.status === "in_progress"
+                  ? "ok"
+                  : view.status === "cancelled"
+                    ? "danger"
+                    : "warn"
+              }
+            >
+              {statusLabel}
             </Badge>
           </div>
           <div className="card-body">
             <dl className="kv">
               <dt>来源试卷</dt>
-              <dd>{exam?.name ?? session.paperId}</dd>
+              <dd>{view.paperName}</dd>
               <dt>卷型</dt>
-              <dd>{exam?.plum?.mode === "small" ? "小梅花" : exam?.plum?.mode === "large" ? "大梅花" : "标准卷"}</dd>
+              <dd>{view.mode === "small" ? "小梅花" : view.mode === "large" ? "大梅花" : "标准卷"}</dd>
               <dt>时间窗</dt>
               <dd>
-                {session.openAt} 至 {session.closeAt}
+                {view.openAt} 至 {view.closeAt}
               </dd>
               <dt>作答时长</dt>
-              <dd>{session.durationMin} 分钟</dd>
+              <dd>{view.durationMin} 分钟</dd>
               <dt>补考</dt>
-              <dd>{session.allowRetake ? "允许重考，成绩取最高分" : "不允许重考"}</dd>
+              <dd>{view.allowRetake ? "允许重考，成绩取最高分" : "不允许重考"}</dd>
               <dt>名单来源</dt>
-              <dd>
-                {session.directUserIds && session.directUserIds.length > 0
-                  ? `指定考生（${session.directUserIds.length} 人）`
-                  : session.scope.length === 0
-                    ? "全员开放"
-                    : session.scope.map((cid) => classNameOf(cid)).join("、")}
-              </dd>
+              <dd>{view.rosterSource}</dd>
               <dt>考生须知</dt>
-              <dd>{session.note || "—"}</dd>
+              <dd>{view.note || "—"}</dd>
             </dl>
           </div>
           <div className="card-foot">
-            <Button variant="danger" onClick={handleCancel} disabled={session.status === "closed"}>
+            <Button variant="danger" onClick={handleCancel} disabled={view.status === "closed"}>
               取消场次
             </Button>
           </div>
@@ -240,7 +231,7 @@ export function ExamSessionDetailPage() {
                 onChange={(e) => setMaxFocusLoss(Number(e.target.value) || 0)}
                 onBlur={() => {
                   if (maxFocusLoss !== null) {
-                    savePolicy({ maxFocusLoss });
+                    void savePolicy({ maxFocusLoss });
                     setMaxFocusLoss(null);
                   }
                 }}
@@ -257,7 +248,7 @@ export function ExamSessionDetailPage() {
                   type="button"
                   className={`chip${policy.onExceeded === "warn" ? " is-on" : ""}`}
                   aria-pressed={policy.onExceeded === "warn"}
-                  onClick={() => savePolicy({ onExceeded: "warn" })}
+                  onClick={() => void savePolicy({ onExceeded: "warn" })}
                 >
                   警告
                 </button>
@@ -265,7 +256,7 @@ export function ExamSessionDetailPage() {
                   type="button"
                   className={`chip${policy.onExceeded === "force_submit" ? " is-on" : ""}`}
                   aria-pressed={policy.onExceeded === "force_submit"}
-                  onClick={() => savePolicy({ onExceeded: "force_submit" })}
+                  onClick={() => void savePolicy({ onExceeded: "force_submit" })}
                 >
                   强制交卷
                 </button>
@@ -276,7 +267,7 @@ export function ExamSessionDetailPage() {
                 <input
                   type="checkbox"
                   checked={policy.requireFullscreen}
-                  onChange={(e) => savePolicy({ requireFullscreen: e.target.checked })}
+                  onChange={(e) => void savePolicy({ requireFullscreen: e.target.checked })}
                 />
                 <span className="checkline-text">要求全屏</span>
               </label>
@@ -284,7 +275,7 @@ export function ExamSessionDetailPage() {
                 <input
                   type="checkbox"
                   checked={policy.disableCopyPaste}
-                  onChange={(e) => savePolicy({ disableCopyPaste: e.target.checked })}
+                  onChange={(e) => void savePolicy({ disableCopyPaste: e.target.checked })}
                 />
                 <span className="checkline-text">禁用复制粘贴</span>
               </label>
@@ -292,7 +283,7 @@ export function ExamSessionDetailPage() {
                 <input
                   type="checkbox"
                   checked={policy.disableContextMenu}
-                  onChange={(e) => savePolicy({ disableContextMenu: e.target.checked })}
+                  onChange={(e) => void savePolicy({ disableContextMenu: e.target.checked })}
                 />
                 <span className="checkline-text">禁用右键菜单</span>
               </label>
@@ -300,7 +291,7 @@ export function ExamSessionDetailPage() {
                 <input
                   type="checkbox"
                   checked={policy.watermark}
-                  onChange={(e) => savePolicy({ watermark: e.target.checked })}
+                  onChange={(e) => void savePolicy({ watermark: e.target.checked })}
                 />
                 <span className="checkline-text">叠加姓名与账号水印</span>
               </label>
@@ -324,7 +315,7 @@ export function ExamSessionDetailPage() {
         <div className="card-head">
           <h2 className="card-title">考生名单</h2>
           <div className="row-tight">
-            <span className="text-sm text-3">{session.roster.length} 人 · 发布时物化</span>
+            <span className="text-sm text-3">{view.roster.length} 人 · 发布时物化</span>
             <Button size="sm" onClick={handleExportScores}>
               导出成绩
             </Button>
@@ -341,24 +332,25 @@ export function ExamSessionDetailPage() {
                   <th scope="col">状态</th>
                   <th scope="col">切屏</th>
                   <th scope="col">已答题</th>
+                  <th scope="col">得分</th>
                 </tr>
               </thead>
               <tbody>
-                {session.roster.length === 0 ? (
+                {view.roster.length === 0 ? (
                   <tr>
-                    <td colSpan={6}>
+                    <td colSpan={7}>
                       <Empty title="名单尚未物化" body="发布场次时会按组织标签展开并物化考生名单。" />
                     </td>
                   </tr>
                 ) : (
-                  session.roster.map((studentId) => {
-                    const student = students.find((s) => s.id === studentId);
-                    const candidate = candidates.find((c) => c.studentId === studentId);
+                  view.roster.map((entry) => {
+                    const candidate = candidates.find((c) => c.studentId === entry.userId);
+                    const grade = view.grades.find((g) => g.userId === entry.userId);
                     return (
-                      <tr key={studentId}>
-                        <td className="mono text-xs">{studentId}</td>
-                        <td>{student?.name ?? studentId}</td>
-                        <td>{student ? classNameOf(student.classId) : "—"}</td>
+                      <tr key={entry.userId}>
+                        <td className="mono text-xs">{entry.userId}</td>
+                        <td>{entry.displayName || entry.userId}</td>
+                        <td>{entry.className || "—"}</td>
                         <td>
                           {candidate ? (
                             <Badge
@@ -389,6 +381,9 @@ export function ExamSessionDetailPage() {
                         <td className="num">{candidate?.focusLossCount ?? 0}</td>
                         <td className="num">
                           {candidate ? `${candidate.answeredCount} / ${candidate.totalCount}` : "—"}
+                        </td>
+                        <td className="num">
+                          {grade && grade.score !== null ? `${grade.score} / ${grade.total}` : "—"}
                         </td>
                       </tr>
                     );

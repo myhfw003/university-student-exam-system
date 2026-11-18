@@ -57,12 +57,32 @@ export {
   type CatalogSnapshot,
 } from "./catalogApi";
 export {
+  cancelAdminSession,
+  closeAdminSession,
+  createAdminSession,
+  loadAdminSession,
+  loadAdminSessions,
   loadExamSession,
   loadMyExamSessions,
+  loadSessionAssignments,
+  loadSessionGrades,
+  loadSessionParticipants,
+  publishAdminSession,
+  setSessionAssignments,
+  updateAdminSession,
+  type AdminSessionCreate,
+  type AdminSessionWrite,
+  type ExamSessionAdminClient,
   type ExamSessionDetail,
   type ExamSessionStatus,
   type ExamSessionSummary,
 } from "./examSessionApi";
+export {
+  countUsers,
+  loadOrgTags,
+  loadUsers,
+  type AdminClient,
+} from "./adminApi";
 export {
   loadDashboardSummary,
   loadMistakes,

@@ -3,9 +3,13 @@
    --------------------------------------------------------------------------
    按设计文档 §2.4 新建（原型无此模块）。
    场次由已发布试卷创建；状态机 scheduled → in_progress → closed，另有 cancelled。
+
+   两条数据通路：
+   - mock 模式：本地运维数据 + 本地名单展开；
+   - HTTP 模式：真实后端（名单在**发布时物化**，名单组是组织维度标签）。
    ========================================================================== */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Button,
@@ -31,17 +35,33 @@ import {
   writeAudit,
 } from "@exam/shared/mock/adminOps";
 import { getExam, useCatalog } from "@exam/shared/mock/catalog";
+import {
+  cancelAdminSession,
+  isBackendEnabled,
+  loadOrgTags,
+  loadUsers,
+  publishAdminSession,
+} from "@exam/shared/api";
+import type { OrgTag, UserSummary } from "@exam/shared/domain/admin";
 import type { ExamSessionStatus } from "@exam/shared/domain/types";
 import { Icon } from "@/app/Icon";
 import { SessionStatusBadge } from "../shared/bits";
+import { submitAdminSession, useAdminSessionList } from "./useAdminSessions";
+
+/** 表单里的日期字符串 → 后端要的 ISO 串（按浏览器本地时区解释）。 */
+function toIso(value: string): string {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
+}
 
 /** 考试场次列表页。 */
 export function ExamSessionListPage() {
   const navigate = useNavigate();
-  const sessions = useAdminOps((state) => state.sessions);
+  const remote = isBackendEnabled();
   const exams = useCatalog((state) => state.exams);
   const classes = useCatalog((state) => state.classes);
   const students = useCatalog((state) => state.students);
+  const mockSessions = useAdminOps((state) => state.sessions);
 
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | ExamSessionStatus>("all");
@@ -61,20 +81,60 @@ export function ExamSessionListPage() {
   const [allowRetake, setAllowRetake] = useState(false);
   const [note, setNote] = useState("");
 
+  // HTTP 模式的名单素材：组织维度标签与用户清单。
+  const [orgTags, setOrgTags] = useState<OrgTag[]>([]);
+  const [users, setUsers] = useState<UserSummary[]>([]);
+
+  useEffect(() => {
+    if (!remote) return;
+    let cancelled = false;
+    void (async () => {
+      const [tags, userList] = await Promise.all([
+        loadOrgTags().catch(() => []),
+        loadUsers().catch(() => []),
+      ]);
+      if (cancelled) return;
+      setOrgTags(tags);
+      setUsers(userList);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [remote]);
+
   const publishedExams = useMemo(() => exams.filter((e) => e.published), [exams]);
 
-  const filtered = useMemo(() => {
-    return sessions.filter((s) => {
-      if (statusFilter !== "all" && s.status !== statusFilter) return false;
-      if (keyword) {
-        const kw = keyword.toLowerCase();
-        if (!`${s.name} ${s.id}`.toLowerCase().includes(kw)) return false;
-      }
-      return true;
-    });
-  }, [sessions, keyword, statusFilter]);
+  const { rows: filtered, refresh } = useAdminSessionList({ status: statusFilter, keyword });
 
   const handleCreate = () => {
+    if (remote) {
+      void submitAdminSession({
+        paperId,
+        name,
+        openAt: toIso(openAt),
+        closeAt: toIso(closeAt),
+        durationMinutes: durationMin,
+        participantMode: rosterMode === "org" ? "tags" : rosterMode === "direct" ? "direct" : "open",
+        participantTagIds: rosterMode === "org" ? scope : [],
+        participantUserIds: rosterMode === "direct" ? directUserIds : [],
+        // 卷型规则不给（null）就沿用试卷的——后端 create 的默认行为。
+        variantRule: null,
+        rules: null,
+        note,
+      }).then((result) => {
+        if (!result.ok) {
+          toast.error(result.message ?? "创建失败");
+          return;
+        }
+        toast.ok("场次已创建");
+        setDialogOpen(false);
+        setName("");
+        setNote("");
+        refresh();
+      });
+      return;
+    }
+
     const result = createSession({
       name,
       paperId,
@@ -106,9 +166,21 @@ export function ExamSessionListPage() {
   };
 
   const handlePublish = (id: string, sessionName: string) => {
+    if (remote) {
+      void publishAdminSession(id)
+        .then(() => {
+          toast.ok("场次已发布，名单已物化");
+          refresh();
+        })
+        .catch((error: unknown) => {
+          toast.error(error instanceof Error ? error.message : "发布失败");
+        });
+      return;
+    }
+
     // 名单按**该场次自己的**纳入方式物化。
     // 这里不能用页面上正在填的表单 scope：否则发布 A 场会把表单里 B 场的名单带出来。
-    const target = sessions.find((s) => s.id === id);
+    const target = mockSessions.find((s) => s.id === id);
     if (!target) {
       toast.error("场次不存在");
       return;
@@ -147,6 +219,20 @@ export function ExamSessionListPage() {
 
   const handleCancel = () => {
     if (!pendingCancel) return;
+    if (remote) {
+      const target = pendingCancel;
+      setPendingCancel(null);
+      void cancelAdminSession(target.id)
+        .then(() => {
+          toast.ok("场次已取消");
+          refresh();
+        })
+        .catch((error: unknown) => {
+          toast.error(error instanceof Error ? error.message : "取消失败");
+        });
+      return;
+    }
+
     const result = cancelSession(pendingCancel.id, "管理员取消");
     if (!result.ok) {
       toast.error(result.message ?? "取消失败");
@@ -184,7 +270,7 @@ export function ExamSessionListPage() {
           <Stat
             key={status}
             label={SESSION_STATUS_LABEL[status]}
-            value={sessions.filter((s) => s.status === status).length}
+            value={filtered.filter((s) => s.status === status).length}
             unit="场"
             hint={
               status === "in_progress"
@@ -252,60 +338,60 @@ export function ExamSessionListPage() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((s) => {
-                    const exam = getExam(s.paperId);
-                    return (
-                      <tr key={s.id}>
-                        <td>
-                          <div className="strong" style={{ fontWeight: 500 }}>
-                            {s.name}
-                          </div>
-                          <div className="text-xs text-3 mono">{s.id}</div>
-                        </td>
-                        <td>{exam?.name ?? s.paperId}</td>
-                        <td className="text-xs">
-                          {s.openAt}
-                          <br />
-                          {s.closeAt}
-                        </td>
-                        <td className="num">{s.durationMin}</td>
-                        <td className="num">{s.roster.length} 人</td>
-                        <td>
-                          <SessionStatusBadge status={s.status} />
-                        </td>
-                        <td className="col-actions">
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            onClick={() => navigate(`/exam-sessions/${s.id}`)}
-                          >
-                            详情
-                          </Button>{" "}
-                          {s.status === "in_progress" ? (
-                            <Button size="sm" onClick={() => navigate(`/monitoring/${s.id}`)}>
-                              监考
-                            </Button>
-                          ) : null}{" "}
-                          {s.status === "scheduled" ? (
-                            <Button size="sm" onClick={() => handlePublish(s.id, s.name)}>
-                              发布
-                            </Button>
-                          ) : (
-                            <Button size="sm" onClick={() => handleAdvance(s.id)}>
-                              推进状态
-                            </Button>
-                          )}{" "}
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            onClick={() => setPendingCancel({ id: s.id, name: s.name })}
-                          >
-                            取消
+                  filtered.map((s) => (
+                    <tr key={s.id}>
+                      <td>
+                        <div className="strong" style={{ fontWeight: 500 }}>
+                          {s.name}
+                        </div>
+                        <div className="text-xs text-3 mono">{s.id}</div>
+                      </td>
+                      <td>{s.paperName || getExam(s.paperId)?.name || s.paperId}</td>
+                      <td className="text-xs">
+                        {s.openAt}
+                        <br />
+                        {s.closeAt}
+                      </td>
+                      <td className="num">{s.durationMin}</td>
+                      <td className="num">
+                        {s.rosterCount === null ? s.rosterModeLabel : `${s.rosterCount} 人`}
+                      </td>
+                      <td>
+                        <SessionStatusBadge status={s.status} />
+                      </td>
+                      <td className="col-actions">
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          onClick={() => navigate(`/exam-sessions/${s.id}`)}
+                        >
+                          详情
+                        </Button>{" "}
+                        {s.status === "in_progress" ? (
+                          <Button size="sm" onClick={() => navigate(`/monitoring/${s.id}`)}>
+                            监考
                           </Button>
-                        </td>
-                      </tr>
-                    );
-                  })
+                        ) : null}{" "}
+                        {s.status === "scheduled" ? (
+                          <Button size="sm" onClick={() => handlePublish(s.id, s.name)}>
+                            发布
+                          </Button>
+                        ) : null}
+                        {!remote && s.status !== "scheduled" ? (
+                          <Button size="sm" onClick={() => handleAdvance(s.id)}>
+                            推进状态
+                          </Button>
+                        ) : null}{" "}
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => setPendingCancel({ id: s.id, name: s.name })}
+                        >
+                          取消
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
@@ -382,18 +468,24 @@ export function ExamSessionListPage() {
             />
           </Field>
           <Field label="补考策略" htmlFor="sess-retake">
-            <label className="checkline">
-              <input
-                id="sess-retake"
-                type="checkbox"
-                checked={allowRetake}
-                onChange={(e) => setAllowRetake(e.target.checked)}
-              />
-              <span className="checkline-text">
-                允许重考
-                <span className="checkline-hint">重考时生成新的作答记录，成绩取最高分。</span>
-              </span>
-            </label>
+            {remote ? (
+              <div className="field-hint">
+                是否允许重考由**来源试卷**决定，场次不再单独设置。
+              </div>
+            ) : (
+              <label className="checkline">
+                <input
+                  id="sess-retake"
+                  type="checkbox"
+                  checked={allowRetake}
+                  onChange={(e) => setAllowRetake(e.target.checked)}
+                />
+                <span className="checkline-text">
+                  允许重考
+                  <span className="checkline-hint">重考时生成新的作答记录，成绩取最高分。</span>
+                </span>
+              </label>
+            )}
           </Field>
         </div>
         <div style={{ marginTop: "var(--sp-4)" }}>
@@ -413,54 +505,98 @@ export function ExamSessionListPage() {
           {rosterMode === "org" ? (
             <>
               <div className="row-tight" style={{ marginTop: "var(--sp-2)" }}>
-                {classes.map((c) => {
-                  const on = scope.includes(c.id);
-                  const count = students.filter((s) => s.classId === c.id).length;
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      className={`chip${on ? " is-on" : ""}`}
-                      aria-pressed={on}
-                      onClick={() =>
-                        setScope((prev) =>
-                          prev.includes(c.id)
-                            ? prev.filter((x) => x !== c.id)
-                            : [...prev, c.id],
-                        )
-                      }
-                    >
-                      {c.name} · {count} 人
-                    </button>
-                  );
-                })}
+                {remote
+                  ? orgTags.map((tag) => {
+                      const on = scope.includes(tag.id);
+                      return (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          className={`chip${on ? " is-on" : ""}`}
+                          aria-pressed={on}
+                          onClick={() =>
+                            setScope((prev) =>
+                              prev.includes(tag.id)
+                                ? prev.filter((x) => x !== tag.id)
+                                : [...prev, tag.id],
+                            )
+                          }
+                        >
+                          {tag.name}
+                        </button>
+                      );
+                    })
+                  : classes.map((c) => {
+                      const on = scope.includes(c.id);
+                      const count = students.filter((s) => s.classId === c.id).length;
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className={`chip${on ? " is-on" : ""}`}
+                          aria-pressed={on}
+                          onClick={() =>
+                            setScope((prev) =>
+                              prev.includes(c.id)
+                                ? prev.filter((x) => x !== c.id)
+                                : [...prev, c.id],
+                            )
+                          }
+                        >
+                          {c.name} · {count} 人
+                        </button>
+                      );
+                    })}
               </div>
               <div className="field-hint">
-                按名单组批量纳入考生。发布时名单会被**物化**为考生列表，之后改组织标签不影响已生成的名单。
+                {remote
+                  ? "按组织维度标签（院系 → 专业 → 班级）批量纳入考生。发布时名单会被**物化**为考生列表，之后改标签不影响已生成的名单。"
+                  : "按名单组批量纳入考生。发布时名单会被**物化**为考生列表，之后改组织标签不影响已生成的名单。"}
               </div>
             </>
           ) : null}
           {rosterMode === "direct" ? (
             <>
               <div className="row-tight" style={{ marginTop: "var(--sp-2)" }}>
-                {students.map((s) => {
-                  const on = directUserIds.includes(s.id);
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      className={`chip${on ? " is-on" : ""}`}
-                      aria-pressed={on}
-                      onClick={() =>
-                        setDirectUserIds((prev) =>
-                          prev.includes(s.id) ? prev.filter((x) => x !== s.id) : [...prev, s.id],
-                        )
-                      }
-                    >
-                      {s.name} · {s.id}
-                    </button>
-                  );
-                })}
+                {remote
+                  ? users.map((user) => {
+                      const on = directUserIds.includes(user.id);
+                      return (
+                        <button
+                          key={user.id}
+                          type="button"
+                          className={`chip${on ? " is-on" : ""}`}
+                          aria-pressed={on}
+                          onClick={() =>
+                            setDirectUserIds((prev) =>
+                              prev.includes(user.id)
+                                ? prev.filter((x) => x !== user.id)
+                                : [...prev, user.id],
+                            )
+                          }
+                        >
+                          {user.displayName} · {user.username}
+                        </button>
+                      );
+                    })
+                  : students.map((s) => {
+                      const on = directUserIds.includes(s.id);
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          className={`chip${on ? " is-on" : ""}`}
+                          aria-pressed={on}
+                          onClick={() =>
+                            setDirectUserIds((prev) =>
+                              prev.includes(s.id) ? prev.filter((x) => x !== s.id) : [...prev, s.id],
+                            )
+                          }
+                        >
+                          {s.name} · {s.id}
+                        </button>
+                      );
+                    })}
               </div>
               <div className="field-hint">
                 逐个指定考生，可包含社会人士。已选 {directUserIds.length} 人。
