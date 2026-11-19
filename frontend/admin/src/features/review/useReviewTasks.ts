@@ -131,7 +131,7 @@ export interface ReviewQueue {
  *
  * @param filter 状态筛选：`pending` / `in_review` / `reviewed` / `all`。
  */
-export function useReviewQueue(filter: { status: string }): ReviewQueue {
+export function useReviewQueue(filter: { status: string; mine?: boolean }): ReviewQueue {
   const remote = isBackendEnabled();
   const mockReviews = useCatalog((state) => state.reviews);
   const mockStudents = useCatalog((state) => state.students);
@@ -148,7 +148,11 @@ export function useReviewQueue(filter: { status: string }): ReviewQueue {
       setLoading(true);
       try {
         const [page, counts] = await Promise.all([
-          loadReviewTasks({ status: filter.status }),
+          loadReviewTasks({
+            status: filter.status,
+            // 「只看我的」是后端的「指派给我」——前端不自己筛。
+            ...(filter.mine ? { mine: true } : {}),
+          }),
           loadReviewCounts().catch(() => EMPTY_COUNTS),
         ]);
         if (cancelled) return;
@@ -167,7 +171,7 @@ export function useReviewQueue(filter: { status: string }): ReviewQueue {
     return () => {
       cancelled = true;
     };
-  }, [remote, filter.status, token]);
+  }, [remote, filter.status, filter.mine, token]);
 
   /** 取回单份卷宗的完整细节（题干、参考答案、命中情况）。 */
   const loadDetail = useCallback(

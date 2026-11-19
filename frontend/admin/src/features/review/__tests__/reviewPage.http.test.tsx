@@ -195,6 +195,21 @@ describe("管理端阅卷中心 · HTTP 模式", () => {
     });
   });
 
+  it("「只看指派给我的」交给服务端筛", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole("checkbox", { name: /只看指派给我的/ })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("checkbox", { name: /只看指派给我的/ }));
+
+    await waitFor(() => {
+      expect(api.loadReviewTasks).toHaveBeenCalledWith({ status: "pending", mine: true });
+    });
+  });
+
   it("状态筛选能切到「阅卷中」", async () => {
     const user = userEvent.setup();
     renderPage();

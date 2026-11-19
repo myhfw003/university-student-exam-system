@@ -57,6 +57,8 @@ export function ReviewCenterPage() {
   const remote = isBackendEnabled();
 
   const [filter, setFilter] = useState<ReviewFilter>("pending");
+  /** 只看指派给我的卷子（后端的 `mine`）。 */
+  const [mineOnly, setMineOnly] = useState(false);
   const [currentId, setCurrentId] = useState("");
   const [detail, setDetail] = useState<ReviewDetailView | null>(null);
   const [score, setScore] = useState(0);
@@ -69,7 +71,7 @@ export function ReviewCenterPage() {
   const [assignKeywordRaw, setAssignKeywordRaw] = useState("");
   const [assignSaving, setAssignSaving] = useState(false);
 
-  const queue = useReviewQueue({ status: filter });
+  const queue = useReviewQueue({ status: filter, mine: mineOnly });
   const { items, counts, loadDetail, saveGrade, batchAdopt, claim, assign, refresh } = queue;
   // 候选阅卷人：姓名要显示在「当前指派」上，所以一进页面就取（HTTP 模式）。
   const people = usePeopleCandidates(remote);
@@ -229,6 +231,16 @@ export function ReviewCenterPage() {
                 { value: "all", label: `全部 ${items.length}` },
               ]}
             />
+            {remote ? (
+              <label className="checkline" style={{ marginTop: "var(--sp-3)" }}>
+                <input
+                  type="checkbox"
+                  checked={mineOnly}
+                  onChange={(event) => setMineOnly(event.target.checked)}
+                />
+                <span className="checkline-text">只看指派给我的（{counts.mine}）</span>
+              </label>
+            ) : null}
           </div>
           <div className="card-body is-flush">
             {items.length === 0 ? (
