@@ -120,7 +120,7 @@ public sealed class ImportQuestionFileHandler : IRequestHandler<ImportQuestionFi
             },
             cancellationToken);
 
-        return ImportBatchDtoFactory.ToDetail(batch, parsed);
+        return ImportBatchDtoFactory.ToDetail(batch, parsed, table.Headers);
     }
 
     internal static ImportRow BuildRow(ImportRowParseResult result, DateTimeOffset now)
@@ -202,7 +202,7 @@ public sealed class UpdateImportMappingHandler : IRequestHandler<UpdateImportMap
 
         _batches.Update(batch);
 
-        return ImportBatchDtoFactory.ToDetail(batch, parsed);
+        return ImportBatchDtoFactory.ToDetail(batch, parsed, table.Headers);
     }
 }
 
@@ -403,7 +403,8 @@ public static class ImportBatchDtoFactory
 
     public static ImportBatchDetailDto ToDetail(
         ImportBatch batch,
-        IReadOnlyList<ImportRowParseResult>? parsed = null)
+        IReadOnlyList<ImportRowParseResult>? parsed = null,
+        IReadOnlyList<string>? headers = null)
     {
         var rows = parsed is not null
             ? parsed.Select(p => new ImportRowDto(
@@ -421,6 +422,6 @@ public static class ImportBatchDtoFactory
                     r.Parsed))
                 .ToList();
 
-        return new ImportBatchDetailDto(ToSummary(batch), rows);
+        return new ImportBatchDetailDto(ToSummary(batch), rows, headers ?? []);
     }
 }

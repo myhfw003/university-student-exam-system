@@ -21,6 +21,7 @@ import type {
   Question,
   QuestionStatus,
 } from "@exam/shared/domain/types";
+import type { QuestionTag } from "./useCatalogTags";
 
 /** 题型徽标。 */
 export function TypeBadge({ type }: { type: string }): ReactNode {
@@ -83,14 +84,29 @@ export function SessionStatusBadge({ status }: { status: ExamSessionStatus }): R
   return <Badge tone={tone}>{SESSION_STATUS_LABEL[status]}</Badge>;
 }
 
-/** 实体的标签片（可限量）。 */
-export function TagChips({ tags, limit }: { tags: readonly string[]; limit?: number }): ReactNode {
+/**
+ * 实体的标签片（可限量）。
+ *
+ * `catalog` 是标签目录：HTTP 模式来自服务端（标签 ID 是数字主键，
+ * 本地目录里查不到），缺省用本地目录。
+ */
+export function TagChips({
+  tags,
+  limit,
+  catalog,
+}: {
+  tags: readonly string[];
+  limit?: number;
+  catalog?: readonly QuestionTag[];
+}): ReactNode {
   const shown = limit ? tags.slice(0, limit) : tags;
   const rest = tags.length - shown.length;
   return (
     <span className="tag-chips">
       {shown.map((tagId) => {
-        const tag = getTag(tagId);
+        const tag = catalog
+          ? catalog.find((item) => item.id === tagId)
+          : getTag(tagId);
         if (!tag) return null;
         return (
           <TagChip key={tagId} group={tag.group} title={tag.name}>
@@ -104,7 +120,22 @@ export function TagChips({ tags, limit }: { tags: readonly string[]; limit?: num
 }
 
 /** 难度标签片。 */
-export function DifficultyChip({ tags }: { tags: readonly string[] }): ReactNode {
+export function DifficultyChip({
+  tags,
+  catalog,
+}: {
+  tags: readonly string[];
+  catalog?: readonly QuestionTag[];
+}): ReactNode {
+  // HTTP 模式：难度标签的名字在服务端目录里，本地目录查不到。
+  if (catalog) {
+    const hit = catalog.find((tag) => tag.group === "difficulty" && tags.includes(tag.id));
+    return (
+      <TagChip group="difficulty" title="难度">
+        {hit?.name ?? "未标难度"}
+      </TagChip>
+    );
+  }
   return (
     <TagChip group="difficulty" title="难度">
       {difficultyLabel({ tags: [...tags] })}

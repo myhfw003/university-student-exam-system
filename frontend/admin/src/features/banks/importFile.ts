@@ -32,15 +32,34 @@ export interface ImportFieldDef {
   keywords: string[];
 }
 
-/** 可映射的目标字段（对应设计文档 §5.1 的列定义）。 */
+/**
+ * 可映射的目标字段。
+ *
+ * **字段名与服务端一致**：真实后端的列映射用的就是这套名字
+ * （`stem` / `type` / `options` / `answer` / `steps` / `analysis` /
+ * `referenceAnswer` / `score` / `difficulty` / `tags` / `code`）——
+ * 前端自己起一套名字，服务端认不出来，映射就白改了。
+ *
+ * 「难度」标成必填：真实后端要求每道导入题挂一个难度维度的标签，
+ * 文件里没有难度列（或没映射）时，**每一行**都会报「必须指定难度标签」。
+ */
 export const IMPORT_FIELDS: readonly ImportFieldDef[] = [
-  { key: "stem", label: "题干", required: true, keywords: ["题干", "题目", "stem", "question"] },
-  { key: "type", label: "题型", required: true, keywords: ["题型", "类型", "type", "题目类型"] },
+  { key: "code", label: "题号", required: false, keywords: ["题号", "编号", "code"] },
+  { key: "stem", label: "题干", required: true, keywords: ["题干", "题目", "stem"] },
+  { key: "type", label: "题型", required: true, keywords: ["题型", "类型", "题目类型", "type"] },
   { key: "options", label: "选项", required: false, keywords: ["选项", "option"] },
-  { key: "answer", label: "答案", required: true, keywords: ["答案", "answer", "正确答案"] },
-  { key: "analysis", label: "解析", required: false, keywords: ["解析", "analysis", "explanation"] },
-  { key: "knowledge", label: "知识点", required: false, keywords: ["知识点", "knowledge", "标签", "tag"] },
-  { key: "score", label: "分值", required: false, keywords: ["分值", "分数", "score", "point"] },
+  { key: "answer", label: "答案", required: true, keywords: ["答案", "正确答案", "answer"] },
+  { key: "steps", label: "评分步骤", required: false, keywords: ["步骤", "step"] },
+  { key: "analysis", label: "解析", required: false, keywords: ["解析", "答案解析", "analysis"] },
+  {
+    key: "referenceAnswer",
+    label: "参考答案",
+    required: false,
+    keywords: ["参考答案", "reference"],
+  },
+  { key: "score", label: "分值", required: false, keywords: ["分值", "分数", "score"] },
+  { key: "difficulty", label: "难度", required: true, keywords: ["难度", "difficulty"] },
+  { key: "tags", label: "知识点 / 标签", required: false, keywords: ["知识点", "标签", "tag"] },
 ];
 
 /** 题型取值（中英文标签都认）。 */
@@ -246,15 +265,34 @@ export async function parseImportFile(file: File): Promise<ParsedTable> {
 /** 列映射：目标字段 → 来源列名。 */
 export type ColumnMapping = Record<string, string>;
 
-/** 按表头自动猜测列映射。 */
+/**
+ * 按表头自动猜测列映射。
+ *
+ * 一列只映射一个字段，一个字段只取一列：多个关键词都命中时**最长的那个说了算**
+ * （「参考答案」是参考答案，不是答案；「答案解析」是解析，不是答案）。
+ */
 export function guessMapping(headers: readonly string[]): ColumnMapping {
   const mapping: ColumnMapping = {};
-  for (const field of IMPORT_FIELDS) {
-    const hit = headers.find((header) => {
-      const lower = header.toLowerCase();
-      return field.keywords.some((kw) => lower.includes(kw.toLowerCase()));
-    });
-    if (hit) mapping[field.key] = hit;
+  const usedFields = new Set<string>();
+  for (const raw of headers) {
+    const header = raw.trim();
+    const lower = header.toLowerCase();
+    if (!lower) continue;
+
+    let best: { key: string; score: number } | null = null;
+    for (const field of IMPORT_FIELDS) {
+      if (usedFields.has(field.key)) continue;
+      for (const keyword of field.keywords) {
+        const kw = keyword.toLowerCase();
+        const score = lower.includes(kw) ? kw.length : kw.includes(lower) ? lower.length : 0;
+        if (score > 0 && (!best || score > best.score)) {
+          best = { key: field.key, score };
+        }
+      }
+    }
+    if (!best) continue;
+    usedFields.add(best.key);
+    mapping[best.key] = header;
   }
   return mapping;
 }
@@ -336,7 +374,8 @@ export function buildImportRows(
     const options = parseOptions(cell("options"));
     const answer = parseAnswer(cell("answer"), type ?? "single");
     const analysis = cell("analysis").trim();
-    const knowledge = cell("knowledge").trim();
+    const knowledge = cell("tags").trim();
+    const difficultyText = cell("difficulty").trim();
 
     const errors: string[] = [];
     if (!stem) errors.push("题干为空");
@@ -360,7 +399,9 @@ export function buildImportRows(
       const hit = knownTagIds.includes(name) ? name : null;
       if (hit && !tags.includes(hit)) tags.push(hit);
     }
-    const difficulty = DIFFICULTY_TAGS[knowledge] ?? DIFFICULTY_TAGS[scoreText];
+    // 难度：优先取难度列；没有难度列时沿用旧兜底（知识点列 / 分值）。
+    const difficulty =
+      DIFFICULTY_TAGS[difficultyText] ?? DIFFICULTY_TAGS[knowledge] ?? DIFFICULTY_TAGS[scoreText];
     if (difficulty && !tags.includes(difficulty)) tags.push(difficulty);
 
     const row: ImportPreviewRow = {

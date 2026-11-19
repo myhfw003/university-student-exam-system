@@ -43,6 +43,45 @@ describe("importFile · 列映射与逐行校验", () => {
     expect(mapping.type).toBe("类型");
     expect(mapping.answer).toBe("正确答案");
     expect(mapping.score).toBe("分值");
+    expect(mapping.tags).toBe("标签");
+  });
+
+  it("列映射的字段名与服务端一致（含难度）", () => {
+    // 服务端认的是 code / stem / type / options / answer / steps / analysis /
+    // referenceAnswer / score / difficulty / tags——字段名对不上，映射就白改了。
+    const mapping = guessMapping([
+      "题号",
+      "题干",
+      "题型",
+      "选项",
+      "答案",
+      "评分步骤",
+      "答案解析",
+      "参考答案",
+      "分值",
+      "难度",
+      "知识点",
+    ]);
+    expect(mapping).toMatchObject({
+      code: "题号",
+      stem: "题干",
+      type: "题型",
+      options: "选项",
+      answer: "答案",
+      steps: "评分步骤",
+      analysis: "答案解析",
+      referenceAnswer: "参考答案",
+      score: "分值",
+      difficulty: "难度",
+      tags: "知识点",
+    });
+  });
+
+  it("最长的关键词说了算：「参考答案」不是答案，「答案解析」不是答案", () => {
+    const mapping = guessMapping(["答案", "答案解析", "参考答案"]);
+    expect(mapping.answer).toBe("答案");
+    expect(mapping.analysis).toBe("答案解析");
+    expect(mapping.referenceAnswer).toBe("参考答案");
   });
 
   it("合法行通过校验，非法行标错且不阻断整批", () => {
@@ -59,7 +98,7 @@ describe("importFile · 列映射与逐行校验", () => {
         options: "选项",
         answer: "正确答案",
         analysis: "解析",
-        knowledge: "标签",
+        tags: "标签",
         score: "分值",
       },
     );
@@ -92,10 +131,25 @@ describe("importFile · 列映射与逐行校验", () => {
     const rows = buildImportRows(
       [["甲", "题干？", "判断题", "", "正确", "", "基础", ""]],
       headers,
-      { stem: "题目内容", type: "类型", answer: "正确答案", knowledge: "标签" },
+      { stem: "题目内容", type: "类型", answer: "正确答案", tags: "标签" },
     );
     expect(rows[0]?.answer).toEqual(["A"]);
     expect(rows[0]?.tags).toContain("t-df1");
+  });
+
+  it("难度取自难度列（服务端按难度列解析难度标签）", () => {
+    const rows = buildImportRows(
+      [["题干？", "单选题", "A. 甲|B. 乙", "A", "中等"]],
+      ["题干", "题型", "选项", "答案", "难度"],
+      {
+        stem: "题干",
+        type: "题型",
+        options: "选项",
+        answer: "答案",
+        difficulty: "难度",
+      },
+    );
+    expect(rows[0]?.tags).toContain("t-df2");
   });
 });
 

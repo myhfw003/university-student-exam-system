@@ -67,6 +67,50 @@ export function toAdminTag(dto: Dto): AdminTag {
   };
 }
 
+/** 能挂到题目上的标签。 */
+export interface QuestionTag {
+  id: string;
+  name: string;
+  /** 维度：领域 / 知识点 / 能力 / 难度。 */
+  group: TagGroup;
+  /** 维度中文名（服务端给的）。 */
+  groupLabel: string;
+  /** 难度等级；只有难度维度有。 */
+  level: number | null;
+}
+
+/**
+ * 读取能挂到题目上的标签。
+ *
+ * 组织维度的标签只挂用户、挂不到题目上——服务端按 `appliesToQuestions` 过滤，
+ * 前端不再自己判断维度（维度规则是后端的）。
+ */
+export async function loadQuestionTags(client: TagClient = httpClient): Promise<QuestionTag[]> {
+  const res = await client.get<{
+    groups?: Array<{
+      group?: string;
+      label?: string;
+      appliesToQuestions?: boolean;
+      tags?: Dto[];
+    }>;
+  }>(ENDPOINTS.catalog.tags);
+
+  return (res.groups ?? [])
+    .filter((group) => group.appliesToQuestions === true)
+    .flatMap((group) =>
+      (group.tags ?? []).map((dto) => {
+        const tag = toAdminTag(dto);
+        return {
+          id: tag.id,
+          name: tag.name,
+          group: tag.group,
+          groupLabel: tag.groupLabel || group.label || tag.group,
+          level: tag.level,
+        };
+      }),
+    );
+}
+
 /**
  * 读取全部标签（按维度分组返回，这里摊平成一张表）。
  *

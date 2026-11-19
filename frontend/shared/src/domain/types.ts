@@ -88,6 +88,13 @@ export interface QuestionAttachment {
 /** 题目。 */
 export interface Question {
   id: string;
+  /**
+   * 题号（人读的编号）。
+   * <para>
+   * mock 模式下题号就是 `id`；真实后端里 `id` 是数字主键，题号是独立的 `code`。
+   * </para>
+   */
+  code?: string;
   type: QuestionType;
   /** 默认分值。 */
   score: number;

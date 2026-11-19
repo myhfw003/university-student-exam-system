@@ -24,6 +24,7 @@ import {
   toast,
   validateAttachment,
 } from "@exam/shared";
+import { isBackendEnabled, uploadQuestionAttachment } from "@exam/shared/api";
 import { upsertQuestion, useCatalog } from "@exam/shared/mock/catalog";
 import type {
   Question,
@@ -35,6 +36,7 @@ import type {
 } from "@exam/shared/domain/types";
 import { MAX_TAGS } from "@exam/shared/mock/catalog";
 import { TagPicker } from "./TagPicker";
+import type { QuestionTag } from "./useCatalogTags";
 
 const TYPE_OPTIONS: Array<{ value: QuestionType; label: string }> = [
   { value: "single", label: "单选题" },
@@ -84,11 +86,36 @@ export interface QuestionEditorProps {
   onClose: () => void;
   /** 保存成功后回调。 */
   onSaved?: (question: Question) => void;
+  /**
+   * 保存题目。
+   * <para>
+   * HTTP 模式由页面传入后端通路（真实后端的题号是 `code`，主键是数字 id）；
+   * 缺省时走本地 mock。
+   * </para>
+   */
+  onSave?: (question: Question) => Promise<Question>;
+  /**
+   * 标签目录。
+   *
+   * HTTP 模式由页面传入服务端目录（标签 ID 是数字主键）；
+   * 缺省时用本地目录。
+   */
+  catalogTags?: readonly QuestionTag[];
 }
 
 /** 题目编辑器对话框。 */
-export function QuestionEditor({ open, question, onClose, onSaved }: QuestionEditorProps) {
+export function QuestionEditor({
+  open,
+  question,
+  onClose,
+  onSaved,
+  onSave,
+  catalogTags,
+}: QuestionEditorProps) {
+  const remote = isBackendEnabled();
   const [id, setId] = useState("");
+  /** 题号：真实后端里题号是独立的 `code`，主键是数字 id。 */
+  const [code, setCode] = useState("");
   const [type, setType] = useState<QuestionType>("single");
   const [score, setScore] = useState(5);
   const [status, setStatus] = useState("draft");
@@ -102,6 +129,13 @@ export function QuestionEditor({ open, question, onClose, onSaved }: QuestionEdi
   const [steps, setSteps] = useState<QuestionStep[]>([]);
   // 题目附件（FR-CAT-05）。
   const [attachments, setAttachments] = useState<QuestionAttachment[]>([]);
+  /**
+   * 待上传的附件文件。
+   *
+   * HTTP 模式：文件直传服务端的私有桶——题目还没有 ID 时不能带题目 ID 上传，
+   * 所以先留在本地，保存题目后再按题目 ID 传上去。
+   */
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   // 切到判断题前的选项与答案，切回来时恢复。
   const judgeStash = useRef<{ options: QuestionOption[]; answer: string[] } | null>(null);
@@ -111,6 +145,7 @@ export function QuestionEditor({ open, question, onClose, onSaved }: QuestionEdi
     if (!open) return;
     if (question) {
       setId(question.id);
+      setCode(question.code ?? question.id);
       setType(question.type);
       setScore(question.score);
       setStatus(question.status);
@@ -125,6 +160,7 @@ export function QuestionEditor({ open, question, onClose, onSaved }: QuestionEdi
       setAttachments(question.attachments ?? []);
     } else {
       setId("");
+      setCode("");
       setType("single");
       setScore(5);
       setStatus("draft");
@@ -136,7 +172,9 @@ export function QuestionEditor({ open, question, onClose, onSaved }: QuestionEdi
       setAnswer([]);
       setKeypoints(DEFAULT_KEYPOINTS.map((k) => ({ ...k })));
       setSteps(DEFAULT_STEPS.map((s) => ({ ...s })));
+      setAttachments([]);
     }
+    setPendingFiles([]);
   }, [open, question]);
 
   /**
@@ -205,10 +243,25 @@ export function QuestionEditor({ open, question, onClose, onSaved }: QuestionEdi
     setAnswer([key]);
   };
 
-  /** 上传附件：校验类型与体积，读取为可访问地址。 */
+  /** 选附件：校验类型与体积。HTTP 模式先留在本地，保存题目时再传。 */
   const handleAttach = async (files: FileList | null): Promise<void> => {
     if (!files || files.length === 0) return;
     setAttachmentError(null);
+
+    if (remote) {
+      const next = [...pendingFiles];
+      for (const file of Array.from(files)) {
+        const check = validateAttachment(file);
+        if (!check.ok) {
+          setAttachmentError(check.message ?? "附件不可用");
+          continue;
+        }
+        next.push(file);
+      }
+      setPendingFiles(next);
+      return;
+    }
+
     const next = [...attachments];
     for (const file of Array.from(files)) {
       const check = validateAttachment(file);
@@ -228,8 +281,8 @@ export function QuestionEditor({ open, question, onClose, onSaved }: QuestionEdi
     setAttachments(next);
   };
 
-  const handleSave = () => {
-    const trimmedId = id.trim();
+  const handleSave = async () => {
+    const trimmedId = (remote ? code : id).trim();
     const trimmedStem = stem.trim();
 
     // 题号：必填 + 新建时唯一（原型 admin.js:1010-1015）。
@@ -241,7 +294,8 @@ export function QuestionEditor({ open, question, onClose, onSaved }: QuestionEdi
       toast.error("请填写题干");
       return;
     }
-    if (!question) {
+    // 真实后端按**题号**判重，重复时服务端会明确报错，这里不再自己查一遍。
+    if (!remote && !question) {
       const duplicated = useCatalog
         .getState()
         .questions.some((q) => q.id === trimmedId);
@@ -290,8 +344,10 @@ export function QuestionEditor({ open, question, onClose, onSaved }: QuestionEdi
 
     const objective = type === "single" || type === "multi" || type === "judge";
 
-    const result = upsertQuestion({
-      id: trimmedId,
+    const next: Question = {
+      // 真实后端：id 是数字主键（新建时为空），题号放在 code。
+      id: remote ? (question?.id ?? "") : trimmedId,
+      ...(remote ? { code: trimmedId } : {}),
       type,
       score,
       status: status as Question["status"],
@@ -308,15 +364,32 @@ export function QuestionEditor({ open, question, onClose, onSaved }: QuestionEdi
           : { steps }),
       ...(question?.batchId ? { batchId: question.batchId } : {}),
       ...(attachments.length > 0 ? { attachments } : {}),
-    });
+    };
 
-    if (!result.ok) {
-      toast.error(result.message ?? "保存失败");
-      return;
+    try {
+      const saved = onSave
+        ? await onSave(next)
+        : (() => {
+            const result = upsertQuestion(next);
+            if (!result.ok || !result.question) {
+              throw new Error(result.message ?? "保存失败");
+            }
+            return result.question;
+          })();
+
+      // 附件：题目有 ID 了才传得上去（服务端按题目 ID 挂附件）。
+      if (remote && pendingFiles.length > 0) {
+        for (const file of pendingFiles) {
+          await uploadQuestionAttachment(file, saved.id);
+        }
+      }
+
+      toast.ok(question ? "题目已更新" : "题目已新增");
+      onSaved?.(saved);
+      onClose();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败");
     }
-    toast.ok(question ? "题目已更新" : "题目已新增");
-    onSaved?.(result.question!);
-    onClose();
   };
 
   const objective = type === "single" || type === "multi" || type === "judge";
@@ -332,19 +405,29 @@ export function QuestionEditor({ open, question, onClose, onSaved }: QuestionEdi
           <Button variant="secondary" onClick={onClose}>
             取消
           </Button>
-          <Button variant="primary" onClick={handleSave}>
+          <Button variant="primary" onClick={() => void handleSave()}>
             保存题目
           </Button>
         </>
       }
     >
-      <Field label="题目编号" hint="编号用于题库检索与组卷引用，保存后不可修改。" htmlFor="qe-id">
+      <Field
+        label="题目编号"
+        hint={
+          remote
+            ? "题号用于题库检索与组卷引用，同一题库内唯一。"
+            : "编号用于题库检索与组卷引用，保存后不可修改。"
+        }
+        htmlFor="qe-id"
+      >
         <TextInput
           id="qe-id"
-          value={id}
-          readOnly={Boolean(question)}
+          value={remote ? code : id}
+          readOnly={!remote && Boolean(question)}
           placeholder="例如 q-m-09"
-          onChange={(event) => setId(event.target.value)}
+          onChange={(event) =>
+            remote ? setCode(event.target.value) : setId(event.target.value)
+          }
         />
       </Field>
 
@@ -396,7 +479,11 @@ export function QuestionEditor({ open, question, onClose, onSaved }: QuestionEdi
             </span>
           </span>
         </div>
-        <TagPicker selected={tags} onToggle={toggleTag} />
+        <TagPicker
+          selected={tags}
+          onToggle={toggleTag}
+          {...(catalogTags ? { tags: catalogTags } : {})}
+        />
         <div className="field-hint">
           标签决定题目在答题端的筛选与归类，最多 {MAX_TAGS} 个；难度由「难度」分组标签决定。
         </div>
@@ -635,25 +722,46 @@ export function QuestionEditor({ open, question, onClose, onSaved }: QuestionEdi
             {attachmentError}
           </Callout>
         ) : null}
-        {attachments.length > 0 ? (
+        {attachments.length > 0 || pendingFiles.length > 0 ? (
           <ul className="list">
             {attachments.map((att) => (
               <li className="list-row" key={att.id}>
-                <img
-                  src={att.url}
-                  alt={att.fileName}
-                  width={64}
-                  height={64}
-                  style={{ objectFit: "cover", borderRadius: "var(--r-sm)" }}
-                />
+                {att.url ? (
+                  <img
+                    src={att.url}
+                    alt={att.fileName}
+                    width={64}
+                    height={64}
+                    style={{ objectFit: "cover", borderRadius: "var(--r-sm)" }}
+                  />
+                ) : null}
                 <div className="list-main">
                   <div className="list-title">{att.fileName}</div>
                   <div className="list-sub">{formatFileSize(att.size)}</div>
                 </div>
+                {/* 真实后端还没有「删附件」的端点，已上传的附件这里不给移除。 */}
+                {remote ? null : (
+                  <IconButton
+                    label={`移除附件 ${att.fileName}`}
+                    onClick={() =>
+                      setAttachments((prev) => prev.filter((item) => item.id !== att.id))
+                    }
+                  >
+                    ✕
+                  </IconButton>
+                )}
+              </li>
+            ))}
+            {pendingFiles.map((file) => (
+              <li className="list-row" key={`${file.name}-${file.size}`}>
+                <div className="list-main">
+                  <div className="list-title">{file.name}</div>
+                  <div className="list-sub">{formatFileSize(file.size)} · 保存题目时上传</div>
+                </div>
                 <IconButton
-                  label={`移除附件 ${att.fileName}`}
+                  label={`移除附件 ${file.name}`}
                   onClick={() =>
-                    setAttachments((prev) => prev.filter((item) => item.id !== att.id))
+                    setPendingFiles((prev) => prev.filter((item) => item !== file))
                   }
                 >
                   ✕

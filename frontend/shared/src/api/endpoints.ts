@@ -23,6 +23,8 @@ export const ENDPOINTS = {
   },
   catalog: {
     tags: "/tags",
+    /** 试题导入批次：上传 → 调列映射 → 采纳。 */
+    imports: "/imports",
     banks: "/question-banks",
     questions: "/questions",
     papers: "/papers",

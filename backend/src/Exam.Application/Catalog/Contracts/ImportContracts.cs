@@ -27,8 +27,16 @@ public sealed record ImportBatchDto(
     DateTimeOffset? AdoptedAt,
     DateTimeOffset CreatedAt);
 
-/// <summary>导入批次详情，含逐行结果。</summary>
-public sealed record ImportBatchDetailDto(ImportBatchDto Batch, IReadOnlyList<ImportRowDto> Rows);
+/// <summary>
+/// 导入批次详情，含逐行结果。
+/// <para>
+/// 带**文件表头**：管理员要按表头调列映射，没有表头就只能对着已映射的列瞎猜。
+/// </para>
+/// </summary>
+public sealed record ImportBatchDetailDto(
+    ImportBatchDto Batch,
+    IReadOnlyList<ImportRowDto> Rows,
+    IReadOnlyList<string> Headers);
 
 /// <summary>分页的导入批次列表。</summary>
 public sealed record ImportBatchListResponse(

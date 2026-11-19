@@ -2,9 +2,12 @@
    知行测评 · 管理端题库清单
    --------------------------------------------------------------------------
    对应原型 admin.banks。题库是内容的组织容器；进入工作台管理题目与候选题。
+
+   数据通路见 `useAdminBanks.ts`：真实后端模式下题库没有标签（后端的题库表上
+   没有标签列），题库的题目归属由「批量加入 / 移出题库」维护。
    ========================================================================== */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Button,
@@ -16,35 +19,55 @@ import {
   TextInput,
   toast,
 } from "@exam/shared";
-import {
-  bankStats,
-  removeBank,
-  tagNames,
-  upsertBank,
-  useCatalog,
-} from "@exam/shared/mock/catalog";
+import { isBackendEnabled } from "@exam/shared/api";
+import { tagNames } from "@exam/shared/mock/catalog";
 import { QUESTION_TYPES } from "@exam/shared/mock/seed";
-import type { Bank, Question } from "@exam/shared/domain/types";
+import type { Question } from "@exam/shared/domain/types";
 import { Icon } from "@/app/Icon";
 import { TagChips } from "../shared/bits";
 import { TagPicker } from "../shared/TagPicker";
+import { useAdminBanks, useAdminQuestions, type AdminBankRow } from "./useAdminBanks";
+
+/** 跨库视图的题目查询条件（模块级常量：每次渲染新建数组会让查询反复重跑）。 */
+const ALL_QUESTIONS = {
+  bankId: "__all__",
+  status: "all",
+  type: "all",
+  keyword: "",
+  tagIds: [] as string[],
+};
 
 /** 题库清单页。 */
 export function BanksPage() {
   const navigate = useNavigate();
+  const remote = isBackendEnabled();
   const [params, setParams] = useSearchParams();
-  const banks = useCatalog((state) => state.banks);
-  const questions = useCatalog((state) => state.questions);
+
+  const { banks, create, update, remove } = useAdminBanks();
+  // 题库编辑时要挑题目：这里取全部题目（跨库视图）。
+  const { questions } = useAdminQuestions(ALL_QUESTIONS);
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<Bank | null>(null);
+  const [editing, setEditing] = useState<AdminBankRow | null>(null);
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [questionIds, setQuestionIds] = useState<string[]>([]);
-  const [pendingDelete, setPendingDelete] = useState<Bank | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<AdminBankRow | null>(null);
 
-  const allStats = bankStats("__all__");
+  const allStats = useMemo(
+    () =>
+      banks.reduce(
+        (acc, bank) => ({
+          total: acc.total + bank.stats.total,
+          published: acc.published + bank.stats.published,
+          draft: acc.draft + bank.stats.draft,
+          disabled: acc.disabled + bank.stats.disabled,
+        }),
+        { total: 0, published: 0, draft: 0, disabled: 0 },
+      ),
+    [banks],
+  );
 
   const openCreate = () => {
     setEditing(null);
@@ -55,12 +78,12 @@ export function BanksPage() {
     setDialogOpen(true);
   };
 
-  const openEdit = (bank: Bank) => {
+  const openEdit = (bank: AdminBankRow) => {
     setEditing(bank);
     setName(bank.name);
-    setDesc(bank.desc ?? "");
+    setDesc(bank.desc);
     setTags(bank.tags);
-    setQuestionIds(bank.questionIds ?? []);
+    setQuestionIds(bank.questionIds);
     setDialogOpen(true);
   };
 
@@ -78,32 +101,31 @@ export function BanksPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editId, banks]);
 
-  const handleSave = () => {
-    const result = upsertBank({
-      ...(editing ? { id: editing.id } : {}),
-      name,
-      desc,
-      tags,
-      questionIds,
-    });
-    if (!result.ok) {
-      toast.error(result.message ?? "保存失败");
-      return;
+  const handleSave = async () => {
+    try {
+      if (editing) {
+        await update(editing.id, { name, desc, tags, questionIds });
+        toast.ok("题库已更新");
+      } else {
+        await create({ name, desc, tags, questionIds });
+        toast.ok("题库已创建");
+      }
+      setDialogOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败");
     }
-    toast.ok(editing ? "题库已更新" : "题库已创建");
-    setDialogOpen(false);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!pendingDelete) return;
-    const result = removeBank(pendingDelete.id);
-    if (!result.ok) {
-      toast.error(result.message ?? "删除失败");
+    try {
+      await remove(pendingDelete.id);
+      toast.ok(`已删除题库「${pendingDelete.name}」`);
       setPendingDelete(null);
-      return;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "删除失败");
+      setPendingDelete(null);
     }
-    toast.ok(`已删除题库「${pendingDelete.name}」`);
-    setPendingDelete(null);
   };
 
   const toggleQuestion = (qid: string) => {
@@ -139,7 +161,7 @@ export function BanksPage() {
                 全部题库
               </div>
               <div className="text-sm text-3">
-                跨库查看全部 {questions.length} 道题目（已发布 {allStats.published} / 草稿{" "}
+                跨库查看全部 {allStats.total} 道题目（已发布 {allStats.published} / 草稿{" "}
                 {allStats.draft} / 已停用 {allStats.disabled}）
               </div>
             </div>
@@ -169,6 +191,7 @@ export function BanksPage() {
                   <th scope="col">草稿</th>
                   <th scope="col">已停用</th>
                   <th scope="col">覆盖维度</th>
+                  <th scope="col">题目数</th>
                   <th scope="col"></th>
                 </tr>
               </thead>
@@ -183,8 +206,7 @@ export function BanksPage() {
                   </tr>
                 ) : (
                   banks.map((bank) => {
-                    const stats = bankStats(bank.id);
-                    const points = tagNames(bank.tags).join("、");
+                    const stats = bank.stats;
                     return (
                       <tr key={bank.id}>
                         <td>
@@ -197,7 +219,9 @@ export function BanksPage() {
                           {bank.tags.length > 0 ? (
                             <TagChips tags={bank.tags} limit={3} />
                           ) : (
-                            <span className="text-3 text-sm">—</span>
+                            <span className="text-3 text-sm">
+                              {remote ? "题库无标签" : "—"}
+                            </span>
                           )}
                         </td>
                         <td className="num">{stats.published}</td>
@@ -215,7 +239,8 @@ export function BanksPage() {
                             <span className="text-3">0</span>
                           )}
                         </td>
-                        <td className="text-xs text-3">{points || "—"}</td>
+                        <td className="text-xs text-3">{tagNames(bank.tags).join("、") || "—"}</td>
+                        <td className="num">{stats.total}</td>
                         <td className="col-actions">
                           <Button
                             size="sm"
@@ -255,7 +280,7 @@ export function BanksPage() {
             <Button variant="secondary" onClick={() => setDialogOpen(false)}>
               取消
             </Button>
-            <Button variant="primary" onClick={handleSave}>
+            <Button variant="primary" onClick={() => void handleSave()}>
               保存题库
             </Button>
           </>
@@ -279,22 +304,26 @@ export function BanksPage() {
             />
           </Field>
         </div>
-        <div style={{ marginTop: "var(--sp-4)" }}>
-          <div className="field-label">标签</div>
-          <TagPicker
-            selected={tags}
-            onToggle={(tagId) =>
-              setTags((prev) =>
-                prev.includes(tagId)
-                  ? prev.filter((t) => t !== tagId)
-                  : [...prev, tagId],
-              )
-            }
-          />
-          <div className="field-hint">
-            标签用于把题库接入领域 / 知识点 / 能力等维度，最多 5 个。
+
+        {remote ? null : (
+          <div style={{ marginTop: "var(--sp-4)" }}>
+            <div className="field-label">标签</div>
+            <TagPicker
+              selected={tags}
+              onToggle={(tagId) =>
+                setTags((prev) =>
+                  prev.includes(tagId)
+                    ? prev.filter((t) => t !== tagId)
+                    : [...prev, tagId],
+                )
+              }
+            />
+            <div className="field-hint">
+              标签用于把题库接入领域 / 知识点 / 能力等维度，最多 5 个。
+            </div>
           </div>
-        </div>
+        )}
+
         <div style={{ marginTop: "var(--sp-4)" }}>
           <div className="field-label">
             题目清单
@@ -321,7 +350,7 @@ export function BanksPage() {
                         checked={questionIds.includes(q.id)}
                         onChange={() => toggleQuestion(q.id)}
                       />
-                      <span className="pick-id mono">{q.id}</span>
+                      <span className="pick-id mono">{q.code ?? q.id}</span>
                       <span className="pick-text">
                         {q.stem.length > 40 ? `${q.stem.slice(0, 40)}…` : q.stem}
                       </span>
@@ -343,7 +372,7 @@ export function BanksPage() {
         confirmText="确认删除"
         confirmVariant="danger"
         onCancel={() => setPendingDelete(null)}
-        onConfirm={handleDelete}
+        onConfirm={() => void handleDelete()}
       />
     </>
   );

@@ -23,15 +23,31 @@ public sealed class MinioObjectStorage : IObjectStorage
     public MinioObjectStorage(
         IOptions<ObjectStorageOptions> options,
         ILogger<MinioObjectStorage> logger)
+        : this(
+            options,
+            logger,
+            new MinioClient()
+                .WithEndpoint(options.Value.Endpoint)
+                .WithCredentials(options.Value.AccessKey, options.Value.SecretKey)
+                .WithSSL(options.Value.UseSsl)
+                .Build())
+    {
+    }
+
+    /// <summary>
+    /// 注入 MinIO 客户端的构造。
+    ///
+    /// 客户端由外部给，是为了能测「返回的流归调用方」这条契约——
+    /// 缓冲被提前关掉这类缺陷只有真读到流才会暴露。
+    /// </summary>
+    public MinioObjectStorage(
+        IOptions<ObjectStorageOptions> options,
+        ILogger<MinioObjectStorage> logger,
+        IMinioClient client)
     {
         _options = options.Value;
         _logger = logger;
-
-        _client = new MinioClient()
-            .WithEndpoint(_options.Endpoint)
-            .WithCredentials(_options.AccessKey, _options.SecretKey)
-            .WithSSL(_options.UseSsl)
-            .Build();
+        _client = client;
     }
 
     public async Task PutAsync(
@@ -58,14 +74,24 @@ public sealed class MinioObjectStorage : IObjectStorage
         try
         {
             // MinIO 的下载走回调：把响应流复制到内存缓冲，再交给调用方。
-            using var buffer = new MemoryStream();
+            // **缓冲的所有权交给调用方**：这里不能 using 释放——方法返回时缓冲就被关掉，
+            // 调用方拿到的会是已关闭的流（读的时候抛 ObjectDisposedException）。
+            var buffer = new MemoryStream();
 
-            var args = new GetObjectArgs()
-                .WithBucket(_options.Bucket)
-                .WithObject(objectKey)
-                .WithCallbackStream((Action<Stream>)(stream => stream.CopyTo(buffer)));
+            try
+            {
+                var args = new GetObjectArgs()
+                    .WithBucket(_options.Bucket)
+                    .WithObject(objectKey)
+                    .WithCallbackStream((Action<Stream>)(stream => stream.CopyTo(buffer)));
 
-            await _client.GetObjectAsync(args, cancellationToken);
+                await _client.GetObjectAsync(args, cancellationToken);
+            }
+            catch
+            {
+                await buffer.DisposeAsync();
+                throw;
+            }
 
             buffer.Position = 0;
             return buffer;

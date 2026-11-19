@@ -8,8 +8,13 @@ import type { Tag } from "../domain/types";
 
 /** 筛选器属性。 */
 export interface TagFilterProps {
-  /** 按分组顺序的标签。 */
-  groups: Array<{ group: string; label: string; tags: Tag[] }>;
+  /**
+   * 按分组顺序的标签。
+   *
+   * 只要 ID 与名称：HTTP 模式的标签来自服务端目录，难度等级可能是空，
+   * 与本地目录的 `Tag` 不是同一个形状。
+   */
+  groups: Array<{ group: string; label: string; tags: Array<Pick<Tag, "id" | "name">> }>;
   /** 已选标签 ID。 */
   selected: readonly string[];
   /** 切换回调。 */
