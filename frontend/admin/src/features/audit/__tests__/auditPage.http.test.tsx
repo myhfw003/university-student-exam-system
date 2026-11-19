@@ -173,8 +173,20 @@ const LOGIN_LOGS = {
       ip: "10.12.0.21",
       userAgent: "Chrome 131",
     },
+    {
+      id: "1197",
+      at: "2026-11-19T08:50:11Z",
+      operatorId: "9",
+      operator: "zhangsan",
+      action: "tag.create",
+      targetType: "tag",
+      targetId: "31",
+      summary: '{"code": "math.limit", "name": "极限", "group": "domain"}',
+      ip: "10.12.0.21",
+      userAgent: "Chrome 131",
+    },
   ],
-  total: 4,
+  total: 5,
 };
 
 describe("管理端审计页 · 登录审计", () => {
@@ -195,6 +207,8 @@ describe("管理端审计页 · 登录审计", () => {
     expect(screen.getAllByText("刷新令牌异常使用").length).toBeGreaterThan(0);
     // 登出也留痕。
     expect(screen.getAllByText("登出").length).toBeGreaterThan(0);
+    // 新建标签也留痕。
+    expect(screen.getAllByText("新建标签").length).toBeGreaterThan(0);
     // 操作者列上是登录账号（失败那次是自称的账号）。
     expect(screen.getAllByText("zhangsan").length).toBeGreaterThan(0);
     expect(screen.getAllByText("ghost").length).toBeGreaterThan(0);

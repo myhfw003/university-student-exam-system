@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Exam.Domain.Audit;
 using Exam.Domain.Identity;
 using Exam.Infrastructure.Identity;
 using Exam.Infrastructure.Persistence;
@@ -52,6 +53,32 @@ public sealed class TagEndpointTests : IAsyncLifetime
         _client.Dispose();
         await _factory.DisposeAsync();
         await _postgres.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task 新建标签_写审计日志()
+    {
+        var token = await LoginAsync(AdminUsername, AdminPassword);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var create = await _client.PostAsJsonAsync(
+            "/api/v1/tags",
+            new { code = "audit.math", name = "留痕标签", group = "domain" });
+
+        create.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        // 标签创建要留痕：拦截器只记修改与删除，创建得显式写。
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var row = await db.Set<AuditLog>()
+            .Where(l => l.Action == "tag.create")
+            .OrderBy(l => l.OccurredAt)
+            .LastOrDefaultAsync();
+
+        row.ShouldNotBeNull();
+        row!.OperatorName.ShouldBe(AdminUsername);
+        row.TargetType.ShouldBe("tag");
+        row.Summary.ShouldContain("audit.math");
     }
 
     [Fact]

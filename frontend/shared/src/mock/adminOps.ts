@@ -80,6 +80,7 @@ export const AUDIT_ACTION_LABEL: Record<AuditAction, string> = {
   "auth.login_failed": "登录失败",
   "auth.refresh_reuse": "刷新令牌异常使用",
   "auth.logout": "登出",
+  "tag.create": "新建标签",
   "user.update": "修改用户",
   "user.role_changed": "变更角色",
   "user.tag_changed": "变更用户标签",

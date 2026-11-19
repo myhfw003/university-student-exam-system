@@ -22,6 +22,7 @@ import {
   updateAdminTag,
 } from "@exam/shared/api";
 import { DIFFICULTY_LABEL } from "@exam/shared/engine/paper";
+import { writeAudit } from "@exam/shared/mock/adminOps";
 import type { TagGroup } from "@exam/shared/domain/types";
 import {
   createTag,
@@ -153,6 +154,16 @@ export function useAdminTags(): {
       if (!remote) {
         const result = createTag({ name, group: input.group });
         if (!result.ok) throw new Error(result.message ?? "保存失败");
+        // mock 模式补一行审计（http 模式由后端写）。
+        writeAudit({
+          operator: "陈砚之",
+          action: "tag.create",
+          targetType: "tag",
+          targetId: result.tag?.id ?? "",
+          summary: `新建标签「${name}」`,
+          ip: "10.12.0.21",
+          userAgent: "Chrome 131 / Windows",
+        });
         return;
       }
       await createAdminTag({

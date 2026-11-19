@@ -53,17 +53,20 @@ public sealed class CreateTagHandler : IRequestHandler<CreateTagCommand, TagDto>
     private readonly IClock _clock;
     private readonly ICurrentUser _currentUser;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAuditRecorder _audit;
 
     public CreateTagHandler(
         ITagRepository tags,
         IClock clock,
         ICurrentUser currentUser,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IAuditRecorder audit)
     {
         _tags = tags;
         _clock = clock;
         _currentUser = currentUser;
         _unitOfWork = unitOfWork;
+        _audit = audit;
     }
 
     public async Task<TagDto> Handle(CreateTagCommand request, CancellationToken cancellationToken)
@@ -114,6 +117,20 @@ public sealed class CreateTagHandler : IRequestHandler<CreateTagCommand, TagDto>
         // 主键由数据库生成，响应需要带上它，因此这里先落库再组装视图。
         // 工作单元行为会在 Handler 返回后再提交一次，此时已无变更，幂等无副作用。
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // 标签创建也要留痕（安全合规 §8.2 的必审计动作清单里有「标签创建」）。
+        // 改名与删除由 EF 拦截器自动留痕，创建不行——拦截器只记修改与删除。
+        await _audit.RecordAsync(
+            "tag.create",
+            "tag",
+            tag.Id.ToString(),
+            new Dictionary<string, object?>
+            {
+                ["code"] = tag.Code,
+                ["name"] = tag.Name,
+                ["group"] = group.ToStorage(),
+            },
+            cancellationToken);
 
         return TagDto.From(tag);
     }
