@@ -285,6 +285,21 @@ public sealed class Question : AuditableEntity, IAuditedEntity
         Touch(now, actorId);
     }
 
+    /// <summary>
+    /// 题目删除时，附件一并软删除（FR-CAT-05）。
+    /// <para>
+    /// 对象存储里的文件**不动**——软删除留的是「可追溯、可恢复」，
+    /// 真要清理文件是保留期任务的事（FR-AUD-03）。
+    /// </para>
+    /// </summary>
+    public void SoftDeleteAttachments(DateTimeOffset now)
+    {
+        foreach (var attachment in _attachments)
+        {
+            attachment.SoftDelete(now);
+        }
+    }
+
     /// <summary>挂载标签。数量上限 5；难度维度走 <see cref="SetDifficulty"/> 而不是这里。</summary>
     public void AttachTag(long tagId, DateTimeOffset now, long? actorId = null)
     {

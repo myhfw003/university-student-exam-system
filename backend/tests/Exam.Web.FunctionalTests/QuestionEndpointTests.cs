@@ -376,6 +376,41 @@ public sealed class QuestionEndpointTests : IAsyncLifetime
         url.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
+    [Fact]
+    public async Task 题目删除后附件行被软删除()
+    {
+        await LoginAsync();
+
+        var questionId = await CreateSingleQuestionAsync("Q-2026-00013");
+
+        var upload = await PostFileAsync(
+            "/api/v1/questions/attachments?questionId=" + questionId,
+            "diagram.png",
+            "image/png",
+            PngBytes());
+        upload.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        var uploaded = await upload.Content.ReadFromJsonAsync<JsonElement>();
+        var attachmentId = uploaded.GetProperty("id").GetInt64();
+
+        var delete = await _client.DeleteAsync($"/api/v1/questions/{questionId}");
+        delete.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        // 行留着（可追溯），但标记成已删除。
+        var attachment = await db.Set<QuestionAttachment>()
+            .IgnoreQueryFilters()
+            .FirstAsync(a => a.Id == attachmentId);
+        attachment.DeletedAt.ShouldNotBeNull();
+
+        // 默认查询查不到它了。
+        var visible = await db.Set<QuestionAttachment>()
+            .FirstOrDefaultAsync(a => a.Id == attachmentId);
+        visible.ShouldBeNull();
+    }
+
     private static byte[] PngBytes() =>
         [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x00];
 

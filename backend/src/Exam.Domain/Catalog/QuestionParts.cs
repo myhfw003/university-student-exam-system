@@ -144,7 +144,7 @@ public sealed class QuestionStep : Entity<long>
 }
 
 /// <summary>题目附件。实际文件放在对象存储，这里只存引用。</summary>
-public sealed class QuestionAttachment : Entity<long>
+public sealed class QuestionAttachment : Entity<long>, ISoftDeletable
 {
     public QuestionAttachment()
     {
@@ -180,6 +180,25 @@ public sealed class QuestionAttachment : Entity<long>
     public int SortOrder { get; private set; }
 
     public DateTimeOffset CreatedAt { get; private set; }
+
+    /// <summary>
+    /// 软删除时间。题目删除时附件一并软删除（FR-CAT-05）：
+    /// 行留着（可追溯、可恢复），但查不到、也签不出签名 URL。
+    /// </summary>
+    public DateTimeOffset? DeletedAt { get; private set; }
+
+    public bool IsDeleted => DeletedAt.HasValue;
+
+    /// <summary>软删除。重复调用幂等。</summary>
+    public void SoftDelete(DateTimeOffset now)
+    {
+        if (IsDeleted)
+        {
+            return;
+        }
+
+        DeletedAt = now;
+    }
 
     public static QuestionAttachment Create(
         string objectKey,

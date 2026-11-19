@@ -449,6 +449,8 @@ public sealed class DeleteQuestionHandler : IRequestHandler<DeleteQuestionComman
         var tagIds = question.TagIds.ToList();
 
         question.SoftDelete(now, _currentUser.UserId);
+        // 附件一并软删除（FR-CAT-05）。
+        question.SoftDeleteAttachments(now);
         _questions.Update(question);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
