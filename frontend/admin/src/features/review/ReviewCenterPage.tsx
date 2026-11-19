@@ -70,7 +70,7 @@ export function ReviewCenterPage() {
   const [assignSaving, setAssignSaving] = useState(false);
 
   const queue = useReviewQueue({ status: filter });
-  const { items, counts, loadDetail, saveGrade, batchAdopt, assign, refresh } = queue;
+  const { items, counts, loadDetail, saveGrade, batchAdopt, claim, assign, refresh } = queue;
   // 候选阅卷人：姓名要显示在「当前指派」上，所以一进页面就取（HTTP 模式）。
   const people = usePeopleCandidates(remote);
 
@@ -160,6 +160,22 @@ export function ReviewCenterPage() {
       toast.error(error instanceof Error ? error.message : "指派失败");
     } finally {
       setAssignSaving(false);
+    }
+  };
+
+  /**
+   * 领取任务（先到先得）。
+   *
+   * 领取后任务变成「阅卷中」，别的教师就抢不走了；被指派给别人的任务也领不了。
+   */
+  const handleClaim = async () => {
+    if (!detail) return;
+    try {
+      await claim(detail.id);
+      toast.ok("已领取这份卷宗");
+      refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "领取失败");
     }
   };
 
@@ -396,17 +412,22 @@ export function ReviewCenterPage() {
                   <h2 className="card-title">评分与评语</h2>
                   <div className="row-tight">
                     {statusBadge}
-                    {remote ? (
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          setAssignPicked(detail.assigneeId ?? "");
-                          setAssignKeywordRaw("");
-                          setAssignOpen(true);
-                        }}
-                      >
-                        指派阅卷人
-                      </Button>
+                    {remote && detail.status === "pending" ? (
+                      <>
+                        <Button size="sm" onClick={() => void handleClaim()}>
+                          领取任务
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setAssignPicked(detail.assigneeId ?? "");
+                            setAssignKeywordRaw("");
+                            setAssignOpen(true);
+                          }}
+                        >
+                          指派阅卷人
+                        </Button>
+                      </>
                     ) : null}
                   </div>
                 </div>

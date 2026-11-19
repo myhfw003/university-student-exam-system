@@ -195,6 +195,29 @@ describe("管理端阅卷中心 · HTTP 模式", () => {
     });
   });
 
+  it("领取任务把卷宗先到先得地占下来", async () => {
+    const user = userEvent.setup();
+    api.claimReviewTask.mockResolvedValue({
+      ...TASK,
+      status: "in_review",
+      statusLabel: "阅卷中",
+      reviewerId: "1",
+      assigneeId: "1",
+    });
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "领取任务" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "领取任务" }));
+
+    await waitFor(() => {
+      expect(api.claimReviewTask).toHaveBeenCalledTimes(1);
+    });
+    expect(api.claimReviewTask.mock.calls[0]).toEqual(["7"]);
+  });
+
   it("能指派阅卷人，候选里只有教师", async () => {
     const user = userEvent.setup();
     renderPage();
