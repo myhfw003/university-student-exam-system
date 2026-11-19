@@ -58,7 +58,7 @@
 | # | 功能 | 页面 | 应调用的端点 | 端点是否存在 |
 |---|---|---|---|---|
 | A1 | 场次列表与生命周期 | `features/sessions/ExamSessionListPage.tsx` | `GET/POST /exam-sessions`、`/{id}/publish`、`/close`、`/cancel` | 存在（无「推进到进行中」这一跳，发布即进入进行中） |
-| A2 | 场次详情：防作弊规则、名单、导出 | `features/sessions/ExamSessionDetailPage.tsx` | `PUT /exam-sessions/{id}`、`GET /exam-sessions/{id}/participants`、`/{id}/grades` | 存在 |
+| A2 | 场次详情：防作弊规则、名单、导出、**成绩发布** | `features/sessions/ExamSessionDetailPage.tsx` | `PUT /exam-sessions/{id}`、`GET /exam-sessions/{id}/participants`、`/{id}/grades` | 存在 |
 | A3 | 场次负责人 | 场次详情页「负责教师」卡片 | `GET/PUT /exam-sessions/{id}/assignments` | 存在（T-P10-12 补上 UI） |
 | A4 | 用户与角色 | `features/users/UsersPage.tsx` | `GET /users`、`PUT /users/{id}`、`PUT/DELETE /users/{id}/roles`、`PUT /users/{id}/tags` | 存在 |
 | A5 | 名单批量导入 | `features/users/UsersPage.tsx` | `POST /users/import`（multipart） | 存在 |
@@ -637,3 +637,22 @@ HTTP 模式只显示作答原文；这属于接口能力缺口，不是前端映
 
 **实测结论**（真实后端 + Chromium）：管理端登录后场次列表出现接口返回的那场考试；
 学生端登录后工作台显示 `/dashboard/summary` 给的推荐练习；两条用例全绿。
+
+### T-P10-18 场次成绩发布（已完成）
+
+**缺口**：后端有 `POST /exam-sessions/{id}/publish-grades`（权限 `grade:publish`），
+前端既没有端点常量也没有调用——成绩发布不出去。
+
+**前端**
+
+- `shared/src/api/examSessionApi.ts` 补 `publishSessionGrades`；
+- 场次详情页「考生名单」卡片加「发布成绩」按钮与发布范围对话框
+  （全部成绩 / 仅客观题），与「导出成绩」并排。
+
+**要注意的**
+
+- 范围只有 `all` 与 `objective_only` 两种，非法范围是 **400**（请求体校验）不是 422。
+- 按钮不按权限点隐藏：能不能发布由后端判定。
+
+**实测结论**（真实后端）：发布全部成绩 → 200（`affectedAttempts=1`）；发布仅客观题 →
+200；非法范围 → 400「请求参数校验失败。」；发布后场次成绩 `published=true`。
