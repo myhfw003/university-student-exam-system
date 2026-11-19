@@ -274,6 +274,57 @@ public sealed class AuthEndpointTests : IAsyncLifetime
         Assert.Equal("账号已被锁定，请稍后再试。", problem.GetProperty("title").GetString());
     }
 
+    [Fact]
+    public async Task 刷新令牌被重复使用_整族吊销且写审计日志()
+    {
+        const string username = "reusecheck1";
+        await CreateUserAsync(username, "Pass123456");
+
+        // 登录拿刷新 Cookie。
+        var login = await _client.PostAsJsonAsync(
+            "/api/v1/auth/login", new { username, password = "Pass123456" });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        var firstCookie = ReadRefreshCookie(login);
+
+        // 用一次（轮换）：旧令牌即刻失效，换回新 Cookie。
+        var rotated = await PostWithCookieAsync("/api/v1/auth/refresh", firstCookie);
+        Assert.Equal(HttpStatusCode.OK, rotated.StatusCode);
+        var secondCookie = ReadRefreshCookie(rotated);
+
+        // 再用旧 Cookie：判定为盗用。
+        var reused = await PostWithCookieAsync("/api/v1/auth/refresh", firstCookie);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, reused.StatusCode);
+
+        // 整族吊销必须真落库：新 Cookie 也不再能刷新。
+        // （不落库的话它照样能换到访问令牌——被偷走的那一族就还活着。）
+        var afterReuse = await PostWithCookieAsync("/api/v1/auth/refresh", secondCookie);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, afterReuse.StatusCode);
+
+        // 复用检测要留审计行（FR-IAM-02）。
+        var row = (await GetAuditLogsAsync("auth.refresh_reuse"))
+            .LastOrDefault(l => l.OperatorName == username);
+        Assert.NotNull(row);
+        Assert.Contains("刷新令牌被重复使用", row!.Summary);
+    }
+
+    /// <summary>从响应里取刷新 Cookie（测试客户端不自动带 Cookie）。</summary>
+    private static string ReadRefreshCookie(HttpResponseMessage response)
+    {
+        var setCookie = response.Headers.TryGetValues("Set-Cookie", out var values)
+            ? string.Join(";", values)
+            : string.Empty;
+        var cookie = setCookie.Split(';')[0] ?? string.Empty;
+        Assert.Contains("rt=", cookie);
+        return cookie;
+    }
+
+    private async Task<HttpResponseMessage> PostWithCookieAsync(string path, string cookie)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, path);
+        request.Headers.Add("Cookie", cookie);
+        return await _client.SendAsync(request);
+    }
+
     private async Task<List<AuditLog>> GetAuditLogsAsync(string action)
     {
         using var scope = _factory.Services.CreateScope();

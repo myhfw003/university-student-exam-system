@@ -17,9 +17,11 @@ public sealed class RefreshAccessTokenHandlerTests
     private readonly IUserPermissionService _permissions = Substitute.For<IUserPermissionService>();
     private readonly ITokenService _tokenService = Substitute.For<ITokenService>();
     private readonly IClock _clock = new FixedClock(Now);
+    private readonly IAuditRecorder _audit = Substitute.For<IAuditRecorder>();
+    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
 
     private RefreshAccessTokenHandler CreateHandler() =>
-        new(_refreshTokens, _users, _permissions, _tokenService, _clock);
+        new(_refreshTokens, _users, _permissions, _tokenService, _clock, _audit, _unitOfWork);
 
     [Fact]
     public async Task 令牌不存在_拒绝刷新()
@@ -47,12 +49,29 @@ public sealed class RefreshAccessTokenHandlerTests
         _refreshTokens.GetByHashAsync("hash-1", Arg.Any<CancellationToken>()).Returns(revoked);
         _refreshTokens.GetFamilyAsync(familyId, Arg.Any<CancellationToken>()).Returns(new[] { revoked, sibling });
 
+        var user = User.Register("zhangsan", "张三", "hash-x", Now);
+        _users.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+
         var handler = CreateHandler();
         var act = async () => await handler.Handle(new RefreshAccessTokenCommand("raw"), CancellationToken.None);
 
         await act.ShouldThrowAsync<BusinessRuleException>();
         sibling.RevokedAt.ShouldBe(Now);
         sibling.RevokeReason.ShouldBe(RefreshTokenRevokeReason.ReuseDetected);
+
+        // 复用检测要留审计行。
+        await _audit.Received(1).RecordAsAsync(
+            1L,
+            "zhangsan",
+            "auth.refresh_reuse",
+            "user",
+            "1",
+            Arg.Is<IReadOnlyDictionary<string, object?>>(
+                s => Equals(s["username"], "zhangsan") && Equals(s["familyId"], familyId.ToString())),
+            Arg.Any<CancellationToken>());
+
+        // 整族吊销必须落库：跟着异常回滚的话，被盗用的一族照样能刷新。
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

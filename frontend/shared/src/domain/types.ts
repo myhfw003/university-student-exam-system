@@ -491,6 +491,7 @@ export interface AppUser {
 export type AuditAction =
   | "auth.login"
   | "auth.login_failed"
+  | "auth.refresh_reuse"
   | "user.update"
   | "user.role_changed"
   | "user.tag_changed"

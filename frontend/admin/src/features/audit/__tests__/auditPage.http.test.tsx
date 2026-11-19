@@ -149,8 +149,20 @@ const LOGIN_LOGS = {
       ip: "10.12.0.44",
       userAgent: "Chrome 131",
     },
+    {
+      id: "1199",
+      at: "2026-11-19T09:09:12Z",
+      operatorId: "9",
+      operator: "zhangsan",
+      action: "auth.refresh_reuse",
+      targetType: "user",
+      targetId: "9",
+      summary: '{"reason": "刷新令牌被重复使用"}',
+      ip: "10.12.0.21",
+      userAgent: "Chrome 131",
+    },
   ],
-  total: 2,
+  total: 3,
 };
 
 describe("管理端审计页 · 登录审计", () => {
@@ -167,6 +179,8 @@ describe("管理端审计页 · 登录审计", () => {
       expect(screen.getAllByText("登录成功").length).toBeGreaterThan(0);
     });
     expect(screen.getAllByText("登录失败").length).toBeGreaterThan(0);
+    // 刷新令牌被重复使用也有登记（FR-IAM-02）。
+    expect(screen.getAllByText("刷新令牌异常使用").length).toBeGreaterThan(0);
     // 操作者列上是登录账号（失败那次是自称的账号）。
     expect(screen.getAllByText("zhangsan").length).toBeGreaterThan(0);
     expect(screen.getAllByText("ghost").length).toBeGreaterThan(0);

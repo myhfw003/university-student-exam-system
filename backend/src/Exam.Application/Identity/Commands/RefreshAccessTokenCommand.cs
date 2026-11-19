@@ -27,19 +27,25 @@ public sealed class RefreshAccessTokenHandler : IRequestHandler<RefreshAccessTok
     private readonly IUserPermissionService _permissions;
     private readonly ITokenService _tokenService;
     private readonly IClock _clock;
+    private readonly IAuditRecorder _audit;
+    private readonly IUnitOfWork _unitOfWork;
 
     public RefreshAccessTokenHandler(
         IRefreshTokenRepository refreshTokens,
         IUserRepository users,
         IUserPermissionService permissions,
         ITokenService tokenService,
-        IClock clock)
+        IClock clock,
+        IAuditRecorder audit,
+        IUnitOfWork unitOfWork)
     {
         _refreshTokens = refreshTokens;
         _users = users;
         _permissions = permissions;
         _tokenService = tokenService;
         _clock = clock;
+        _audit = audit;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<RefreshAccessTokenResult> Handle(
@@ -64,6 +70,8 @@ public sealed class RefreshAccessTokenHandler : IRequestHandler<RefreshAccessTok
                 token.Revoke(RefreshTokenRevokeReason.ReuseDetected, now);
                 _refreshTokens.Update(token);
             }
+
+            await RecordReuseDetectedAsync(stored, cancellationToken);
 
             throw new BusinessRuleException("检测到刷新令牌异常使用，请重新登录。");
         }
@@ -104,5 +112,34 @@ public sealed class RefreshAccessTokenHandler : IRequestHandler<RefreshAccessTok
             (int)Math.Max(0, (access.ExpiresAt - now).TotalSeconds),
             refresh.RawToken,
             refresh.ExpiresAt);
+    }
+
+    /// <summary>
+    /// 记一次「刷新令牌被重复使用」，并把整族吊销落库。
+    /// <para>
+    /// 复用检测是抛异常结束的，工作单元只在命令成功返回后才提交——
+    /// 不在这里单独提交的话，整族吊销会被一起回滚，
+    /// 被盗用的那一族照样能继续刷新。
+    /// </para>
+    /// </summary>
+    private async Task RecordReuseDetectedAsync(RefreshToken stored, CancellationToken cancellationToken)
+    {
+        var user = await _users.GetByIdAsync(stored.UserId, cancellationToken);
+
+        await _audit.RecordAsAsync(
+            stored.UserId,
+            user?.Username,
+            "auth.refresh_reuse",
+            "user",
+            stored.UserId.ToString(),
+            new Dictionary<string, object?>
+            {
+                ["username"] = user?.Username,
+                ["familyId"] = stored.FamilyId.ToString(),
+                ["reason"] = "刷新令牌被重复使用",
+            },
+            cancellationToken);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 }
