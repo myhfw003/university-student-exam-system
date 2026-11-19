@@ -206,7 +206,7 @@ export function ReviewCenterPage() {
     <>
       <PageHead
         title="阅卷中心"
-        sub={`主观题由系统按关键词给出初判建议，管理端复核后给出最终分数与评语。当前待阅 ${counts.pending} 份，已阅 ${counts.reviewed} 份。`}
+        sub={`主观题由系统按关键词给出初判建议，管理端复核后给出最终分数与评语。当前待阅 ${counts.pending} 份，阅卷中 ${counts.inReview} 份，已阅 ${counts.reviewed} 份。`}
         actions={
           <Button onClick={handleBatchAdopt}>批量采纳初判建议</Button>
         }
@@ -224,6 +224,7 @@ export function ReviewCenterPage() {
               onChange={(next) => setFilter(next)}
               options={[
                 { value: "pending", label: `待阅卷 ${counts.pending}` },
+                { value: "in_review", label: `阅卷中 ${counts.inReview}` },
                 { value: "reviewed", label: `已阅卷 ${counts.reviewed}` },
                 { value: "all", label: `全部 ${items.length}` },
               ]}

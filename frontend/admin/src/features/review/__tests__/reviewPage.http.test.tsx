@@ -195,6 +195,22 @@ describe("管理端阅卷中心 · HTTP 模式", () => {
     });
   });
 
+  it("状态筛选能切到「阅卷中」", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "阅卷中 1" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "阅卷中 1" }));
+
+    // 状态筛选交给服务端，不在前端自己筛。
+    await waitFor(() => {
+      expect(api.loadReviewTasks).toHaveBeenCalledWith({ status: "in_review" });
+    });
+  });
+
   it("领取任务把卷宗先到先得地占下来", async () => {
     const user = userEvent.setup();
     api.claimReviewTask.mockResolvedValue({
