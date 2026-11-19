@@ -3,10 +3,12 @@ import {
   addReview,
   bankStats,
   createTag,
+  descendantTagIds,
   discardQuestion,
   difficultyLabel,
   isInScope,
   itemsOf,
+  matchTagFilter,
   matchTags,
   preflight,
   primaryTagName,
@@ -387,5 +389,58 @@ describe("catalog · 题库统计与阅卷", () => {
     const items = itemsOf({ questionIds: ["q-m-01"] });
     expect(items).toHaveLength(1);
     expect(items[0]?.score).toBeGreaterThan(0);
+  });
+});
+
+describe("catalog · 标签筛选语义", () => {
+  // 种子数据里「编程实现」挂在「应用迁移」下（同维度成树）。
+  it("后代展开包含子标签与孙标签", () => {
+    expect(descendantTagIds("t-ab-apply")).toContain("t-ab-apply");
+    expect(descendantTagIds("t-ab-apply")).toContain("t-ab-implement");
+    // 没有子标签的标签只展开成它自己。
+    expect(descendantTagIds("t-ab-calc")).toEqual(["t-ab-calc"]);
+  });
+
+  it("任一命中：命中任一选中标签（含子标签）即算命中", () => {
+    expect(matchTagFilter({ tags: ["t-ab-apply"] }, ["t-ab-apply", "t-ab-calc"])).toBe(true);
+    expect(matchTagFilter({ tags: ["t-ab-calc"] }, ["t-ab-apply", "t-ab-calc"])).toBe(true);
+    expect(matchTagFilter({ tags: ["t-ab-analyze"] }, ["t-ab-apply", "t-ab-calc"])).toBe(false);
+  });
+
+  it("包含子标签：父标签命中带上子标签的题目", () => {
+    // 「编程实现」是「应用迁移」的子标签。
+    expect(
+      matchTagFilter({ tags: ["t-ab-implement"] }, ["t-ab-apply"], { includeDescendants: true }),
+    ).toBe(true);
+    // 关掉「包含子标签」就只认标签本身。
+    expect(
+      matchTagFilter({ tags: ["t-ab-implement"] }, ["t-ab-apply"], { includeDescendants: false }),
+    ).toBe(false);
+  });
+
+  it("全部命中：每个选中的标签都要被命中", () => {
+    // 同时挂了两个选中标签的题目才算命中。
+    expect(
+      matchTagFilter({ tags: ["t-ab-apply", "t-ab-calc"] }, ["t-ab-apply", "t-ab-calc"], {
+        matchMode: "all",
+      }),
+    ).toBe(true);
+    // 只挂了一个：不算全部命中。
+    expect(
+      matchTagFilter({ tags: ["t-ab-apply"] }, ["t-ab-apply", "t-ab-calc"], { matchMode: "all" }),
+    ).toBe(false);
+  });
+
+  it("全部命中 + 包含子标签：子标签也算命中父标签", () => {
+    expect(
+      matchTagFilter({ tags: ["t-ab-implement"] }, ["t-ab-apply"], {
+        matchMode: "all",
+        includeDescendants: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("没选标签时全部题目都算命中", () => {
+    expect(matchTagFilter({ tags: [] }, [])).toBe(true);
   });
 });

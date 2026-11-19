@@ -23,6 +23,10 @@
       与 rowCount / count 保持一致。
    6. 原型引用了三个未定义的标签 ID（t-dom-math / t-pt-calc / t-pt-tree），
       本文件补齐，保证「引用即存在」。
+   7. 原型的标签是平的（没有父子关系），本文件给「编程实现」加了父标签
+      「应用迁移」——同一维度成树，与后端的规则一致（父标签必须与子标签同维度）。
+      有了这层树，「包含子标签」开关与「全部命中」才有可验证的差别
+      （见 T-P10-23）。
    ========================================================================== */
 
 import type {
@@ -135,7 +139,8 @@ export const TAGS: Tag[] =   [
       { id: "t-ab-understand", name: "概念理解", group: "ability" },
       { id: "t-ab-apply", name: "应用迁移", group: "ability" },
       { id: "t-ab-express", name: "论述表达", group: "ability" },
-      { id: "t-ab-implement", name: "编程实现", group: "ability" },
+      // 「编程实现」挂在「应用迁移」下：同维度成树（与后端一致，父标签必须同维度）。
+      { id: "t-ab-implement", name: "编程实现", group: "ability", parentId: "t-ab-apply" },
       { id: "t-ab-analyze", name: "归纳分析", group: "ability" },
 
       { id: "t-df1", name: "基础", group: "difficulty", level: 1 },

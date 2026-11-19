@@ -35,7 +35,12 @@ export interface Tag {
   group: TagGroup;
   /** 难度分组下才有：1 基础 / 2 中等 / 3 较难。 */
   level?: DifficultyLevel;
+  /** 父标签；顶级标签没有父。与后端一致，父标签必须同维度。 */
+  parentId?: string | null;
 }
+
+/** 标签命中模式：任一命中（any）/ 全部命中（all）。 */
+export type TagMatchMode = "any" | "all";
 
 /** 题目选项。 */
 export interface QuestionOption {

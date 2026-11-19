@@ -33,11 +33,12 @@ import {
   updateQuestion,
   type AdminQuestionDetail,
 } from "@exam/shared/api";
-import type { Question, QuestionType } from "@exam/shared/domain/types";
+import type { Question, QuestionType, TagMatchMode } from "@exam/shared/domain/types";
 import { useCatalogTags } from "../shared/useCatalogTags";
 import {
   bankStats,
   discardQuestions,
+  matchTagFilter,
   removeBank,
   removeQuestion,
   setQuestionsStatus,
@@ -83,6 +84,10 @@ export interface AdminQuestionFilter {
   keyword: string;
   /** 标签筛选（任一命中）。 */
   tagIds: string[];
+  /** 是否把子标签也算命中，默认开启。 */
+  includeDescendants?: boolean;
+  /** 命中模式：任一命中（默认）/ 全部命中。 */
+  matchMode?: TagMatchMode;
   /** 是否拉取；标签页切换时避免无谓的请求。 */
   enabled?: boolean;
 }
@@ -304,6 +309,8 @@ export function useAdminQuestions(filter: AdminQuestionFilter): {
           type: filter.type,
           keyword: filter.keyword.trim() || undefined,
           tagIds: filter.tagIds.length > 0 ? filter.tagIds : undefined,
+          includeDescendants: filter.includeDescendants ?? true,
+          matchMode: filter.matchMode ?? "any",
         });
         if (cancelled) return;
         setRemoteQuestions(
@@ -340,6 +347,8 @@ export function useAdminQuestions(filter: AdminQuestionFilter): {
     filter.type,
     filter.keyword,
     filter.tagIds,
+    filter.includeDescendants,
+    filter.matchMode,
     filter.enabled,
     token,
   ]);
@@ -361,7 +370,13 @@ export function useAdminQuestions(filter: AdminQuestionFilter): {
         const kw = filter.keyword.toLowerCase();
         if (!`${q.id} ${q.code ?? ""} ${q.stem}`.toLowerCase().includes(kw)) return false;
       }
-      if (filter.tagIds.length && !filter.tagIds.some((tagId) => q.tags.includes(tagId))) {
+      if (
+        filter.tagIds.length &&
+        !matchTagFilter(q, filter.tagIds, {
+          includeDescendants: filter.includeDescendants ?? true,
+          matchMode: filter.matchMode ?? "any",
+        })
+      ) {
         return false;
       }
       return true;

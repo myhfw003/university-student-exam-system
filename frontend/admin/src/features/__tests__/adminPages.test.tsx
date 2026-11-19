@@ -198,6 +198,39 @@ describe("管理端题库工作台", () => {
     await user.click(screen.getByRole("tab", { name: /候选题/ }));
     expect(screen.getByText("候选题队列")).toBeInTheDocument();
   });
+
+  it("按标签筛选：含子标签时父标签命中子标签的题目", async () => {
+    const user = userEvent.setup();
+    renderPage(<BankWorkbenchPage />, "/banks/__all__?tab=questions", "/banks/:bankId");
+
+    // 「编程实现」挂在「应用迁移」下：选中父标签，含子标签时它也算命中。
+    await user.click(screen.getByRole("button", { name: "应用迁移" }));
+
+    // q-d-05 挂的是「编程实现」，按子标签命中。
+    expect(screen.getByText(/给定带头结点的单链表 L/)).toBeInTheDocument();
+
+    // 关掉「包含子标签」：只认标签本身，这道题不再出现。
+    await user.click(screen.getByRole("checkbox", { name: "包含子标签" }));
+    expect(screen.queryByText(/给定带头结点的单链表 L/)).not.toBeInTheDocument();
+  });
+
+  it("按标签筛选：全部命中要求同时命中每个选中的标签", async () => {
+    const user = userEvent.setup();
+    renderPage(<BankWorkbenchPage />, "/banks/__all__?tab=questions", "/banks/:bankId");
+
+    // q-m-01 挂「高等数学」+「计算求解」，q-m-05 只挂「高等数学」。
+    await user.click(screen.getByRole("button", { name: "高等数学" }));
+    await user.click(screen.getByRole("button", { name: "计算求解" }));
+
+    // 任一命中：两个标签命中任意一个都算数。
+    expect(screen.getByText(/求极限 lim\(x→0\)/)).toBeInTheDocument();
+    expect(screen.getByText(/下列级数中绝对收敛的有/)).toBeInTheDocument();
+
+    // 切到「全部命中」：两个标签都要命中，只挂一个的不再出现。
+    await user.click(screen.getByRole("button", { name: "全部命中" }));
+    expect(screen.getByText(/求极限 lim\(x→0\)/)).toBeInTheDocument();
+    expect(screen.queryByText(/下列级数中绝对收敛的有/)).not.toBeInTheDocument();
+  });
 });
 
 describe("管理端组卷列表", () => {

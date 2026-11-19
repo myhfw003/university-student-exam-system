@@ -22,6 +22,20 @@ import { getAccessToken, type TokenPair } from "./tokenStore";
 /** 请求方法。 */
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
+/**
+ * 查询参数值。
+ *
+ * 数组会展开成**重复参数**（`tagIds=1&tagIds=2`）——
+ * 服务端把 `long[]` 从重复参数绑定，逗号分隔会被判成非法值。
+ */
+export type QueryValue =
+  | string
+  | number
+  | boolean
+  | undefined
+  | null
+  | readonly (string | number | boolean)[];
+
 /** 请求配置。 */
 export interface RequestOptions {
   method?: HttpMethod;
@@ -36,7 +50,7 @@ export interface RequestOptions {
   /** 取消信号。 */
   signal?: AbortSignal;
   /** 查询参数。 */
-  query?: Record<string, string | number | boolean | undefined | null>;
+  query?: Record<string, QueryValue>;
 }
 
 /** 归一化后的请求错误。 */
@@ -79,6 +93,11 @@ export interface HttpClientConfig {
   refreshToken?: () => Promise<TokenPair | null>;
 }
 
+/** 判断查询参数值是不是数组（只认字符串 / 数字 / 布尔组成的数组）。 */
+function isQueryArray(value: QueryValue): value is readonly (string | number | boolean)[] {
+  return Array.isArray(value);
+}
+
 function buildUrl(baseUrl: string, path: string, query: RequestOptions["query"]): string {
   const base = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
   const suffix = path.startsWith("/") ? path : `/${path}`;
@@ -86,6 +105,11 @@ function buildUrl(baseUrl: string, path: string, query: RequestOptions["query"])
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value === undefined || value === null) continue;
+      // 数组按重复参数展开：服务端绑定 `long[]` 只认重复参数。
+      if (isQueryArray(value)) {
+        for (const item of value) qs.append(key, String(item));
+        continue;
+      }
       qs.set(key, String(value));
     }
   }

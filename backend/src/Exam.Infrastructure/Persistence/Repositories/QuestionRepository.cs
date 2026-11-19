@@ -9,6 +9,9 @@ public sealed class QuestionRepository : IQuestionRepository
 {
     private readonly AppDbContext _db;
 
+    /// <summary>本次请求内已展开的标签子树（按根标签缓存）。</summary>
+    private readonly Dictionary<long, long[]> _subtreeCache = new();
+
     public QuestionRepository(AppDbContext db) => _db = db;
 
     public Task<Question?> GetByIdAsync(long id, CancellationToken cancellationToken = default) =>
@@ -126,13 +129,29 @@ public sealed class QuestionRepository : IQuestionRepository
 
         if (criteria.TagIds.Count > 0)
         {
-            var tagIds = criteria.IncludeDescendants
-                ? await ExpandDescendantsAsync(criteria.TagIds, cancellationToken)
-                : criteria.TagIds;
+            // 选中的标签去重：同一个标签重复选中不应改变筛选结果。
+            var roots = criteria.TagIds.Distinct().ToList();
 
-            query = criteria.MatchMode == TagMatchMode.All
-                ? query.Where(q => q.Tags.Count(t => tagIds.Contains(t.TagId)) == tagIds.Count)
-                : query.Where(q => q.Tags.Any(t => tagIds.Contains(t.TagId)));
+            if (criteria.MatchMode == TagMatchMode.All)
+            {
+                // 全部命中：每个选中的标签都要被命中。
+                // 含子标签时，命中该标签的任意后代也算命中它。
+                foreach (var root in roots)
+                {
+                    var hits = criteria.IncludeDescendants
+                        ? await GetSubtreeAsync(root, cancellationToken)
+                        : [root];
+                    query = query.Where(q => q.Tags.Any(t => hits.Contains(t.TagId)));
+                }
+            }
+            else
+            {
+                // 任一命中：命中任意一个选中的标签（含其后代）即可。
+                var tagIds = criteria.IncludeDescendants
+                    ? await ExpandDescendantsAsync(roots, cancellationToken)
+                    : roots;
+                query = query.Where(q => q.Tags.Any(t => tagIds.Contains(t.TagId)));
+            }
         }
 
         if (criteria.BankId is not null)
@@ -155,6 +174,26 @@ public sealed class QuestionRepository : IQuestionRepository
         }
 
         return query;
+    }
+
+    /// <summary>
+    /// 取标签自身与它的全部后代。
+    /// <para>
+    /// 同一请求里重复展开没有意义（列表查询会分别数总数与取当页），
+    /// 这里按实例缓存一份：仓库是 Scoped 生命周期，缓存只活在本次请求内。
+    /// </para>
+    /// </summary>
+    private async Task<long[]> GetSubtreeAsync(long rootId, CancellationToken cancellationToken)
+    {
+        if (_subtreeCache.TryGetValue(rootId, out var cached))
+        {
+            return cached;
+        }
+
+        var ids = await ExpandDescendantsAsync([rootId], cancellationToken);
+        var subtree = ids.ToArray();
+        _subtreeCache[rootId] = subtree;
+        return subtree;
     }
 
     /// <summary>递归 CTE 展开标签的全部后代。</summary>

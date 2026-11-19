@@ -127,6 +127,7 @@ describe("管理端题库 · HTTP 模式", () => {
     // 服务端标签目录：真实后端的标签 ID 是数字主键。
     api.loadQuestionTags.mockResolvedValue([
       { id: "1", name: "基础", group: "difficulty", groupLabel: "难度", level: 1 },
+      { id: "10", name: "高等数学", group: "domain", groupLabel: "领域", level: null },
     ]);
     api.batchQuestionStatus.mockResolvedValue({ total: 1, succeeded: 1, items: [] });
     api.createBank.mockResolvedValue(BANK_DETAIL);
@@ -335,5 +336,49 @@ describe("管理端题库 · HTTP 模式", () => {
     });
     expect(api.batchQuestionStatus.mock.calls[0]![0]).toEqual(["31"]);
     expect(api.batchQuestionStatus.mock.calls[0]![1]).toBe("published");
+  });
+
+  it("按标签筛选把含子标签开关与命中模式交给服务端", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/banks/3?tab=questions"]}>
+        <Routes>
+          <Route path="/banks/:bankId" element={<BankWorkbenchPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("TCP 属于哪一层协议？")).toBeInTheDocument();
+    });
+
+    // 选中一个标签。
+    await user.click(screen.getByRole("button", { name: "高等数学" }));
+    await waitFor(() => {
+      expect(api.loadQuestions).toHaveBeenCalledWith(
+        expect.objectContaining({ tagIds: ["10"] }),
+      );
+    });
+
+    // 默认：含子标签 + 任一命中。
+    expect(api.loadQuestions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ includeDescendants: true, matchMode: "any" }),
+    );
+
+    // 关掉「包含子标签」。
+    await user.click(screen.getByRole("checkbox", { name: "包含子标签" }));
+    await waitFor(() => {
+      expect(api.loadQuestions).toHaveBeenLastCalledWith(
+        expect.objectContaining({ includeDescendants: false }),
+      );
+    });
+
+    // 切到「全部命中」。
+    await user.click(screen.getByRole("button", { name: "全部命中" }));
+    await waitFor(() => {
+      expect(api.loadQuestions).toHaveBeenLastCalledWith(
+        expect.objectContaining({ matchMode: "all" }),
+      );
+    });
   });
 });

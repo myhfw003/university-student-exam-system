@@ -21,6 +21,7 @@ import type {
   QuestionOption,
   QuestionStep,
   QuestionType,
+  TagMatchMode,
 } from "../domain/types";
 
 /** 题目与题库接口所需的客户端。 */
@@ -178,8 +179,11 @@ export async function loadQuestions(
     type?: string | undefined;
     status?: string | undefined;
     tagIds?: string[] | undefined;
+    /** 是否把子标签也算命中；不传则用服务端默认（开启）。 */
+    includeDescendants?: boolean | undefined;
     keyword?: string | undefined;
-    matchMode?: string | undefined;
+    /** 任一命中（默认）/ 全部命中。 */
+    matchMode?: TagMatchMode | undefined;
     page?: number | undefined;
     size?: number | undefined;
   } = {},
@@ -192,7 +196,12 @@ export async function loadQuestions(
       ...(params.bankId ? { bankId: params.bankId } : {}),
       ...(params.type && params.type !== "all" ? { type: params.type } : {}),
       ...(params.status && params.status !== "all" ? { status: params.status } : {}),
-      ...(params.tagIds?.length ? { tagIds: params.tagIds.join(",") } : {}),
+      // 标签 ID 走重复参数：服务端的 `long[]` 只认 `tagIds=1&tagIds=2`，
+      // 逗号分隔会被判成非法值。
+      ...(params.tagIds?.length ? { tagIds: params.tagIds } : {}),
+      ...(params.includeDescendants !== undefined
+        ? { includeDescendants: params.includeDescendants }
+        : {}),
       ...(params.matchMode ? { matchMode: params.matchMode } : {}),
       ...(params.keyword ? { keyword: params.keyword } : {}),
     },

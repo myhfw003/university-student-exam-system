@@ -58,6 +58,8 @@ function toTag(dto: Dto): Tag {
   const tag: Tag = { id: str(dto.id), name: str(dto.name), group };
   const level = num(dto.level, 0);
   if (level === 1 || level === 2 || level === 3) tag.level = level;
+  // 父标签：顶级标签为空。
+  if (dto.parentId !== null && dto.parentId !== undefined) tag.parentId = str(dto.parentId);
   return tag;
 }
 

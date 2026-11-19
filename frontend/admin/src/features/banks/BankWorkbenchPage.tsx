@@ -42,7 +42,7 @@ import {
   updateImportBatch,
   useCatalog,
 } from "@exam/shared/mock/catalog";
-import type { Question } from "@exam/shared/domain/types";
+import type { Question, TagMatchMode } from "@exam/shared/domain/types";
 import { Icon } from "@/app/Icon";
 import { DifficultyChip, SourceBadge, StatusBadge, TagChips, TypeBadge } from "../shared/bits";
 import { QuestionEditor } from "../shared/QuestionEditor";
@@ -160,13 +160,18 @@ export function BankWorkbenchPage() {
   const stats = statsOf(bankId, banks);
 
   // 题目筛选。
-  const [statusFilter, setStatusFilter] = useState<"published" | "draft" | "disabled" | "全部">(
+  // 取值用数据层的口径（all 表示不限），标签只是显示文案：
+  // 混用中文标签会把请求打歪——服务端只认 all / published 这类取值。
+  const [statusFilter, setStatusFilter] = useState<"published" | "draft" | "disabled" | "all">(
     "published",
   );
-  const [typeFilter, setTypeFilter] = useState("全部");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [keyword, setKeyword] = useState("");
   // 标签筛选（原型：领域 + 能力两组 chip，多选为「任一命中」）。
   const [tagFilter, setTagFilter] = useState<string[]>([]);
+  // 「包含子标签」默认开启；命中模式默认「任一命中」（FR-CAT-02）。
+  const [tagIncludeDescendants, setTagIncludeDescendants] = useState(true);
+  const [tagMatchMode, setTagMatchMode] = useState<TagMatchMode>("any");
 
   // 候选题筛选与选择。
   const [sourceFilter, setSourceFilter] = useState("全部");
@@ -179,6 +184,8 @@ export function BankWorkbenchPage() {
     type: typeFilter,
     keyword,
     tagIds: tagFilter,
+    includeDescendants: tagIncludeDescendants,
+    matchMode: tagMatchMode,
     enabled: tab === "questions",
   });
   const candidateQuery = useAdminQuestions({
@@ -578,7 +585,7 @@ export function BankWorkbenchPage() {
                   { value: "published", label: "已发布" },
                   { value: "draft", label: "草稿" },
                   { value: "disabled", label: "已停用" },
-                  { value: "全部", label: "全部" },
+                  { value: "all", label: "全部" },
                 ]}
               />
               <SelectInput
@@ -586,7 +593,7 @@ export function BankWorkbenchPage() {
                 value={typeFilter}
                 onChange={(event) => setTypeFilter(event.target.value)}
               >
-                <option value="全部">全部题型</option>
+                <option value="all">全部题型</option>
                 <option value="single">单选题</option>
                 <option value="multi">多选题</option>
                 <option value="judge">判断题</option>
@@ -621,6 +628,10 @@ export function BankWorkbenchPage() {
                 )
               }
               groupLabel="标签筛选"
+              includeDescendants={tagIncludeDescendants}
+              onIncludeDescendantsChange={setTagIncludeDescendants}
+              matchMode={tagMatchMode}
+              onMatchModeChange={setTagMatchMode}
             />
           </div>
           <div className="card-body is-flush">

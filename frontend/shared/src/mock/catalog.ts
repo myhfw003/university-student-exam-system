@@ -35,6 +35,7 @@ import type {
   Student,
   Tag,
   TagGroup,
+  TagMatchMode,
 } from "../domain/types";
 import { DIFFICULTY_LABEL, LETTERS } from "../engine/paper";
 import { SEED, buildReviewQueue, getExam as seedExam, getPractice as seedPractice } from "./seed";
@@ -422,6 +423,56 @@ export function matchTags(entity: { tags: string[] }, ids: readonly string[]): b
   return entity.tags.some((tagId) => ids.includes(tagId));
 }
 
+/**
+ * 取标签自身与它的全部后代。
+ *
+ * 标签树按 `parentId` 组织；目录里没有父标签时只有它自己。
+ */
+export function descendantTagIds(rootId: string): string[] {
+  const children = new Map<string, string[]>();
+  for (const tag of useCatalog.getState().tags) {
+    if (!tag.parentId) continue;
+    const list = children.get(tag.parentId) ?? [];
+    list.push(tag.id);
+    children.set(tag.parentId, list);
+  }
+  const out: string[] = [];
+  const queue: string[] = [rootId];
+  while (queue.length > 0) {
+    const id = queue.shift();
+    if (!id || out.includes(id)) continue;
+    out.push(id);
+    for (const child of children.get(id) ?? []) queue.push(child);
+  }
+  return out;
+}
+
+/**
+ * 按标签筛选：任一命中（默认）/ 全部命中，可含子标签。
+ *
+ * 语义与服务端 `GET /questions` 一致：
+ * - `any`：命中任意一个选中标签（含其子标签）即算命中；
+ * - `all`：每个选中标签都要被命中（含其子标签也算命中该标签）。
+ */
+export function matchTagFilter(
+  entity: { tags: string[] },
+  ids: readonly string[],
+  options: { includeDescendants?: boolean; matchMode?: TagMatchMode } = {},
+): boolean {
+  const roots = [...new Set(ids)];
+  if (roots.length === 0) return true;
+  const includeDescendants = options.includeDescendants ?? true;
+  const matchMode = options.matchMode ?? "any";
+  const subtrees = roots.map((root) =>
+    includeDescendants ? descendantTagIds(root) : [root],
+  );
+  if (matchMode === "all") {
+    return subtrees.every((subtree) => entity.tags.some((tagId) => subtree.includes(tagId)));
+  }
+  const union = new Set(subtrees.flat());
+  return entity.tags.some((tagId) => union.has(tagId));
+}
+
 /* ==========================================================================
    标签
    ========================================================================== */
@@ -446,8 +497,36 @@ export function validateTags(ids: readonly string[]): TagValidation {
   return { ok: true, ids: list };
 }
 
+/**
+ * 校验父标签：必须存在，且与当前标签同维度。
+ *
+ * 与后端同一条规则（父标签必须与当前标签属于同一维度）。
+ */
+function checkParent(
+  tags: readonly Tag[],
+  parentId: string | null | undefined,
+  group: TagGroup,
+  selfId?: string,
+): { ok: true } | { ok: false; message: string } {
+  if (!parentId) return { ok: true };
+  if (parentId === selfId) return { ok: false, message: "标签不能以自身为父标签。" };
+  const parent = tags.find((t) => t.id === parentId);
+  if (!parent) return { ok: false, message: "父标签不存在。" };
+  if (parent.group !== group) {
+    return {
+      ok: false,
+      message: `父标签必须与当前标签属于同一维度（${TAG_GROUP_LABEL[group]}）。`,
+    };
+  }
+  return { ok: true };
+}
+
 /** 新建标签。 */
-export function createTag(input: { name: string; group: TagGroup }): { ok: boolean; message?: string | undefined; tag?: Tag } {
+export function createTag(input: {
+  name: string;
+  group: TagGroup;
+  parentId?: string | null;
+}): { ok: boolean; message?: string | undefined; tag?: Tag } {
   const name = input.name.trim();
   if (!name) return { ok: false, message: "请填写标签名称" };
   if (!TAG_GROUP_ORDER.includes(input.group)) return { ok: false, message: "请选择有效的标签分组" };
@@ -456,9 +535,12 @@ export function createTag(input: { name: string; group: TagGroup }): { ok: boole
   if (state.tags.some((t) => t.group === input.group && t.name === name)) {
     return { ok: false, message: "同一分组内已存在同名标签" };
   }
+  const parent = checkParent(state.tags, input.parentId, input.group);
+  if (!parent.ok) return { ok: false, message: parent.message };
 
   const id = `t-user-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
   const tag: Tag = { id, name, group: input.group };
+  if (input.parentId) tag.parentId = input.parentId;
   // 难度分组按名称定级，未知名称按「中等」兜底（原型 createTag）。
   if (input.group === "difficulty") {
     tag.level = difficultyLevelByName(name);
@@ -470,7 +552,7 @@ export function createTag(input: { name: string; group: TagGroup }): { ok: boole
 /** 更新标签。 */
 export function updateTag(
   id: string,
-  patch: { name?: string; group?: TagGroup },
+  patch: { name?: string; group?: TagGroup; parentId?: string | null },
 ): { ok: boolean; message?: string } {
   const name = patch.name?.trim();
   if (name === undefined || !name) return { ok: false, message: "请填写标签名称" };
@@ -485,8 +567,14 @@ export function updateTag(
   if (state.tags.some((t) => t.id !== id && t.group === group && t.name === name)) {
     return { ok: false, message: "同一分组内已存在同名标签" };
   }
+  const parent = checkParent(state.tags, patch.parentId, group, id);
+  if (!parent.ok) return { ok: false, message: parent.message };
 
   const next: Tag = { ...target, name, group };
+  if (patch.parentId !== undefined) {
+    if (patch.parentId) next.parentId = patch.parentId;
+    else delete next.parentId;
+  }
   if (group !== "difficulty") {
     delete next.level;
   } else {

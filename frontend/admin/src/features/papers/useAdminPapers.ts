@@ -43,6 +43,7 @@ import {
   createExam,
   createPractice,
   itemsOf,
+  matchTagFilter,
   plumCfgOf,
   removePaper,
   setExamMeta,
@@ -593,6 +594,9 @@ export function usePaperQuestionPool(filters: {
   const bankKey = filters.bankIds.join(",");
   const typeKey = filters.types.join(",");
   const tagKey = filters.tagIds.join(",");
+  // 标签数组：按 tagKey 派生一份引用稳定的数组——
+  // 依赖里放数组会每次渲染都换引用，effect 就跟着不停重取。
+  const tagIds = useMemo(() => (tagKey ? tagKey.split(",") : []), [tagKey]);
   // 题型多选时交给前端筛（服务端一次只认一个题型）。
   const singleType = filters.types.length === 1 ? filters.types[0] : undefined;
 
@@ -609,7 +613,7 @@ export function usePaperQuestionPool(filters: {
               ...(bankId ? { bankId } : {}),
               status: "published",
               ...(singleType ? { type: singleType } : {}),
-              ...(tagKey ? { tagIds: tagKey.split(",") } : {}),
+              ...(tagIds.length ? { tagIds } : {}),
               ...(filters.keyword.trim() ? { keyword: filters.keyword.trim() } : {}),
               size: 200,
             }),
@@ -647,7 +651,7 @@ export function usePaperQuestionPool(filters: {
     return () => {
       cancelled = true;
     };
-  }, [remote, filters.enabled, bankKey, typeKey, tagKey, singleType, filters.keyword, filters.types]);
+  }, [remote, filters.enabled, bankKey, typeKey, tagIds, singleType, filters.keyword, filters.types]);
 
   const mockRows = useMemo<PoolQuestion[]>(() => {
     if (remote || !filters.enabled) return [];
@@ -661,7 +665,8 @@ export function usePaperQuestionPool(filters: {
           if (!inBank) return false;
         }
         if (filters.types.length > 0 && !filters.types.includes(question.type)) return false;
-        if (filters.tagIds.length > 0 && !question.tags.some((t) => filters.tagIds.includes(t))) {
+        // 标签命中口径与服务端一致：默认含子标签、任一命中。
+        if (!matchTagFilter(question, filters.tagIds)) {
           return false;
         }
         if (filters.keyword) {

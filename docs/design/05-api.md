@@ -214,7 +214,7 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 | `bankId` | 题库筛选 |
 | `type` | 题型 |
 | `status` | `draft` / `published` / `disabled` |
-| `tagIds` | 逗号分隔 |
+| `tagIds` | 标签 ID 列表，**重复参数**：`tagIds=1&tagIds=2` |
 | `includeDescendants` | 是否含子标签，默认 `true` |
 | `matchMode` | `any` / `all`，默认 `any` |
 | `difficultyTagIds` | 难度筛选 |
