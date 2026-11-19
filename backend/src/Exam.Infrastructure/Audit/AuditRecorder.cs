@@ -31,7 +31,24 @@ public sealed class AuditRecorder : IAuditRecorder
         _requestContext = requestContext;
     }
 
-    public async Task RecordAsync(
+    public Task RecordAsync(
+        string action,
+        string? targetType = null,
+        string? targetId = null,
+        IReadOnlyDictionary<string, object?>? summary = null,
+        CancellationToken cancellationToken = default) =>
+        RecordAsAsync(
+            _currentUser.UserId,
+            _currentUser.Username,
+            action,
+            targetType,
+            targetId,
+            summary,
+            cancellationToken);
+
+    public async Task RecordAsAsync(
+        long? operatorId,
+        string? operatorName,
         string action,
         string? targetType = null,
         string? targetId = null,
@@ -39,14 +56,14 @@ public sealed class AuditRecorder : IAuditRecorder
         CancellationToken cancellationToken = default)
     {
         var log = AuditLog.Create(
-            _currentUser.UserId,
-            _currentUser.Username,
+            operatorId,
+            operatorName,
             action,
             targetType,
             targetId,
             _clock.UtcNow);
 
-        log.WithContext(_requestContext.IpAddress, _requestContext.UserAgent, _currentUser.UserId?.ToString());
+        log.WithContext(_requestContext.IpAddress, _requestContext.UserAgent, operatorId?.ToString());
 
         if (summary is { Count: > 0 })
         {

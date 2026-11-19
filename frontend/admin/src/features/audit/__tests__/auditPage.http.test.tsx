@@ -54,21 +54,21 @@ const LOGS = {
   total: 2,
 };
 
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <Routes>
+        <Route path="*" element={<AuditLogPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe("管理端审计页 · HTTP 模式", () => {
   beforeEach(() => {
     api.loadAuditLogs.mockReset();
     api.loadAuditLogs.mockResolvedValue(LOGS);
   });
-
-  function renderPage() {
-    return render(
-      <MemoryRouter>
-        <Routes>
-          <Route path="*" element={<AuditLogPage />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-  }
 
   it("显示服务端返回的日志与动作名", async () => {
     renderPage();
@@ -119,5 +119,74 @@ describe("管理端审计页 · HTTP 模式", () => {
     // 服务端请求参数里没有操作者——后端按 ID 筛，页面上选的是名字。
     const last = api.loadAuditLogs.mock.calls.at(-1)![0];
     expect(last.operatorId).toBeUndefined();
+  });
+});
+
+/** 后端写下的登录审计（FR-AUD-01）。 */
+const LOGIN_LOGS = {
+  items: [
+    {
+      id: "1201",
+      at: "2026-11-19T09:12:03Z",
+      operatorId: "7",
+      operator: "zhangsan",
+      action: "auth.login",
+      targetType: "user",
+      targetId: "7",
+      summary: '{"username": "zhangsan"}',
+      ip: "10.12.0.21",
+      userAgent: "Chrome 131",
+    },
+    {
+      id: "1200",
+      at: "2026-11-19T09:10:41Z",
+      operatorId: "8",
+      operator: "ghost",
+      action: "auth.login_failed",
+      targetType: "user",
+      targetId: "ghost",
+      summary: '{"username": "ghost", "reason": "账号不存在"}',
+      ip: "10.12.0.44",
+      userAgent: "Chrome 131",
+    },
+  ],
+  total: 2,
+};
+
+describe("管理端审计页 · 登录审计", () => {
+  beforeEach(() => {
+    api.loadAuditLogs.mockReset();
+    api.loadAuditLogs.mockResolvedValue(LOGIN_LOGS);
+  });
+
+  it("显示后端写下的登录成功与登录失败", async () => {
+    renderPage();
+
+    // 动作中文名：徽标与筛选项上都有。
+    await waitFor(() => {
+      expect(screen.getAllByText("登录成功").length).toBeGreaterThan(0);
+    });
+    expect(screen.getAllByText("登录失败").length).toBeGreaterThan(0);
+    // 操作者列上是登录账号（失败那次是自称的账号）。
+    expect(screen.getAllByText("zhangsan").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("ghost").length).toBeGreaterThan(0);
+    // 失败原因在摘要里。
+    expect(screen.getByText(/账号不存在/)).toBeInTheDocument();
+  });
+
+  it("按登录动作筛选时把动作码交给服务端", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => {
+      expect(api.loadAuditLogs).toHaveBeenCalled();
+    });
+
+    await user.click(screen.getByRole("button", { name: "登录失败" }));
+
+    await waitFor(() => {
+      const last = api.loadAuditLogs.mock.calls.at(-1)![0];
+      expect(last.action).toBe("auth.login_failed");
+    });
   });
 });

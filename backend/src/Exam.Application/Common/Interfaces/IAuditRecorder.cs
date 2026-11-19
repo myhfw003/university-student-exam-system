@@ -9,4 +9,20 @@ public interface IAuditRecorder
         string? targetId = null,
         IReadOnlyDictionary<string, object?>? summary = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 以指定的操作者留痕。
+    /// <para>
+    /// 登录这类操作用：请求发起来的时候还没有令牌，操作者取不到当前用户，
+    /// 只能由业务自己给（登录成功是登录者本人，登录失败是自称的账号）。
+    /// </para>
+    /// </summary>
+    Task RecordAsAsync(
+        long? operatorId,
+        string? operatorName,
+        string action,
+        string? targetType = null,
+        string? targetId = null,
+        IReadOnlyDictionary<string, object?>? summary = null,
+        CancellationToken cancellationToken = default);
 }

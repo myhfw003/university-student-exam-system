@@ -21,6 +21,14 @@ import { dataSourceMode } from "../api/dataSource";
 import { refreshAccessToken } from "../api/authRefresh";
 import { clearTokens, getAccessToken, setTokens } from "../api/tokenStore";
 import { permissionsFor, type PermissionPoint } from "./permissions";
+import { writeAudit } from "../mock/adminOps";
+
+/**
+ * mock 模式审计行的来源信息。沿用其它示例审计的同一套取值：
+ * mock 的 IP / UA 是演示数据，与 http 模式的真实来源本来就不同。
+ */
+const MOCK_AUDIT_IP = "10.12.0.21";
+const MOCK_AUDIT_UA = "Chrome 131 / Windows";
 
 /** 登录用户档案（前端口径）。 */
 export interface AuthUser {
@@ -163,8 +171,28 @@ export const useAuth = create<AuthState>((set, get) => ({
     // mock 模式：演示账号直接登录。
     if (demo) {
       set({ status: "authenticated", user: { ...demo, account: account.trim() } });
+      // 登录也要留痕（FR-AUD-01）：http 模式由后端写，mock 模式在这里补同一行。
+      writeAudit({
+        operator: demo.name,
+        action: "auth.login",
+        targetType: "user",
+        targetId: demo.id,
+        summary: "登录成功",
+        ip: MOCK_AUDIT_IP,
+        userAgent: MOCK_AUDIT_UA,
+      });
       return { ok: true };
     }
+    // 登不进去的账号也留痕：只知道自称的账号，不知道是谁。
+    writeAudit({
+      operator: account.trim(),
+      action: "auth.login_failed",
+      targetType: "user",
+      targetId: account.trim(),
+      summary: "密码错误",
+      ip: MOCK_AUDIT_IP,
+      userAgent: MOCK_AUDIT_UA,
+    });
     return { ok: false, message: "账号或密码错误" };
   },
 

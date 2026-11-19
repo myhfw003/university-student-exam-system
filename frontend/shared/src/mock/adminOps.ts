@@ -284,10 +284,21 @@ function buildSessions(): ExamSession[] {
 function buildAuditLogs(): AuditLog[] {
   const rows: Array<Omit<AuditLog, "id">> = [
     {
+      at: "2026-11-12 08:20",
+      operator: "linzhiyao",
+      action: "auth.login_failed",
+      targetType: "user",
+      targetId: "u-student-07",
+      summary: "密码错误，登录被拒绝",
+      ip: "10.12.0.44",
+      userAgent: "Chrome 131 / Windows",
+    },
+    {
       at: "2026-11-12 08:12",
       operator: "陈砚之",
       action: "auth.login",
-      targetType: "session",
+      // 对象是账号本身（后端写登录审计时也是 user + 用户 ID）。
+      targetType: "user",
       targetId: "u-admin-01",
       summary: "管理员登录管理端",
       ip: "10.12.0.21",
@@ -297,7 +308,7 @@ function buildAuditLogs(): AuditLog[] {
       at: "2026-11-12 08:05",
       operator: "何知微",
       action: "auth.login",
-      targetType: "session",
+      targetType: "user",
       targetId: "u-reviewer-01",
       summary: "阅卷教师登录管理端",
       ip: "10.12.0.35",

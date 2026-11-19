@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Exam.Domain.Audit;
 using Exam.Domain.SharedKernel.Abstractions;
 using Exam.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -189,6 +190,107 @@ public sealed class AuthEndpointTests : IAsyncLifetime
 
         var body = await me.Content.ReadFromJsonAsync<JsonElement>();
         Assert.True(body.GetProperty("mustChangePassword").GetBoolean());
+    }
+
+    [Fact]
+    public async Task 登录成功_写审计日志()
+    {
+        const string username = "auditlogin1";
+        await CreateUserAsync(username, "Pass123456");
+        var userId = await GetUserIdAsync(username);
+
+        await LoginAsync(username, "Pass123456");
+
+        var row = (await GetAuditLogsAsync("auth.login"))
+            .LastOrDefault(l => l.OperatorName == username);
+
+        Assert.NotNull(row);
+        Assert.Equal(userId, row!.OperatorId);
+        Assert.Equal("user", row.TargetType);
+        Assert.Equal(userId.ToString(), row.TargetId);
+        Assert.Contains(username, row.Summary);
+    }
+
+    [Fact]
+    public async Task 登录失败_写审计日志并落库()
+    {
+        const string username = "auditfail01";
+        await CreateUserAsync(username, "Pass123456");
+
+        var response = await _client.PostAsJsonAsync(
+            "/api/v1/auth/login", new { username, password = "WrongPass1" });
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+
+        var row = (await GetAuditLogsAsync("auth.login_failed"))
+            .LastOrDefault(l => l.OperatorName == username);
+
+        Assert.NotNull(row);
+        Assert.Contains("密码错误", row!.Summary);
+
+        // 失败路径必须自己落库：跟着异常回滚的话失败计数归零，账号永远锁不住。
+        var state = await GetUserLoginStateAsync(username);
+        Assert.Equal(1, state.FailedLoginCount);
+        Assert.Equal(Domain.Identity.UserStatus.Active, state.Status);
+    }
+
+    [Fact]
+    public async Task 账号不存在_写审计日志()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/api/v1/auth/login", new { username = "ghost-account", password = "whatever" });
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+
+        var row = (await GetAuditLogsAsync("auth.login_failed"))
+            .LastOrDefault(l => l.OperatorName == "ghost-account");
+
+        Assert.NotNull(row);
+        Assert.Contains("账号不存在", row!.Summary);
+        // 账号不存在就无从知道操作者是谁，账号 ID 留空。
+        Assert.Null(row.OperatorId);
+    }
+
+    [Fact]
+    public async Task 连续五次密码错误_账号被锁定()
+    {
+        const string username = "auditlock01";
+        await CreateUserAsync(username, "Pass123456");
+
+        for (var i = 0; i < 5; i++)
+        {
+            var response = await _client.PostAsJsonAsync(
+                "/api/v1/auth/login", new { username, password = "WrongPass1" });
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        }
+
+        var state = await GetUserLoginStateAsync(username);
+        Assert.Equal(Domain.Identity.UserStatus.Locked, state.Status);
+
+        // 锁定期内即便密码正确也登不进去。
+        var blocked = await _client.PostAsJsonAsync(
+            "/api/v1/auth/login", new { username, password = "Pass123456" });
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, blocked.StatusCode);
+
+        var problem = await blocked.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("账号已被锁定，请稍后再试。", problem.GetProperty("title").GetString());
+    }
+
+    private async Task<List<AuditLog>> GetAuditLogsAsync(string action)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return await db.Set<AuditLog>()
+            .Where(l => l.Action == action)
+            .OrderBy(l => l.OccurredAt)
+            .ToListAsync();
+    }
+
+    private async Task<(int FailedLoginCount, Domain.Identity.UserStatus Status)> GetUserLoginStateAsync(
+        string username)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = await db.Users.FirstAsync(u => u.Username == username);
+        return (user.FailedLoginCount, user.Status);
     }
 
     private async Task<HttpResponseMessage> GetMeAsync(string token)
