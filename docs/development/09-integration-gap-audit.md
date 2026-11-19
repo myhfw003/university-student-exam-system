@@ -63,7 +63,7 @@
 | A4 | 用户与角色 | `features/users/UsersPage.tsx` | `GET /users`、`PUT /users/{id}`、`PUT/DELETE /users/{id}/roles`、`PUT /users/{id}/tags` | 存在 |
 | A5 | 名单批量导入 | `features/users/UsersPage.tsx` | `POST /users/import`（multipart） | 存在 |
 | A6 | 审计日志 | `features/audit/AuditLogPage.tsx` | `GET /audit-logs` | 存在 |
-| A7 | 阅卷中心 | `features/review/ReviewCenterPage.tsx` | `GET /review-tasks`、`/{id}/grade`、`/batch-adopt`、`/{id}/claim`、`/{id}/assign` | 存在（T-P10-13 补上 UI） |
+| A7 | 阅卷中心 | `features/review/ReviewCenterPage.tsx` | `GET /review-tasks`、`/{id}/grade`、`/batch-adopt`、`/{id}/claim`、`/{id}/assign` | 存在（T-P10-13 / T-P10-14 补上 UI） |
 | A8 | 监考处置 | `features/monitoring/ProctoringPage.tsx` | `POST /attempts/{id}/proctor-actions`、`GET /attempts/{id}/proctor-actions` | 存在（**按 attempt 维度**，需先补 attemptId 到候选人模型） |
 | A9 | 题库与题目 | `features/banks/*`、`features/shared/QuestionEditor.tsx` | `GET/POST/PUT/DELETE /questions`、`/question-banks`、`POST /questions/{id}/publish|disable|restore`、`/questions/batch-status` | 存在 |
 | A10 | 组卷向导 | `features/papers/PaperWizardPage.tsx` | `POST/PUT /papers`、`/papers/{id}/items`、`/validate`、`/publish`、`/unpublish`、`/blueprint*`、`/paper-templates` | 存在 |
@@ -609,3 +609,14 @@ HTTP 模式只显示作答原文；这属于接口能力缺口，不是前端映
 **实测结论**（真实后端）：给待阅任务指派 → 200 并带 `assigneeId`；给学生指派 →
 422「该用户没有阅卷权限，不能指派阅卷任务。」；给已阅完的任务指派 →
 422「已阅完的任务不能再指派。」；账号不存在 → 404「指派的阅卷人不存在。」。
+
+### T-P10-14 阅卷任务领取（已完成）
+
+**缺口**：审计 §2 的 A7 里「claim 无 UI」——后端有 `POST /review-tasks/{id}/claim`，
+数据通路里也有 `claim`，页面上没有入口。
+
+**前端**：待阅卷宗的「评分与评语」卡片加「领取任务」按钮；领取后走刷新，
+下一次拉取就能看到「阅卷中」。**领取与指派按状态互斥**：只有 `pending` 才显示这两个按钮。
+
+**实测结论**（真实后端）：领取 → 200，`status=in_review`，`assigneeId` 与
+`reviewerId` 都置为领取人；再领一次 → 422「该任务已被领取或已阅完。」
