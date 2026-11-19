@@ -1,6 +1,7 @@
 using Exam.Application.Common.Attributes;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
+using Exam.Application.Common.Security;
 using Exam.Application.Identity.Contracts;
 using Exam.Domain.Identity;
 using Exam.Domain.SharedKernel.Abstractions;
@@ -137,6 +138,7 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, UserD
             {
                 ["username"] = user.Username,
                 ["roleIds"] = roleIds,
+                // 这里记的是「是否由系统生成初始密码」这个标记，不是密码本身。
                 ["generatedPassword"] = generated,
             },
             cancellationToken);
@@ -152,7 +154,7 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, UserD
                 user.Username,
                 user.DisplayName,
                 user.Email,
-                user.Phone,
+                SensitiveDataMasker.MaskPhone(user.Phone),
                 user.Status.ToStorage(),
                 user.MustChangePassword,
                 roleCodes,

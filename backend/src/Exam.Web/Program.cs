@@ -3,6 +3,8 @@ using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Exam.Application;
 using Exam.Application.Common.Interfaces;
+using Exam.Application.Common.Security;
+using Exam.Application.Identity.Commands;
 using Exam.Infrastructure;
 using Exam.Infrastructure.Identity;
 using Exam.Infrastructure.Observability;
@@ -65,6 +67,37 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
     .ReadFrom.Services(services)
     .Enrich.FromLogContext()
     .Enrich.WithProperty("Application", "exam-web")
+    // 密码与令牌不进日志（FR-AUD-02 / 安全合规 §8.4）：
+    // 这些命令对象一旦被人记进日志，密钥就跟着出去了。
+    .Destructure.ByTransforming<LoginCommand>(cmd =>
+        new { cmd.Username, Password = SensitiveDataMasker.MaskSecret(cmd.Password) })
+    .Destructure.ByTransforming<ChangeOwnPasswordCommand>(cmd =>
+        new
+        {
+            CurrentPassword = SensitiveDataMasker.MaskSecret(cmd.CurrentPassword),
+            NewPassword = SensitiveDataMasker.MaskSecret(cmd.NewPassword),
+        })
+    .Destructure.ByTransforming<ResetUserPasswordCommand>(cmd =>
+        new { cmd.Id, NewPassword = SensitiveDataMasker.MaskSecret(cmd.NewPassword) })
+    .Destructure.ByTransforming<CreateUserCommand>(cmd =>
+        new
+        {
+            cmd.Username,
+            cmd.DisplayName,
+            cmd.Email,
+            Phone = SensitiveDataMasker.MaskPhone(cmd.Phone),
+            Password = SensitiveDataMasker.MaskSecret(cmd.Password),
+            cmd.RoleIds,
+        })
+    .Destructure.ByTransforming<UpdateUserCommand>(cmd =>
+        new
+        {
+            cmd.DisplayName,
+            cmd.Email,
+            Phone = SensitiveDataMasker.MaskPhone(cmd.Phone),
+            cmd.Status,
+            cmd.DisableReason,
+        })
     .WriteTo.Console(new Serilog.Formatting.Compact.CompactJsonFormatter()));
 
 // ---------------------------------------------------------------- 应用层与基础设施

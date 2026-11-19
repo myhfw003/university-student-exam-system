@@ -132,6 +132,29 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task 用户接口_手机号按前3后4脱敏()
+    {
+        var adminToken = await LoginAsync(AdminUsername, AdminPassword);
+        UseToken(adminToken);
+
+        await _client.PostAsJsonAsync(
+            "/api/v1/users",
+            new
+            {
+                username = "phone001",
+                displayName = "手机号脱敏",
+                password = "Passw0rd!",
+                phone = "13812345678",
+            });
+
+        var list = await _client.GetAsync("/api/v1/users?keyword=phone001&page=1&size=10");
+        list.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        var body = await list.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("items")[0].GetProperty("phone").GetString().ShouldBe("138****5678");
+    }
+
+    [Fact]
     public async Task 角色变更_下一次请求即生效()
     {
         var adminToken = await LoginAsync(AdminUsername, AdminPassword);

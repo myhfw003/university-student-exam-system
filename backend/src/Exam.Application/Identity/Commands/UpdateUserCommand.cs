@@ -2,6 +2,7 @@ using Exam.Application.Common.Attributes;
 using Exam.Application.Common.Exceptions;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
+using Exam.Application.Common.Security;
 using Exam.Application.Identity.Contracts;
 using Exam.Domain.Identity;
 using Exam.Domain.SharedKernel.Abstractions;
@@ -133,7 +134,7 @@ public sealed class UpdateUserHandler : IRequestHandler<UpdateUserCommand, UserD
                 user.Username,
                 user.DisplayName,
                 user.Email,
-                user.Phone,
+                SensitiveDataMasker.MaskPhone(user.Phone),
                 user.Status.ToStorage(),
                 user.MustChangePassword,
                 roleCodes,
