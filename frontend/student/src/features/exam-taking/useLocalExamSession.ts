@@ -35,6 +35,7 @@ import { MockAnswerTransport } from "@/lib/transports";
 import { apiBaseUrl, ENDPOINTS, getAccessToken } from "@exam/shared/api";
 import { createHttpServerTimeSource } from "@/lib/serverTimeSource";
 import { useServerTime } from "@/lib/useServerTime";
+import { useClockDriftNotice } from "./useClockDriftNotice";
 import { useStudentStore } from "@/stores/studentStore";
 import { countAnswered, useExamSessionStore, type ExamResponses } from "@/stores/examSessionStore";
 import { useFocusGuard } from "./FocusGuard";
@@ -189,7 +190,9 @@ export function useLocalExamSession(examId: string, enabled = true): ExamSession
     }),
     [],
   );
-  const { serverNow } = useServerTime(timeSource, enabled && Boolean(exam));
+  const { serverNow, driftDetected } = useServerTime(timeSource, enabled && Boolean(exam));
+  // 时钟偏移突变时提示用户（FR-DLV-04）：考试中改系统时间要看得见。
+  useClockDriftNotice(driftDetected);
 
   useEffect(() => {
     if (!enabled || !exam) return;

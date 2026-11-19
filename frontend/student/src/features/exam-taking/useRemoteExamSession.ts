@@ -40,6 +40,7 @@ import { SyncEngine } from "@/lib/syncEngine";
 import { HttpAnswerTransport } from "@/lib/transports";
 import { createHttpServerTimeSource } from "@/lib/serverTimeSource";
 import { useServerTime } from "@/lib/useServerTime";
+import { useClockDriftNotice } from "./useClockDriftNotice";
 import { useStudentStore } from "@/stores/studentStore";
 import { countAnswered, useExamSessionStore, type ExamResponses } from "@/stores/examSessionStore";
 import { useFocusGuard } from "./FocusGuard";
@@ -302,7 +303,9 @@ export function useRemoteExamSession(sessionId: string, enabled = true): ExamSes
     }),
     [],
   );
-  const { serverNow } = useServerTime(timeSource, enabled && Boolean(surface));
+  const { serverNow, driftDetected } = useServerTime(timeSource, enabled && Boolean(surface));
+  // 时钟偏移突变时提示用户（FR-DLV-04）：考试中改系统时间要看得见。
+  useClockDriftNotice(driftDetected);
 
   useEffect(() => {
     if (!enabled || !surface) return;
