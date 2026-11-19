@@ -781,3 +781,52 @@ HTTP 模式只显示作答原文；这属于接口能力缺口，不是前端映
 `ExpandDescendantsAsync` 的递归 CTE（要跨维度就得去掉维度判断）、
 以及维度隔离约束（FR-CAT-01：题目只能挂四维）——**不是改前端能解决的**。
 **这一条需要产品确认后再动。**
+
+### T-P10-24 登录审计（已完成）
+
+**缺口一：登录是唯一没留痕的动作**。
+
+审计的其余动作（改用户、改角色、发试卷、发布成绩、监考处置……）都写了审计行，
+只有登录没有——`LoginHandler` 根本没注入 `IAuditRecorder`。
+「谁在什么时候登进来过」这条线在系统里是断的，撞库也查不出来。
+
+**缺口二：失败路径压根不落库**。
+
+`UnitOfWorkBehavior` 只在命令**成功返回**之后才 `SaveChangesAsync`，
+而登录失败抛的是 `BusinessRuleException`——审计行**和**域里的失败计数
+一起被回滚。改之前的实测：连着登错 5 次，`failed_login_count` 还是 0，
+账号还是 `Active`，FR-IAM-01 的「连错 5 次锁 15 分钟」从来没生效过。
+
+现在失败路径自己提交一次（`LoginHandler` 注入 `IUnitOfWork`，
+与 `CreateUserCommand` 等既有写法一致），审计行与失败计数一起落库。
+
+**操作者**：登录请求还没有令牌，取不到当前用户，所以给 `IAuditRecorder`
+加了一个「显式指定操作者」的重载——成功是登录者本人，
+失败是**自称的账号**（账号不存在时只有名字，ID 留空）。
+账号不存在也留痕（撞库要靠它查），但对外仍是统一提示，不泄露账号是否存在。
+
+**mock 与服务端对齐**：前端本来就有 `auth.login` / `auth.login_failed`
+这两个动作码与中文名（`AUDIT_ACTION_LABEL`），这次补上两端——
+mock 模式由前端写同一行；示例数据里登录那两行的对象类型从 `session`
+改成 `user`（后端口径是「被登录的账号 + 用户 ID」）。
+**API 契约没动**：审计行是数据，不是接口。
+
+**要注意的**
+
+- 登录审计行之外还会多出 `entity.user.updated` 自动留痕（`User` 是被审计实体，
+  登录时 `LastLoginAt` / `FailedLoginCount` 变了）。这是既有机制，不是重复记录。
+- 失败登录现在真的会累积失败计数：同一账号连错 5 次会被锁 15 分钟。
+  端到端用例试失败登录要用临时账号。
+- 登录失败的对外提示仍是 422 + `20005`（统一提示，不区分账号是否存在），
+  与 `openapi.json` 里写的 401 不一致——这是**改动之前就有的**契约出入，
+  本次没动（动了就是改接口行为，超出这一项的范围）。
+
+**实测结论**（真实后端 + Chromium + 后端功能测试 + 前端单测）：全部通过。
+
+- 后端功能测试新增 4 条：登录成功写审计行、登录失败写审计行**并**落库
+  （`failed_login_count` 变成 1）、账号不存在也写审计行、连错 5 次账号真被锁。
+- 浏览器连真实后端（新增 `e2e/login-audit.http.spec.ts`）：管理端登录 →
+  审计页按「登录成功」筛能筛到这一行；另一次失败登录按「登录失败」筛能筛到那一行。
+- 接口直查：`GET /audit-logs?action=auth.login` 返回
+  `operatorName=admin`、`targetType=user`、`summary={"username":"admin"}`；
+  `action=auth.login_failed` 返回 `summary={"reason":"密码错误","username":"admin"}`。
