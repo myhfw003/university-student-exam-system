@@ -23,6 +23,7 @@ const api = {
   closeAdminSession: vi.fn(),
   createAdminSession: vi.fn(),
   updateAdminSession: vi.fn(),
+  importExamParticipants: vi.fn(),
 };
 
 vi.mock("@exam/shared/api", async (importOriginal) => ({
@@ -156,6 +157,64 @@ describe("管理端场次页面 · HTTP 模式", () => {
     });
     // 补考是试卷的属性：HTTP 模式下场次不再单独设置。
     expect(screen.getByText(/是否允许重考由/)).toBeInTheDocument();
+  });
+
+  it("名单 CSV 导入走服务端的导入端点", async () => {
+    const user = userEvent.setup();
+    api.loadAdminSession.mockResolvedValue({
+      summary: { ...SUMMARY, status: "scheduled", statusLabel: "未开始" },
+      snapshotId: null,
+      rules: {
+        maxFocusLoss: 3,
+        onMaxFocusLoss: "force_submit",
+        requireFullScreen: true,
+        blockCopyPaste: true,
+        blockContextMenu: false,
+        showWatermark: true,
+        enableHeartbeatCheck: true,
+        heartbeatIntervalSeconds: 20,
+        heartbeatTimeoutSeconds: 60,
+        maxDisconnect: 3,
+        earlyEntryMinutes: 0,
+      },
+      note: "开考后不要切屏",
+      participantTagIds: [],
+      participantUserIds: [],
+    });
+    api.importExamParticipants.mockResolvedValue({
+      total: 3,
+      imported: 2,
+      skipped: [{ rowNumber: 3, account: "s103", reason: "账号不存在：s103。先在「用户」里建好账号再导入。" }],
+      participantCount: 2,
+      participantMode: "direct",
+      participantModeLabel: "指定考生",
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/exam-sessions/12"]}>
+        <Routes>
+          <Route path="/exam-sessions/:id" element={<ExamSessionDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "导入名单" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "导入名单" }));
+    const file = new File(["账号,姓名\ns101,林知遥\n"], "roster.csv", { type: "text/csv" });
+    await user.upload(screen.getByLabelText(/名单文件/), file);
+    await user.click(screen.getByRole("button", { name: "确认导入" }));
+
+    await waitFor(() => {
+      expect(api.importExamParticipants).toHaveBeenCalledTimes(1);
+    });
+    expect(api.importExamParticipants.mock.calls[0]![0]).toBe("12");
+
+    // 结果与被跳过的行都给管理员看。
+    expect(await screen.findByText(/导入完成：成功 2 人，跳过 1 行/)).toBeInTheDocument();
+    expect(screen.getByText(/账号不存在：s103/)).toBeInTheDocument();
   });
 
   it("详情页显示场次配置、名单与成绩", async () => {

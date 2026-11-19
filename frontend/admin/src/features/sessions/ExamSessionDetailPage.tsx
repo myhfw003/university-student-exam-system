@@ -14,13 +14,16 @@ import {
   Badge,
   Button,
   Callout,
+  Dialog,
   Empty,
+  Field,
   PageHead,
   Stat,
   TextInput,
   downloadCsv,
   toast,
 } from "@exam/shared";
+import { isBackendEnabled, type ExamParticipantImportResult } from "@exam/shared/api";
 import { SESSION_STATUS_LABEL } from "@exam/shared/mock/adminOps";
 import { Icon } from "@/app/Icon";
 import { useProctorFeed } from "../monitoring/useProctorFeed";
@@ -34,6 +37,14 @@ export function ExamSessionDetailPage() {
   const feed = useProctorFeed(id);
 
   const [maxFocusLoss, setMaxFocusLoss] = useState<number | null>(null);
+
+  // 名单 CSV 导入（真实后端模式）。
+  const remote = isBackendEnabled();
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importResult, setImportResult] = useState<ExamParticipantImportResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const candidates = feed.candidates;
   const submitted = candidates.filter((c) => c.status === "submitted" || c.status === "forced_submitted");
@@ -125,6 +136,28 @@ export function ExamSessionDetailPage() {
       toast.ok("场次已结束");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "结束失败");
+    }
+  };
+
+  /** 名单 CSV 导入：导入后名单口径切到「指定考生」。 */
+  const handleImport = async () => {
+    if (!importFile) {
+      toast.error("请先选择名单文件");
+      return;
+    }
+    setImporting(true);
+    setImportError(null);
+    try {
+      const result = await view.importParticipants(importFile);
+      setImportResult(result);
+      toast.ok(
+        `名单已导入：${result.imported} 人` +
+          (result.skipped.length > 0 ? `，${result.skipped.length} 行被跳过` : ""),
+      );
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : "导入失败");
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -316,6 +349,18 @@ export function ExamSessionDetailPage() {
           <h2 className="card-title">考生名单</h2>
           <div className="row-tight">
             <span className="text-sm text-3">{view.roster.length} 人 · 发布时物化</span>
+            {remote && view.status === "scheduled" ? (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setImportResult(null);
+                  setImportError(null);
+                  setImportOpen(true);
+                }}
+              >
+                导入名单
+              </Button>
+            ) : null}
             <Button size="sm" onClick={handleExportScores}>
               导出成绩
             </Button>
@@ -394,6 +439,75 @@ export function ExamSessionDetailPage() {
           </div>
         </div>
       </section>
+
+      {/* 名单 CSV 导入。 */}
+      <Dialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        title="导入考生名单"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setImportOpen(false)}>
+              关闭
+            </Button>
+            <Button
+              variant="primary"
+              disabled={importFile === null || importing || importResult !== null}
+              onClick={() => void handleImport()}
+            >
+              {importing ? "导入中…" : "确认导入"}
+            </Button>
+          </>
+        }
+      >
+        <div className="stack">
+          <Callout tone="info" title="名单 CSV 列定义">
+            与「用户」里的名单同一份文件：**账号**（学号）与**姓名**两列必填。
+            导入的是**已有账号**：账号不存在的行会被跳过并给出原因，先把账号建好再导。
+            导入后名单口径切到「指定考生」——名单就是这批账号。
+          </Callout>
+
+          <Field
+            htmlFor="session-roster-file"
+            label="名单文件"
+            hint="支持 .csv（UTF-8 / GBK）。列按表头名自动匹配。"
+          >
+            <input
+              id="session-roster-file"
+              className="input"
+              type="file"
+              accept=".csv,.txt"
+              onChange={(event) => setImportFile(event.target.files?.[0] ?? null)}
+            />
+          </Field>
+
+          {importError ? (
+            <Callout tone="danger" title="导入失败">
+              {importError}
+            </Callout>
+          ) : null}
+
+          {importResult ? (
+            <Callout
+              tone={importResult.skipped.length > 0 ? "warn" : "ok"}
+              title={`导入完成：成功 ${importResult.imported} 人，跳过 ${importResult.skipped.length} 行`}
+            >
+              名单口径现在是「{importResult.participantModeLabel}」，共{" "}
+              {importResult.participantCount} 人。发布场次时按这份名单物化。
+              {importResult.skipped.length > 0 ? (
+                <ul className="rule-list" style={{ marginTop: "var(--sp-3)" }}>
+                  {importResult.skipped.map((failure) => (
+                    <li key={`${failure.rowNumber}-${failure.account}`}>
+                      第 {failure.rowNumber} 行 · {failure.account || "（无账号）"} ·{" "}
+                      {failure.reason}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </Callout>
+          ) : null}
+        </div>
+      </Dialog>
     </>
   );
 }

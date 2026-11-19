@@ -425,6 +425,58 @@ export async function loadSessionAssignments(
   }));
 }
 
+/** 名单导入的结果。 */
+export interface ExamParticipantImportResult {
+  /** 文件里的总行数。 */
+  total: number;
+  /** 导入成功的账号数。 */
+  imported: number;
+  /** 被跳过的行与原因。 */
+  skipped: Array<{ rowNumber: number; account: string; reason: string }>;
+  /** 导入后的名单人数。 */
+  participantCount: number;
+  /** 导入后的名单口径：`direct`（指定考生）。 */
+  participantMode: string;
+  participantModeLabel: string;
+}
+
+/**
+ * 场次名单 CSV 导入。
+ *
+ * 文件里是**已有账号**（与「用户」里的名单 CSV 同一份文件）：
+ * 账号不存在的行被跳过并给出原因。导入后名单口径切到「指定考生」。
+ */
+export async function importExamParticipants(
+  id: string,
+  file: File,
+  client: ExamSessionAdminClient = httpClient,
+): Promise<ExamParticipantImportResult> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+
+  const res = await client.post<{
+    total?: number;
+    imported?: number;
+    skipped?: Array<{ rowNumber?: number; account?: string; reason?: string }>;
+    participantCount?: number;
+    participantMode?: string;
+    participantModeLabel?: string;
+  }>(`${ENDPOINTS.delivery.examSessions}/${id}/participants/import`, form);
+
+  return {
+    total: Number(res.total ?? 0),
+    imported: Number(res.imported ?? 0),
+    skipped: (res.skipped ?? []).map((item) => ({
+      rowNumber: Number(item.rowNumber ?? 0),
+      account: String(item.account ?? ""),
+      reason: String(item.reason ?? ""),
+    })),
+    participantCount: Number(res.participantCount ?? 0),
+    participantMode: String(res.participantMode ?? ""),
+    participantModeLabel: String(res.participantModeLabel ?? ""),
+  };
+}
+
 /** 设置场次负责人（覆盖式）。 */
 export async function setSessionAssignments(
   id: string,

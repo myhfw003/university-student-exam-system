@@ -6,6 +6,7 @@ using Exam.Application.Grading.Commands;
 using Exam.Application.Grading.Contracts;
 using Exam.Application.Grading.Queries;
 using Exam.Domain.Identity;
+using Exam.Domain.SharedKernel.Exceptions;
 using Exam.Web.Api.Contracts;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -154,6 +155,31 @@ public sealed class ExamSessionsController : ControllerBase
         await _mediator.Send(
             new SetExamParticipantsCommand(id, request.ParticipantTagIds ?? []),
             cancellationToken);
+
+    /// <summary>场次名单 CSV 导入。导入的是已有账号，导入后名单口径切到「指定考生」。</summary>
+    [HttpPost("{id:long}/participants/import")]
+    [Authorize(Policy = PermissionCatalog.ExamWrite)]
+    [RequestSizeLimit(11 * 1024 * 1024)]
+    [ProducesResponseType(typeof(ExamParticipantImportResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ExamParticipantImportResult> ImportParticipants(
+        long id,
+        IFormFile? file,
+        CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+        {
+            throw new BusinessRuleException("请选择要上传的名单文件。");
+        }
+
+        await using var stream = file.OpenReadStream();
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, cancellationToken);
+
+        return await _mediator.Send(
+            new ImportExamParticipantsCommand(id, buffer.ToArray(), file.FileName),
+            cancellationToken);
+    }
 
     /// <summary>场次负责人。被指派的人看得到这场考试的全部作答与监考数据。</summary>
     [HttpGet("{id:long}/assignments")]

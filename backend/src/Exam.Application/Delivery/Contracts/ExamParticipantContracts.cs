@@ -30,3 +30,22 @@ public static class ExamParticipantDtoFactory
         participant.Status.Label(),
         participant.AttemptsUsed);
 }
+
+/// <summary>名单导入时跳过的行。</summary>
+public sealed record ExamParticipantImportFailure(int RowNumber, string Account, string Reason);
+
+/// <summary>
+/// 场次名单 CSV 导入的结果。
+/// <para>
+/// 导入的是**已有账号**：账号不存在的行被跳过并记下原因。
+/// 导入后名单口径切到「指定考生」——名单就是这批账号。
+/// </para>
+/// </summary>
+public sealed record ExamParticipantImportResult(
+    long ExamSessionId,
+    int Total,
+    int Imported,
+    IReadOnlyList<ExamParticipantImportFailure> Skipped,
+    int ParticipantCount,
+    string ParticipantMode,
+    string ParticipantModeLabel);

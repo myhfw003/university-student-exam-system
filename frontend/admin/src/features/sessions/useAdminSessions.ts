@@ -20,12 +20,14 @@ import {
   createAdminSession,
   isBackendEnabled,
   loadAdminSession,
+  importExamParticipants,
   loadAdminSessions,
   loadSessionGrades,
   loadSessionParticipants,
   publishAdminSession,
   updateAdminSession,
   type AdminSessionCreate,
+  type ExamParticipantImportResult,
 } from "@exam/shared/api";
 import type {
   AdminSessionRules,
@@ -118,6 +120,8 @@ export interface AdminSessionDetailView {
   cancel: () => Promise<void>;
   /** 保存防作弊策略。 */
   savePolicy: (patch: Partial<AntiCheatPolicy>) => Promise<void>;
+  /** 名单 CSV 导入（真实后端模式；导入后口径切到「指定考生」）。 */
+  importParticipants: (file: File) => Promise<ExamParticipantImportResult>;
   /** 重新拉取。 */
   refresh: () => void;
 }
@@ -443,6 +447,19 @@ export function useAdminSessionDetail(id: string): AdminSessionDetailView {
     [remote, id, remoteDetail, refresh],
   );
 
+  /** 名单 CSV 导入。mock 模式没有这个能力（名单是本地数据）。 */
+  const importParticipants = useCallback(
+    async (file: File) => {
+      if (!remote) {
+        throw new Error("名单导入只在真实后端模式下可用。");
+      }
+      const result = await importExamParticipants(id, file);
+      refresh();
+      return result;
+    },
+    [remote, id, refresh],
+  );
+
   /* ---------------------------------------------------------- 视图 */
 
   if (remote) {
@@ -479,6 +496,7 @@ export function useAdminSessionDetail(id: string): AdminSessionDetailView {
         close,
         cancel,
         savePolicy,
+        importParticipants,
         refresh,
       };
     }
@@ -515,6 +533,7 @@ export function useAdminSessionDetail(id: string): AdminSessionDetailView {
       close,
       cancel,
       savePolicy,
+      importParticipants,
       refresh,
     };
   }
@@ -553,6 +572,7 @@ export function useAdminSessionDetail(id: string): AdminSessionDetailView {
       close,
       cancel,
       savePolicy,
+      importParticipants,
       refresh,
     };
   }
@@ -587,6 +607,7 @@ export function useAdminSessionDetail(id: string): AdminSessionDetailView {
     close,
     cancel,
     savePolicy,
+    importParticipants,
     refresh,
   };
 }

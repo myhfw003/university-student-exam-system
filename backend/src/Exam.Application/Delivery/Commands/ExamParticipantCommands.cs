@@ -7,6 +7,7 @@ using Exam.Application.Delivery.Services;
 using Exam.Domain.Delivery;
 using Exam.Domain.Identity;
 using Exam.Domain.SharedKernel.Abstractions;
+using FluentValidation;
 using MediatR;
 
 namespace Exam.Application.Delivery.Commands;
@@ -105,5 +106,141 @@ public sealed class SetExamParticipantsHandler : IRequestHandler<SetExamParticip
                 })
                 .ToList(),
             participants.Count);
+    }
+}
+
+/// <summary>
+/// 场次名单 CSV 导入。
+/// <para>
+/// 导入的是**已有账号**：账号不存在的行被跳过并记下原因（先在「用户」里建好账号再导）。
+/// 导入后名单口径切到「指定考生」——名单就是这批账号。
+/// </para>
+/// <para>
+/// 只允许在**未发布**的场次上导入：已发布的场次名单已经物化、考生可能已经在作答，
+/// 换名单口径会让「谁在考这场」前后不一致。
+/// </para>
+/// </summary>
+public sealed record ImportExamParticipantsCommand(long ExamSessionId, byte[] FileContent, string FileName)
+    : IAppCommand<ExamParticipantImportResult>, IAuthorizableRequest
+{
+    public IReadOnlyCollection<string> RequiredPermissions { get; init; } = [PermissionCatalog.ExamWrite];
+}
+
+public sealed class ImportExamParticipantsCommandValidator : AbstractValidator<ImportExamParticipantsCommand>
+{
+    public ImportExamParticipantsCommandValidator()
+    {
+        RuleFor(x => x.FileContent)
+            .NotNull().WithMessage("请上传名单文件。");
+
+        RuleFor(x => x.FileContent!.Length)
+            .GreaterThan(0).WithMessage("名单文件是空的。")
+            .LessThanOrEqualTo(10 * 1024 * 1024).WithMessage("名单文件不能超过 10 MB。");
+    }
+}
+
+public sealed class ImportExamParticipantsHandler
+    : IRequestHandler<ImportExamParticipantsCommand, ExamParticipantImportResult>
+{
+    private readonly IUserRosterParser _parser;
+    private readonly IExamSessionRepository _sessions;
+    private readonly IUserRepository _users;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IAuditRecorder _audit;
+    private readonly IClock _clock;
+    private readonly ICurrentUser _currentUser;
+
+    public ImportExamParticipantsHandler(
+        IUserRosterParser parser,
+        IExamSessionRepository sessions,
+        IUserRepository users,
+        IUnitOfWork unitOfWork,
+        IAuditRecorder audit,
+        IClock clock,
+        ICurrentUser currentUser)
+    {
+        _parser = parser;
+        _sessions = sessions;
+        _users = users;
+        _unitOfWork = unitOfWork;
+        _audit = audit;
+        _clock = clock;
+        _currentUser = currentUser;
+    }
+
+    public async Task<ExamParticipantImportResult> Handle(
+        ImportExamParticipantsCommand request,
+        CancellationToken cancellationToken)
+    {
+        var session = await _sessions.GetByIdAsync(request.ExamSessionId, cancellationToken)
+            ?? throw new NotFoundException("考试场次不存在。");
+
+        // 已发布的场次名单已经物化，不能再换口径。
+        session.EnsureScheduled();
+
+        var rows = _parser.Parse(request.FileContent, request.FileName);
+
+        var skipped = new List<ExamParticipantImportFailure>();
+        var userIds = new List<long>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var row in rows)
+        {
+            var account = row.Account?.Trim();
+            if (string.IsNullOrEmpty(account))
+            {
+                skipped.Add(new ExamParticipantImportFailure(row.RowNumber, string.Empty, "账号为空。"));
+                continue;
+            }
+
+            // 同一账号出现多次只算一次。
+            if (!seen.Add(account))
+            {
+                continue;
+            }
+
+            var user = await _users.GetByUsernameAsync(account, cancellationToken);
+            if (user is null)
+            {
+                skipped.Add(new ExamParticipantImportFailure(
+                    row.RowNumber,
+                    account,
+                    $"账号不存在：{account}。先在「用户」里建好账号再导入。"));
+                continue;
+            }
+
+            userIds.Add(user.Id);
+        }
+
+        // 一行都没导进去时不动名单：宁可什么都不改，也不要把已有名单清空。
+        if (userIds.Count > 0)
+        {
+            var now = _clock.UtcNow;
+            session.SetParticipantUsers(userIds, now, _currentUser.UserId);
+            _sessions.Update(session);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+
+        await _audit.RecordAsync(
+            "exam_session.import_participants",
+            "exam_session",
+            session.Id.ToString(),
+            new Dictionary<string, object?>
+            {
+                ["fileName"] = request.FileName,
+                ["total"] = rows.Count,
+                ["imported"] = userIds.Count,
+                ["skipped"] = skipped.Count,
+            },
+            cancellationToken);
+
+        return new ExamParticipantImportResult(
+            session.Id,
+            rows.Count,
+            userIds.Count,
+            skipped,
+            userIds.Count,
+            session.ParticipantMode.ToStorage(),
+            session.ParticipantMode.Label());
     }
 }

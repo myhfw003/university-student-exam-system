@@ -2013,6 +2013,88 @@
         "x-required-permission": "exam:write"
       }
     },
+    "/api/v1/exam-sessions/{id}/participants/import": {
+      "post": {
+        "tags": [
+          "ExamSessions"
+        ],
+        "summary": "场次名单 CSV 导入。导入的是已有账号，导入后名单口径切到「指定考生」。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExamParticipantImportResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExamParticipantImportResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExamParticipantImportResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-required-permission": "exam:write"
+      }
+    },
     "/api/v1/exam-sessions/{id}/assignments": {
       "get": {
         "tags": [
@@ -9916,6 +9998,61 @@
           "attemptsUsed": {
             "type": "integer",
             "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExamParticipantImportFailure": {
+        "type": "object",
+        "properties": {
+          "rowNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "account": {
+            "type": "string",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExamParticipantImportResult": {
+        "type": "object",
+        "properties": {
+          "examSessionId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "imported": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExamParticipantImportFailure"
+            },
+            "nullable": true
+          },
+          "participantCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "participantMode": {
+            "type": "string",
+            "nullable": true
+          },
+          "participantModeLabel": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
