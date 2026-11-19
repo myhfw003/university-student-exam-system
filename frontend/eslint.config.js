@@ -12,6 +12,8 @@ export default tseslint.config(
     ignores: [
       "**/node_modules/**",
       "**/dist/**",
+      // 连后端模式的产物目录（dist-http 等）也是构建产物，不参与 lint。
+      "**/dist-*/**",
       "**/coverage/**",
       "**/.twtest/**",
       "**/pnpm-lock.yaml",

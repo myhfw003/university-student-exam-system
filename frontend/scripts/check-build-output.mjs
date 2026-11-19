@@ -20,11 +20,14 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+/** 产物目录（与 vite 的 FRONTEND_BUILD_OUT_DIR 一致）。 */
+const OUT_DIR = process.env.FRONTEND_BUILD_OUT_DIR ?? "dist";
+
 /** 各 SPA 的挂载点与期望的产物前缀。 */
 const TARGETS = [
   // mount 是该 SPA 在 nginx 里的挂载路径，prefix 是产物引用的 URL 前缀。
-  { name: "学生端", dist: "student/dist", mount: "", prefix: "/assets/" },
-  { name: "管理端", dist: "admin/dist", mount: "/admin", prefix: "/admin/assets/" },
+  { name: "学生端", dist: `student/${OUT_DIR}`, mount: "", prefix: "/assets/" },
+  { name: "管理端", dist: `admin/${OUT_DIR}`, mount: "/admin", prefix: "/admin/assets/" },
 ];
 
 const failures = [];

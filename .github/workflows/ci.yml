@@ -186,6 +186,10 @@ jobs:
           ConnectionStrings__Database: "Host=127.0.0.1;Port=5432;Database=exam;Username=exam_owner;Password=exam_owner_password;Maximum Pool Size=5;Timeout=15;Command Timeout=120"
           Seed__AdminUsername: admin
           Seed__AdminPassword: admin-e2e-password
+      - name: 安装 headless 浏览器（浏览器连后端那组用例用）
+        # api 那组只打接口、不开浏览器；ui-http 那组要真的在浏览器里点页面。
+        working-directory: frontend
+        run: npx --yes playwright@1.65.0 install --with-deps chromium
       - name: 端到端测试（接口全景巡检与越权访问）
         # 起真实后端再打真实接口：越权与错误结构在 mock 模式下验不出来。
         # API 与测试放同一个步骤：CI 会在步骤结束时回收后台进程。
@@ -208,6 +212,11 @@ jobs:
           E2E_API_BASE_URL=http://127.0.0.1:5000 \
           E2E_ADMIN_USERNAME=admin E2E_ADMIN_PASSWORD=admin-e2e-password \
             pnpm exec playwright test --project=api
+          # 浏览器连真实后端那组：产物要另建一份（连后端模式），再跑 ui-http。
+          pnpm build:http
+          E2E_API_BASE_URL=http://127.0.0.1:5000 \
+          E2E_ADMIN_USERNAME=admin E2E_ADMIN_PASSWORD=admin-e2e-password \
+            pnpm exec playwright test --project=ui-http
       - name: 上传失败现场（trace 与截图）
         if: failure()
         uses: actions/upload-artifact@v4

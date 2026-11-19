@@ -14,6 +14,9 @@ export default defineConfig({
     port: 5173,
   },
   build: {
+    // 产物目录可换：`FRONTEND_BUILD_OUT_DIR=dist-http` 出一份连后端的产物，
+    // 与 mock 模式的产物并存（端到端用例会分别托管）。
+    outDir: process.env.FRONTEND_BUILD_OUT_DIR ?? "dist",
     // 性能预算：student 首屏 JS ≤ 400 KB gzip（docs/design/06-frontend.md §10）
     chunkSizeWarningLimit: 400,
     rollupOptions: {

@@ -33,25 +33,76 @@ const MIME = {
 
 /** 起静态服务器，返回 { studentBase, adminBase, close }。 */
 
-/** 起静态服务器，返回 { studentBase, adminBase, origin, close }。 */
-export async function serveDist(port = 0) {
-  const { createServer } = await import("node:http");
+/**
+ * 把请求转发给后端。
+ *
+ * 与 nginx 的 `location /api/` 反代同义：路径原样带过去，
+ * `Set-Cookie`（刷新令牌的 HttpOnly Cookie）等响应头原样带回。
+ */
+function proxyTo(request, req, res, target) {
+  const url = new URL(target);
+  const upstream = request(
+    {
+      hostname: url.hostname,
+      port: url.port || (url.protocol === "https:" ? 443 : 80),
+      path: req.url,
+      method: req.method,
+      headers: { ...req.headers, host: url.host },
+    },
+    (response) => {
+      res.writeHead(response.statusCode ?? 502, response.headers);
+      response.pipe(res);
+    },
+  );
+
+  upstream.on("error", () => {
+    if (!res.headersSent) {
+      res.writeHead(502, { "Content-Type": "text/plain; charset=utf-8" });
+    }
+    res.end("后端代理失败");
+  });
+
+  req.pipe(upstream);
+}
+
+/**
+ * 起静态服务器，返回 { studentBase, adminBase, origin, close }。
+ *
+ * @param port 端口，0 表示随机。
+ * @param options
+ * - `apiTarget`：反代目标（如 `http://127.0.0.1:8081`）。给了就把 `/api/*`
+ *   转发过去——与 nginx 的 `location /api/` 同义，前端因此可以用相对路径
+ *   `/api/v1`，不用处理跨域。
+ * - `distSuffix`：产物目录后缀（`-http` → `dist-http`），用于把
+ *   「mock 模式产物」与「连后端模式产物」分开。
+ */
+export async function serveDist(port = 0, options = {}) {
+  const { apiTarget, distSuffix = "" } = options;
+  const { createServer, request } = await import("node:http");
   const { statSync, readFileSync } = await import("node:fs");
   const { dirname, extname, join, normalize } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
 
   const wsRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-  const studentDist = join(wsRoot, "student", "dist");
-  const adminDist = join(wsRoot, "admin", "dist");
+  const studentDist = join(wsRoot, "student", `dist${distSuffix}`);
+  const adminDist = join(wsRoot, "admin", `dist${distSuffix}`);
 
   for (const [name, dir] of [["学生端", studentDist], ["管理端", adminDist]]) {
     if (!existsSync(join(dir, "index.html"))) {
-      throw new Error(`${name}产物不存在：${dir}，请先执行 pnpm build`);
+      throw new Error(
+        `${name}产物不存在：${dir}，请先执行 ${distSuffix ? "pnpm build:http" : "pnpm build"}`,
+      );
     }
   }
 
   const server = createServer((req, res) => {
     const urlPath = decodeURIComponent((req.url ?? "/").split("?")[0]);
+
+    // API 反代：与 nginx 的 `location /api/` 同义——同源部署，前端用相对路径。
+    if (apiTarget && urlPath.startsWith("/api/")) {
+      proxyTo(request, req, res, apiTarget);
+      return;
+    }
 
     if (urlPath === "/admin") {
       res.writeHead(301, { Location: "/admin/" });
@@ -100,7 +151,12 @@ export async function serveDist(port = 0) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const index = process.argv.indexOf("--port");
   const port = index >= 0 ? Number(process.argv[index + 1]) || 4174 : 4174;
-  const server = await serveDist(port);
+  const apiIndex = process.argv.indexOf("--api-target");
+  const apiTarget = apiIndex >= 0 ? process.argv[apiIndex + 1] : undefined;
+  const suffixIndex = process.argv.indexOf("--dist-suffix");
+  const distSuffix = suffixIndex >= 0 ? (process.argv[suffixIndex + 1] ?? "") : "";
+  const server = await serveDist(port, { apiTarget, distSuffix });
   console.log(`学生端 ${server.studentBase}`);
   console.log(`管理端 ${server.adminBase}`);
+  if (apiTarget) console.log(`API 反代 → ${apiTarget}`);
 }
