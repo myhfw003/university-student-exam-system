@@ -8,7 +8,7 @@
    步骤命中都由服务端给，前端不重算。
    ========================================================================== */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Badge,
   Button,
@@ -95,9 +95,14 @@ export function ReviewCenterPage() {
     }
   }, [items, currentId, remote, loadDetail]);
 
-  // 载入教师评分与评语：换卷宗时按服务端给的分数与评语重置。
+  // 载入教师评分与评语：**只在换卷宗时**按服务端给的分数与评语重置。
+  // 领取之后、保存之后都会刷新当前卷宗；若每次刷新都重置，
+  // 教师刚选好的分数会被冲掉（保存下去的是初判分，不是教师选的分）。
+  const loadedDetailId = useRef<string | null>(null);
   useEffect(() => {
     if (!detail) return;
+    if (loadedDetailId.current === detail.id) return;
+    loadedDetailId.current = detail.id;
     setScore(detail.finalScore ?? detail.suggestedScore ?? 0);
     setComment(detail.comment);
   }, [detail]);
@@ -169,12 +174,17 @@ export function ReviewCenterPage() {
    * 领取任务（先到先得）。
    *
    * 领取后任务变成「阅卷中」，别的教师就抢不走了；被指派给别人的任务也领不了。
+   *
+   * 领取后要把筛选切到「阅卷中」：任务离开「待阅卷」了，
+   * 不切的话卷宗会从眼前跳走（面板会落到队列里的另一份卷宗上，
+   * 教师接着打的分就落到别人的卷上了）。
    */
   const handleClaim = async () => {
     if (!detail) return;
     try {
       await claim(detail.id);
       toast.ok("已领取这份卷宗");
+      setFilter("in_review");
       refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "领取失败");

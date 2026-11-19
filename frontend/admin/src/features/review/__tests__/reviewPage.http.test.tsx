@@ -247,6 +247,45 @@ describe("管理端阅卷中心 · HTTP 模式", () => {
       expect(api.claimReviewTask).toHaveBeenCalledTimes(1);
     });
     expect(api.claimReviewTask.mock.calls[0]).toEqual(["7"]);
+
+    // 领取后任务离开「待阅卷」：筛选要切到「阅卷中」，
+    // 否则卷宗会从眼前跳走（面板落到队列里的另一份卷宗上）。
+    await waitFor(() => {
+      expect(api.loadReviewTasks).toHaveBeenCalledWith({ status: "in_review" });
+    });
+  });
+
+  it("刷新卷宗不会把教师选好的分数冲掉", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("分数")).toBeInTheDocument();
+    });
+
+    // 教师选 7 分。
+    await user.click(screen.getByRole("button", { name: "7" }));
+
+    // 领取触发刷新（服务端把状态改回「阅卷中」再下发一遍卷宗）。
+    api.claimReviewTask.mockResolvedValue({
+      ...TASK,
+      status: "in_review",
+      statusLabel: "阅卷中",
+      reviewerId: "1",
+      assigneeId: "1",
+    });
+    await user.click(screen.getByRole("button", { name: "领取任务" }));
+    await waitFor(() => {
+      expect(api.claimReviewTask).toHaveBeenCalledTimes(1);
+    });
+
+    // 分数仍是教师选的那一档——初判分（10）不能顶掉它。
+    await user.click(screen.getByRole("button", { name: "保存评分" }));
+
+    await waitFor(() => {
+      expect(api.gradeReviewTask).toHaveBeenCalledTimes(1);
+    });
+    expect(api.gradeReviewTask.mock.calls[0]![1].score).toBe(7);
   });
 
   it("能指派阅卷人，候选里只有教师", async () => {
