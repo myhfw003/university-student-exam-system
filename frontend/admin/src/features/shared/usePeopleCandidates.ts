@@ -1,22 +1,27 @@
 /* ==========================================================================
-   知行测评 · 场次负责人候选
+   知行测评 · 人员候选
    --------------------------------------------------------------------------
-   被指派的人是「阅卷教师 / 监考人员」——指派只界定「谁负责这场考试」，
-   不授予权限（后端 `PUT /exam-sessions/{id}/assignments` 的语义）。
+   两处用到「从账号里挑人」：
+
+   - 场次负责人（阅卷教师 / 监考人员）：`PUT /exam-sessions/{id}/assignments`；
+   - 阅卷任务指派：`POST /review-tasks/{id}/assign`。
 
    候选来自真实账号列表：**排除只有学生 / 社会人士角色的账号**，
    其余（出题教师、阅卷教师、管理员、自定义角色）都列出来——
    自定义角色也可能有阅卷权限，白名单式的过滤反而会把能干活的人挡在门外。
+
+   能不能真的干这活由**后端**判定：没有阅卷权限的人被指派时，
+   服务端会返回「该用户没有阅卷权限，不能指派阅卷任务。」，页面原样给管理员看。
    ========================================================================== */
 
 import { useEffect, useMemo, useState } from "react";
 import { isBackendEnabled, loadUserPage } from "@exam/shared/api";
 
-/** 不作为负责人候选的角色码：学生与社会人士。 */
-const NON_ASSIGNABLE_ROLE_CODES = new Set(["student", "general_user"]);
+/** 不作为候选的角色码：学生与社会人士。 */
+const NON_CANDIDATE_ROLE_CODES = new Set(["student", "general_user"]);
 
-/** 候选负责人。 */
-export interface AssigneeCandidate {
+/** 候选人员。 */
+export interface PersonCandidate {
   /** 用户 ID（指派时传这个）。 */
   id: string;
   /** 登录账号。 */
@@ -28,17 +33,17 @@ export interface AssigneeCandidate {
 }
 
 /**
- * 负责人候选。
+ * 候选人员。
  *
  * `enabled` 一般跟着「指派对话框是否打开」走——没打开就不必发这个请求。
  */
-export function useAssigneeCandidates(enabled: boolean): {
-  candidates: AssigneeCandidate[];
+export function usePeopleCandidates(enabled: boolean): {
+  candidates: PersonCandidate[];
   loading: boolean;
   error: string | null;
 } {
   const remote = isBackendEnabled();
-  const [users, setUsers] = useState<AssigneeCandidate[]>([]);
+  const [users, setUsers] = useState<PersonCandidate[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,9 +62,9 @@ export function useAssigneeCandidates(enabled: boolean): {
             .filter((user) => user.status === "active")
             .filter((user) => {
               const roles = user.roles;
-              // 一个角色都没有的账号干不了活；只有学生 / 社会人士角色的也不算负责人。
+              // 一个角色都没有的账号干不了活；只有学生 / 社会人士角色的也不算。
               if (roles.length === 0) return false;
-              return !roles.every((code) => NON_ASSIGNABLE_ROLE_CODES.has(code));
+              return !roles.every((code) => NON_CANDIDATE_ROLE_CODES.has(code));
             })
             .map((user) => ({
               id: user.id,
@@ -69,10 +74,10 @@ export function useAssigneeCandidates(enabled: boolean): {
             })),
         );
       } catch (err) {
-        // 拿不到候选不阻塞场次详情页：负责人这一栏显示原因即可。
+        // 拿不到候选不阻塞页面：这一栏显示原因即可。
         if (!cancelled) {
           setUsers([]);
-          setError(err instanceof Error ? err.message : "候选教师加载失败");
+          setError(err instanceof Error ? err.message : "候选人员加载失败");
         }
       } finally {
         if (!cancelled) setLoading(false);

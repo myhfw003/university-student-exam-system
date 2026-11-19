@@ -28,7 +28,7 @@ import { isBackendEnabled, type ExamParticipantImportResult } from "@exam/shared
 import { SESSION_STATUS_LABEL } from "@exam/shared/mock/adminOps";
 import { Icon } from "@/app/Icon";
 import { useProctorFeed } from "../monitoring/useProctorFeed";
-import { useAssigneeCandidates } from "./useAssignees";
+import { usePeopleCandidates } from "../shared/usePeopleCandidates";
 import { useAdminSessionDetail } from "./useAdminSessions";
 
 /** 场次详情页。 */
@@ -53,7 +53,7 @@ export function ExamSessionDetailPage() {
   const [picked, setPicked] = useState<string[]>([]);
   const [assignKeywordRaw, setAssignKeywordRaw] = useState("");
   const [assignSaving, setAssignSaving] = useState(false);
-  const assignees = useAssigneeCandidates(assignOpen);
+  const assignees = usePeopleCandidates(assignOpen);
 
   const candidates = feed.candidates;
   const submitted = candidates.filter((c) => c.status === "submitted" || c.status === "forced_submitted");

@@ -20,6 +20,7 @@ const api = {
   claimReviewTask: vi.fn(),
   assignReviewTask: vi.fn(),
   loadReviewTaskNeighbors: vi.fn(),
+  loadUserPage: vi.fn(),
 };
 
 vi.mock("@exam/shared/api", async (importOriginal) => ({
@@ -99,6 +100,21 @@ describe("管理端阅卷中心 · HTTP 模式", () => {
       skipped: 0,
       items: [],
     });
+    // 候选阅卷人：教师可指派，学生不在候选里。
+    api.loadUserPage.mockResolvedValue({
+      items: [
+        { id: "101", username: "s101", displayName: "林知遥", status: "active", roles: ["student"] },
+        {
+          id: "201",
+          username: "t201",
+          displayName: "周慕青",
+          status: "active",
+          roles: ["grader_teacher"],
+        },
+      ],
+      total: 2,
+    });
+    api.assignReviewTask.mockResolvedValue({ ...TASK, assigneeId: "201" });
   });
 
   function renderPage() {
@@ -177,5 +193,31 @@ describe("管理端阅卷中心 · HTTP 模式", () => {
     await waitFor(() => {
       expect(api.batchAdoptReviewTasks).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("能指派阅卷人，候选里只有教师", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "指派阅卷人" })).toBeInTheDocument();
+    });
+    // 还没指派。
+    expect(screen.getByText("未指派")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "指派阅卷人" }));
+
+    // 候选：教师可选；学生不是阅卷候选。
+    const radio = await screen.findByRole("radio", { name: /周慕青/ });
+    expect(screen.queryByRole("radio", { name: /林知遥/ })).not.toBeInTheDocument();
+
+    await user.click(radio);
+    await user.click(screen.getByRole("button", { name: "确认指派" }));
+
+    await waitFor(() => {
+      expect(api.assignReviewTask).toHaveBeenCalledTimes(1);
+    });
+    // 指派的是「哪份卷宗」与「给谁」。
+    expect(api.assignReviewTask.mock.calls[0]).toEqual(["7", "201"]);
   });
 });

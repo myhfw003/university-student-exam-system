@@ -12,9 +12,12 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Badge,
   Button,
+  Callout,
   ConfirmDialog,
+  Dialog,
   Empty,
   PageHead,
+  SearchInput,
   Segmented,
   TagChip,
   TextArea,
@@ -27,6 +30,7 @@ import { getTag } from "@exam/shared/mock/catalog";
 import { TYPE_LABEL } from "@exam/shared/engine/paper";
 import type { QuestionType } from "@exam/shared/domain/types";
 import { DifficultyChip, TagChips, TypeBadge } from "../shared/bits";
+import { usePeopleCandidates } from "../shared/usePeopleCandidates";
 import { useReviewQueue, type ReviewDetailView } from "./useReviewTasks";
 
 /** 阅卷筛选。 */
@@ -59,9 +63,16 @@ export function ReviewCenterPage() {
   const [comment, setComment] = useState("");
   /** 批量采纳初判建议的二次确认。 */
   const [batchAdoptOpen, setBatchAdoptOpen] = useState(false);
+  /** 指派阅卷人（真实后端模式）。 */
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignPicked, setAssignPicked] = useState("");
+  const [assignKeywordRaw, setAssignKeywordRaw] = useState("");
+  const [assignSaving, setAssignSaving] = useState(false);
 
   const queue = useReviewQueue({ status: filter });
-  const { items, counts, loadDetail, saveGrade, batchAdopt, refresh } = queue;
+  const { items, counts, loadDetail, saveGrade, batchAdopt, assign, refresh } = queue;
+  // 候选阅卷人：姓名要显示在「当前指派」上，所以一进页面就取（HTTP 模式）。
+  const people = usePeopleCandidates(remote);
 
   // 队列变化或换卷宗时同步当前卷宗。
   useEffect(() => {
@@ -134,6 +145,37 @@ export function ReviewCenterPage() {
     const next = items[(index + delta + items.length) % items.length];
     if (next) setCurrentId(next.id);
   };
+
+  /** 指派阅卷人。能不能真的阅卷由服务端判定（没有阅卷权限会被拒）。 */
+  const handleAssign = async () => {
+    if (!detail || !assignPicked) return;
+    setAssignSaving(true);
+    try {
+      await assign(detail.id, assignPicked);
+      const name = people.candidates.find((candidate) => candidate.id === assignPicked)?.name;
+      toast.ok(`已指派给 ${name ?? "该教师"}`);
+      setAssignOpen(false);
+      refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "指派失败");
+    } finally {
+      setAssignSaving(false);
+    }
+  };
+
+  // 当前卷宗指派给了谁（候选人表里查姓名；查不到就显示账号 ID）。
+  const assigneeName = detail?.assigneeId
+    ? (people.candidates.find((candidate) => candidate.id === detail.assigneeId)?.name ??
+      detail.assigneeId)
+    : "";
+
+  // 候选按账号或姓名过滤。
+  const assignKeyword = assignKeywordRaw.trim().toLowerCase();
+  const visiblePeople = people.candidates.filter(
+    (candidate) =>
+      !assignKeyword ||
+      `${candidate.account} ${candidate.name}`.toLowerCase().includes(assignKeyword),
+  );
 
   const statusBadge = useMemo(() => {
     if (!detail) return null;
@@ -250,6 +292,8 @@ export function ReviewCenterPage() {
                     </dd>
                     <dt>作答次序</dt>
                     <dd>第 {detail.attemptNo} 次作答</dd>
+                    <dt>指派阅卷人</dt>
+                    <dd>{assigneeName || "未指派"}</dd>
                     {detail.tags.length > 0 ? (
                       <>
                         <dt>标签</dt>
@@ -350,7 +394,21 @@ export function ReviewCenterPage() {
               <section className="card">
                 <div className="card-head">
                   <h2 className="card-title">评分与评语</h2>
-                  {statusBadge}
+                  <div className="row-tight">
+                    {statusBadge}
+                    {remote ? (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setAssignPicked(detail.assigneeId ?? "");
+                          setAssignKeywordRaw("");
+                          setAssignOpen(true);
+                        }}
+                      >
+                        指派阅卷人
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="card-body">
                   <div className="field" style={{ marginBottom: "var(--sp-4)" }}>
@@ -419,6 +477,70 @@ export function ReviewCenterPage() {
         onCancel={() => setBatchAdoptOpen(false)}
         onConfirm={() => void confirmBatchAdopt()}
       />
+
+      {/* 指派阅卷人。 */}
+      <Dialog
+        open={assignOpen}
+        onClose={() => setAssignOpen(false)}
+        title="指派阅卷人"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setAssignOpen(false)}>
+              关闭
+            </Button>
+            <Button
+              variant="primary"
+              disabled={assignSaving || !assignPicked}
+              onClick={() => void handleAssign()}
+            >
+              {assignSaving ? "指派中…" : "确认指派"}
+            </Button>
+          </>
+        }
+      >
+        <div className="stack">
+          <Callout tone="info" title="指派不改变权限">
+            被指派的人必须自己有阅卷权限，否则服务端会拒绝这次指派。
+          </Callout>
+
+          <SearchInput
+            id="assign-reviewer"
+            label="搜索阅卷人"
+            placeholder="按账号或姓名过滤"
+            value={assignKeywordRaw}
+            onChange={setAssignKeywordRaw}
+            onSearch={setAssignKeywordRaw}
+          />
+
+          {people.error ? (
+            <Callout tone="danger" title="候选阅卷人加载失败">
+              {people.error}
+            </Callout>
+          ) : null}
+
+          {people.loading ? (
+            <p className="text-3 text-sm">加载候选阅卷人…</p>
+          ) : visiblePeople.length === 0 ? (
+            <Empty title="没有可选的阅卷人" body="候选是除学生与社会人士以外的账号。" />
+          ) : (
+            <div className="stack" style={{ maxHeight: "320px", overflowY: "auto" }}>
+              {visiblePeople.map((candidate) => (
+                <label key={candidate.id} className="checkline">
+                  <input
+                    type="radio"
+                    name="assign-reviewer"
+                    checked={assignPicked === candidate.id}
+                    onChange={() => setAssignPicked(candidate.id)}
+                  />
+                  <span className="checkline-text">
+                    {candidate.name} · <span className="mono text-xs">{candidate.account}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      </Dialog>
     </>
   );
 }

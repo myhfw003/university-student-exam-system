@@ -86,6 +86,8 @@ export interface ReviewDetailView {
   submittedAt: string;
   status: ReviewTaskStatus;
   statusLabel: string;
+  /** 指派的阅卷人；未指派为空。 */
+  assigneeId: string | null;
   /** 该题（步骤）的满分。 */
   maxScore: number;
   /** 系统初判建议分。 */
@@ -320,6 +322,7 @@ function toDetailView(
     submittedAt: task.reviewedAt ?? task.createdAt,
     status: task.status,
     statusLabel: task.statusLabel,
+    assigneeId: task.assigneeId,
     maxScore: task.maxScore,
     suggestedScore: task.suggestedScore,
     points: (detail?.keypoints ?? []).map((point) => ({ text: point.text, hit: point.hit })),
@@ -421,6 +424,7 @@ function toMockDetail(
     submittedAt: review.submittedAt,
     status: review.status === "reviewed" ? "reviewed" : "pending",
     statusLabel: review.status === "reviewed" ? "已阅完" : "待领取",
+    assigneeId: null,
     maxScore: suggestion?.max ?? question?.score ?? 0,
     suggestedScore: suggestion?.score ?? null,
     points: suggestion?.points ?? [],
