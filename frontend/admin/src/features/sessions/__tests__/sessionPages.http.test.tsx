@@ -24,6 +24,8 @@ const api = {
   createAdminSession: vi.fn(),
   updateAdminSession: vi.fn(),
   importExamParticipants: vi.fn(),
+  loadSessionAssignments: vi.fn(),
+  setSessionAssignments: vi.fn(),
 };
 
 vi.mock("@exam/shared/api", async (importOriginal) => ({
@@ -114,6 +116,8 @@ describe("管理端场次页面 · HTTP 模式", () => {
       ],
       total: 1,
     });
+    api.loadSessionAssignments.mockResolvedValue([]);
+    api.setSessionAssignments.mockResolvedValue([]);
   });
 
   it("列表页显示后端场次与名单纳入方式", async () => {
@@ -215,6 +219,68 @@ describe("管理端场次页面 · HTTP 模式", () => {
     // 结果与被跳过的行都给管理员看。
     expect(await screen.findByText(/导入完成：成功 2 人，跳过 1 行/)).toBeInTheDocument();
     expect(screen.getByText(/账号不存在：s103/)).toBeInTheDocument();
+  });
+
+  it("详情页能指派负责教师", async () => {
+    const user = userEvent.setup();
+    api.loadSessionAssignments.mockResolvedValue([
+      {
+        userId: "201",
+        username: "t201",
+        displayName: "周慕青",
+        assignedAt: "2026-11-19T10:00:00Z",
+      },
+    ]);
+    api.loadUserPage.mockResolvedValue({
+      items: [
+        { id: "101", username: "s101", displayName: "林知遥", status: "active", roles: ["student"] },
+        {
+          id: "201",
+          username: "t201",
+          displayName: "周慕青",
+          status: "active",
+          roles: ["grader_teacher"],
+        },
+      ],
+      total: 2,
+    });
+    api.setSessionAssignments.mockResolvedValue([
+      {
+        userId: "201",
+        username: "t201",
+        displayName: "周慕青",
+        assignedAt: "2026-11-19T10:00:00Z",
+      },
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/exam-sessions/12"]}>
+        <Routes>
+          <Route path="/exam-sessions/:id" element={<ExamSessionDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "负责教师" })).toBeInTheDocument();
+    });
+    // 已指派的负责人显示出来。
+    expect(screen.getByText(/周慕青/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "指派教师" }));
+
+    // 候选里只有教师：学生不是负责人候选。
+    const candidate = await screen.findByRole("checkbox", { name: /周慕青/ });
+    expect(candidate).toBeChecked();
+    expect(screen.queryByRole("checkbox", { name: /林知遥/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "保存指派" }));
+
+    await waitFor(() => {
+      expect(api.setSessionAssignments).toHaveBeenCalledTimes(1);
+    });
+    // 覆盖式保存：传的是整份指派名单。
+    expect(api.setSessionAssignments.mock.calls[0]).toEqual(["12", ["201"]]);
   });
 
   it("详情页显示场次配置、名单与成绩", async () => {

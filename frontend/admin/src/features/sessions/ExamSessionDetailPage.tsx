@@ -18,6 +18,7 @@ import {
   Empty,
   Field,
   PageHead,
+  SearchInput,
   Stat,
   TextInput,
   downloadCsv,
@@ -27,6 +28,7 @@ import { isBackendEnabled, type ExamParticipantImportResult } from "@exam/shared
 import { SESSION_STATUS_LABEL } from "@exam/shared/mock/adminOps";
 import { Icon } from "@/app/Icon";
 import { useProctorFeed } from "../monitoring/useProctorFeed";
+import { useAssigneeCandidates } from "./useAssignees";
 import { useAdminSessionDetail } from "./useAdminSessions";
 
 /** 场次详情页。 */
@@ -45,6 +47,13 @@ export function ExamSessionDetailPage() {
   const [importResult, setImportResult] = useState<ExamParticipantImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+
+  // 场次负责人指派（真实后端模式）。
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [assignKeywordRaw, setAssignKeywordRaw] = useState("");
+  const [assignSaving, setAssignSaving] = useState(false);
+  const assignees = useAssigneeCandidates(assignOpen);
 
   const candidates = feed.candidates;
   const submitted = candidates.filter((c) => c.status === "submitted" || c.status === "forced_submitted");
@@ -169,6 +178,35 @@ export function ExamSessionDetailPage() {
       toast.error(error instanceof Error ? error.message : "取消失败");
     }
   };
+
+  /** 打开指派对话框：以当前指派为初始勾选。 */
+  const openAssign = () => {
+    setPicked(view.assignments.map((entry) => entry.userId));
+    setAssignKeywordRaw("");
+    setAssignOpen(true);
+  };
+
+  /** 保存指派（覆盖式：没勾的人会被移除）。 */
+  const handleSaveAssignments = async () => {
+    setAssignSaving(true);
+    try {
+      await view.saveAssignments(picked);
+      toast.ok(`已指派 ${picked.length} 人负责这场考试`);
+      setAssignOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败");
+    } finally {
+      setAssignSaving(false);
+    }
+  };
+
+  // 候选按账号或姓名过滤。
+  const assignKeyword = assignKeywordRaw.trim().toLowerCase();
+  const visibleCandidates = assignees.candidates.filter(
+    (candidate) =>
+      !assignKeyword ||
+      `${candidate.account} ${candidate.name}`.toLowerCase().includes(assignKeyword),
+  );
 
   return (
     <>
@@ -344,6 +382,42 @@ export function ExamSessionDetailPage() {
         </section>
       </div>
 
+      {/* 场次负责人（阅卷教师 / 监考人员）：真实后端模式才有这个概念。 */}
+      {remote ? (
+        <section className="card" style={{ marginTop: "var(--sp-4)" }}>
+          <div className="card-head">
+            <h2 className="card-title">负责教师</h2>
+            <div className="row-tight">
+              <span className="text-sm text-3">{view.assignments.length} 人</span>
+              <Button size="sm" onClick={openAssign}>
+                指派教师
+              </Button>
+            </div>
+          </div>
+          <div className="card-body">
+            {view.assignments.length === 0 ? (
+              <Empty
+                title="尚未指派负责人"
+                body="指派后，被指派的教师看得到这场考试的全部作答、成绩与监考数据。"
+              />
+            ) : (
+              <ul className="rule-list">
+                {view.assignments.map((entry) => (
+                  <li key={entry.userId}>
+                    {entry.displayName || entry.username} ·{" "}
+                    <span className="mono text-xs">{entry.username}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Callout tone="info" title="指派不授予权限">
+              指派只界定「谁负责这场考试」。被指派的人仍要自己有阅卷或监考的权限点，
+              才能看到这场考试的数据。
+            </Callout>
+          </div>
+        </section>
+      ) : null}
+
       <section className="card" style={{ marginTop: "var(--sp-4)" }}>
         <div className="card-head">
           <h2 className="card-title">考生名单</h2>
@@ -506,6 +580,75 @@ export function ExamSessionDetailPage() {
               ) : null}
             </Callout>
           ) : null}
+        </div>
+      </Dialog>
+
+      {/* 场次负责人指派。 */}
+      <Dialog
+        open={assignOpen}
+        onClose={() => setAssignOpen(false)}
+        title="指派负责教师"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setAssignOpen(false)}>
+              关闭
+            </Button>
+            <Button
+              variant="primary"
+              disabled={assignSaving}
+              onClick={() => void handleSaveAssignments()}
+            >
+              {assignSaving ? "保存中…" : "保存指派"}
+            </Button>
+          </>
+        }
+      >
+        <div className="stack">
+          <Callout tone="info" title="覆盖式保存">
+            保存后，没勾选的人会被移出指派名单。指派只界定「谁负责这场考试」，不授予权限。
+          </Callout>
+
+          <SearchInput
+            id="assign-keyword"
+            label="搜索教师"
+            placeholder="按账号或姓名过滤"
+            value={assignKeywordRaw}
+            onChange={setAssignKeywordRaw}
+            onSearch={setAssignKeywordRaw}
+          />
+
+          {assignees.error ? (
+            <Callout tone="danger" title="候选教师加载失败">
+              {assignees.error}
+            </Callout>
+          ) : null}
+
+          {assignees.loading ? (
+            <p className="text-3 text-sm">加载候选教师…</p>
+          ) : visibleCandidates.length === 0 ? (
+            <Empty title="没有可选的教师" body="候选是除学生与社会人士以外的账号。" />
+          ) : (
+            <div className="stack" style={{ maxHeight: "320px", overflowY: "auto" }}>
+              {visibleCandidates.map((candidate) => (
+                <label key={candidate.id} className="checkline">
+                  <input
+                    type="checkbox"
+                    checked={picked.includes(candidate.id)}
+                    onChange={(event) =>
+                      setPicked((current) =>
+                        event.target.checked
+                          ? [...current, candidate.id]
+                          : current.filter((id) => id !== candidate.id),
+                      )
+                    }
+                  />
+                  <span className="checkline-text">
+                    {candidate.name} · <span className="mono text-xs">{candidate.account}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
         </div>
       </Dialog>
     </>

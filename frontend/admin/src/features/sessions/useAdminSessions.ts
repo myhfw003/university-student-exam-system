@@ -22,9 +22,11 @@ import {
   loadAdminSession,
   importExamParticipants,
   loadAdminSessions,
+  loadSessionAssignments,
   loadSessionGrades,
   loadSessionParticipants,
   publishAdminSession,
+  setSessionAssignments,
   updateAdminSession,
   type AdminSessionCreate,
   type ExamParticipantImportResult,
@@ -32,6 +34,7 @@ import {
 import type {
   AdminSessionRules,
   AdminSessionSummary,
+  SessionAssignment,
 } from "@exam/shared/domain/admin";
 import type { AntiCheatPolicy, ExamSessionStatus, PaperMode } from "@exam/shared/domain/types";
 import {
@@ -122,6 +125,10 @@ export interface AdminSessionDetailView {
   savePolicy: (patch: Partial<AntiCheatPolicy>) => Promise<void>;
   /** 名单 CSV 导入（真实后端模式；导入后口径切到「指定考生」）。 */
   importParticipants: (file: File) => Promise<ExamParticipantImportResult>;
+  /** 场次负责人（阅卷教师 / 监考人员）。 */
+  assignments: SessionAssignment[];
+  /** 保存场次负责人（覆盖式）。 */
+  saveAssignments: (userIds: string[]) => Promise<void>;
   /** 重新拉取。 */
   refresh: () => void;
 }
@@ -291,6 +298,7 @@ export function useAdminSessionDetail(id: string): AdminSessionDetailView {
     { userId: string; displayName: string; className: string }[]
   >([]);
   const [grades, setGrades] = useState<SessionGradeRow[]>([]);
+  const [assignments, setAssignments] = useState<SessionAssignment[]>([]);
   const [loading, setLoading] = useState(false);
   const [token, setToken] = useState(0);
 
@@ -302,12 +310,14 @@ export function useAdminSessionDetail(id: string): AdminSessionDetailView {
       setLoading(true);
       try {
         const detail = await loadAdminSession(id);
-        const [roster, gradeRows] = await Promise.all([
+        const [roster, gradeRows, assignees] = await Promise.all([
           loadSessionParticipants(id),
           loadSessionGrades(id).catch(() => []),
+          loadSessionAssignments(id).catch(() => []),
         ]);
         if (cancelled) return;
         setRemoteDetail(detail);
+        setAssignments(assignees);
         setParticipants(
           roster.map((participant) => ({
             userId: participant.userId,
@@ -460,6 +470,24 @@ export function useAdminSessionDetail(id: string): AdminSessionDetailView {
     [remote, id, refresh],
   );
 
+  /**
+   * 保存场次负责人（覆盖式）。
+   *
+   * 指派只界定「谁负责这场考试」，不授予权限——被指派的人仍要有对应的权限点。
+   * mock 模式没有这个模型（本地内容仓库里没有指派关系）。
+   */
+  const saveAssignments = useCallback(
+    async (userIds: string[]) => {
+      if (!remote) {
+        throw new Error("场次负责人指派只在真实后端模式下可用。");
+      }
+      const saved = await setSessionAssignments(id, userIds);
+      setAssignments(saved);
+      refresh();
+    },
+    [remote, id, refresh],
+  );
+
   /* ---------------------------------------------------------- 视图 */
 
   if (remote) {
@@ -497,6 +525,8 @@ export function useAdminSessionDetail(id: string): AdminSessionDetailView {
         cancel,
         savePolicy,
         importParticipants,
+        assignments,
+        saveAssignments,
         refresh,
       };
     }
@@ -534,6 +564,8 @@ export function useAdminSessionDetail(id: string): AdminSessionDetailView {
       cancel,
       savePolicy,
       importParticipants,
+      assignments,
+      saveAssignments,
       refresh,
     };
   }
@@ -573,6 +605,8 @@ export function useAdminSessionDetail(id: string): AdminSessionDetailView {
       cancel,
       savePolicy,
       importParticipants,
+      assignments,
+      saveAssignments,
       refresh,
     };
   }
@@ -608,6 +642,8 @@ export function useAdminSessionDetail(id: string): AdminSessionDetailView {
     cancel,
     savePolicy,
     importParticipants,
+    assignments: [],
+    saveAssignments,
     refresh,
   };
 }

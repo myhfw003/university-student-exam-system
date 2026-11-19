@@ -137,8 +137,8 @@ export async function loadUserPage(
     organizations?: Array<{ userId?: number; tagIds?: number[]; organizationPath?: string | null }>;
   }>(ENDPOINTS.admin.users, {
     query: {
-      page: 1,
-      size: 50,
+      page: params.page ?? 1,
+      size: params.size ?? 50,
       ...(params.keyword ? { keyword: params.keyword } : {}),
       ...(params.status && params.status !== "all" ? { status: params.status } : {}),
       ...(params.roleId ? { roleId: params.roleId } : {}),
