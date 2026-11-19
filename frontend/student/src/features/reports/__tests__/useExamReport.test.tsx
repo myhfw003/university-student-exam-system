@@ -136,6 +136,24 @@ const REPORT = {
   ],
 };
 
+/** 改分流水：阅卷教师改过一次分。 */
+const REVISIONS = {
+  attemptId: ATTEMPT_ID,
+  items: [
+    {
+      id: 5,
+      questionId: 11,
+      scoreResultId: 31,
+      previousScore: 6,
+      newScore: 10,
+      comment: "要点都覆盖到了，给满分。",
+      operatorId: 1,
+      occurredAt: "2026-11-17T15:00:00Z",
+    },
+  ],
+  total: 1,
+};
+
 /** 造一个最小可用的 JSON 响应。 */
 function json(body: unknown) {
   return {
@@ -158,6 +176,7 @@ describe("useExamReport · HTTP 模式的成绩报告", () => {
         if (url.includes(`/exam-sessions/${SESSION_ID}`)) return json(SESSION);
         if (url.includes("/my/results")) return json(RESULTS);
         if (url.includes(`/attempts/${ATTEMPT_ID}/report`)) return json(REPORT);
+        if (url.includes(`/attempts/${ATTEMPT_ID}/grade-revisions`)) return json(REVISIONS);
         if (url.includes(`/attempts/${ATTEMPT_ID}`)) return json(ATTEMPT);
         throw new Error(`未预期的请求：${url}`);
       }),
@@ -195,6 +214,22 @@ describe("useExamReport · HTTP 模式的成绩报告", () => {
     expect(detail.status).toBe("correct");
   });
 
+  it("带出改分流水：改过几分、谁改的、什么时候改的", async () => {
+    const { result } = renderReport();
+
+    await waitFor(() => {
+      expect(result.current.data).not.toBeNull();
+    });
+
+    const revisions = result.current.data!.revisions;
+    expect(revisions).toHaveLength(1);
+    expect(revisions[0]!.questionId).toBe("11");
+    expect(revisions[0]!.previousScore).toBe(6);
+    expect(revisions[0]!.newScore).toBe(10);
+    expect(revisions[0]!.comment).toBe("要点都覆盖到了，给满分。");
+    expect(revisions[0]!.occurredAt).toBe("2026-11-17T15:00:00Z");
+  });
+
   it("答案未公布时不显示正确答案", async () => {
     vi.stubGlobal(
       "fetch",
@@ -212,6 +247,7 @@ describe("useExamReport · HTTP 模式的成绩报告", () => {
         }
         if (url.includes(`/exam-sessions/${SESSION_ID}`)) return json(SESSION);
         if (url.includes("/my/results")) return json(RESULTS);
+        if (url.includes(`/attempts/${ATTEMPT_ID}/grade-revisions`)) return json(REVISIONS);
         if (url.includes(`/attempts/${ATTEMPT_ID}`)) return json(ATTEMPT);
         throw new Error(`未预期的请求：${url}`);
       }),

@@ -12,7 +12,12 @@
 import { httpClient } from "./httpClient";
 import { ENDPOINTS } from "./endpoints";
 import { toDomainPayload, type ServerAnswerPayload } from "./answerPayload";
-import type { AttemptReport, MyResult, ReportDetail } from "../domain/attempt";
+import type {
+  AttemptReport,
+  GradeRevision,
+  MyResult,
+  ReportDetail,
+} from "../domain/attempt";
 import type { QuestionType } from "../domain/types";
 
 /** 成绩接口所需的最小客户端接口（便于端到端测试注入自定义基地址）。 */
@@ -120,4 +125,29 @@ export async function loadAttemptReport(
 ): Promise<AttemptReport> {
   const dto = await client.get<Dto>(ENDPOINTS.learning.attemptsReport(attemptId));
   return toAttemptReport(dto);
+}
+
+/**
+ * 读取改分流水。
+ *
+ * 学生端可见：改过几次分、谁改的。流水读不到不影响成绩本身——
+ * 报告照常出，只是没有改分记录这一节。
+ */
+export async function loadGradeRevisions(
+  attemptId: string,
+  client: ReportClient = httpClient,
+): Promise<GradeRevision[]> {
+  const res = await client.get<{ items?: Dto[] } | Dto[]>(
+    ENDPOINTS.learning.attemptGradeRevisions(attemptId),
+  );
+  const items = Array.isArray(res) ? res : (res.items ?? []);
+  return items.map((dto) => ({
+    id: str(dto.id),
+    questionId: str(dto.questionId),
+    previousScore: numOrNull(dto.previousScore),
+    newScore: num(dto.newScore),
+    comment: dto.comment ? str(dto.comment) : null,
+    operatorId: str(dto.operatorId),
+    occurredAt: str(dto.occurredAt),
+  }));
 }

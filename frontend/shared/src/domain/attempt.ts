@@ -293,6 +293,23 @@ export interface MyResult {
   status: string;
 }
 
+/** 改分流水的一条：阅卷教师改过分数的痕迹。 */
+export interface GradeRevision {
+  id: string;
+  /** 题目 ID。 */
+  questionId: string;
+  /** 改分前的分数；首次定分时为空。 */
+  previousScore: number | null;
+  /** 改分后的分数。 */
+  newScore: number;
+  /** 评语。 */
+  comment: string | null;
+  /** 操作者（阅卷教师）ID。 */
+  operatorId: string;
+  /** 改分时间。 */
+  occurredAt: string;
+}
+
 /* ==========================================================================
    练习
    --------------------------------------------------------------------------

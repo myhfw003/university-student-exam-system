@@ -18,6 +18,7 @@ import {
   isBackendEnabled,
   listMyAttempts,
   loadAttemptReport,
+  loadGradeRevisions,
   loadExamSession,
   loadMyResults,
   toPaperMode,
@@ -25,6 +26,7 @@ import {
 import { gradedPaperFromReport } from "@exam/shared/engine";
 import type { GradedWithTeacher } from "@exam/shared/engine/scoring";
 import type { PaperMode } from "@exam/shared/domain/types";
+import type { GradeRevision } from "@exam/shared/domain/attempt";
 
 /** 成绩报告视图数据。 */
 export interface ExamReportData {
@@ -40,6 +42,12 @@ export interface ExamReportData {
   submittedAt: string | null;
   /** 第几次作答。 */
   attemptNo: number;
+  /**
+   * 改分流水：阅卷教师改过分数的痕迹。
+   *
+   * 没有改分就是空数组；流水读不到也不影响成绩本身。
+   */
+  revisions: GradeRevision[];
 }
 
 /** 找出这场考试里成绩最好的一次作答（重考按最高分计入）。 */
@@ -98,9 +106,11 @@ export function useExamReport(
           return;
         }
 
-        const [surface, report] = await Promise.all([
+        const [surface, report, revisions] = await Promise.all([
           getAttempt(attemptId),
           loadAttemptReport(attemptId),
+          // 改分流水读不到不影响成绩：拿不到就当没有改分记录。
+          loadGradeRevisions(attemptId).catch(() => []),
         ]);
         if (cancelled) return;
 
@@ -111,6 +121,7 @@ export function useExamReport(
           graded: gradedPaperFromReport(surface, report),
           submittedAt: report.submittedAt,
           attemptNo: report.attemptNo,
+          revisions,
         });
       } catch {
         if (!cancelled) setError("成绩报告读取失败，请稍后重试。");

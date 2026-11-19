@@ -73,6 +73,9 @@ export const ENDPOINTS = {
     myResults: "/my/results",
     /** 单次作答的成绩报告。 */
     attemptsReport: (attemptId: string | number) => `/attempts/${attemptId}/report`,
+    /** 改分流水（学生端可见：改过几次分、谁改的）。 */
+    attemptGradeRevisions: (attemptId: string | number) =>
+      `/attempts/${attemptId}/grade-revisions`,
     mistakes: "/mistakes",
     dashboard: "/dashboard/summary",
   },

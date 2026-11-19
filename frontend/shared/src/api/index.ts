@@ -249,6 +249,7 @@ export {
 } from "./practiceApi";
 export {
   loadAttemptReport,
+  loadGradeRevisions,
   loadMyResults,
   toAttemptReport,
   type ReportClient,

@@ -122,6 +122,12 @@ function RemoteExamReport({ data }: { data: ExamReportData }) {
   const { label: modeLabel, short: modeShort } = modeLabels(data.mode);
   const graded = data.graded;
 
+  /** 改分流水里的题目 ID → 题号（题目清单里没有就显示 ID）。 */
+  const questionCodeOf = (questionId: string): string => {
+    const detail = graded.details.find((item) => item.qid === questionId);
+    return detail?.question.code || questionId;
+  };
+
   return (
     <>
       <PageHead
@@ -168,6 +174,44 @@ function RemoteExamReport({ data }: { data: ExamReportData }) {
       </div>
 
       <TypeScoreBars graded={graded} />
+
+      {/* 改分记录：阅卷教师改过分数时才有内容。 */}
+      {data.revisions.length > 0 ? (
+        <section className="card" style={{ marginTop: "var(--sp-5)" }}>
+          <div className="card-head">
+            <h2 className="card-title">改分记录</h2>
+            <span className="text-sm text-3">共 {data.revisions.length} 次</span>
+          </div>
+          <div className="card-body is-flush">
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th scope="col">题目</th>
+                    <th scope="col">原分</th>
+                    <th scope="col">改后</th>
+                    <th scope="col">评语</th>
+                    <th scope="col">改分时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.revisions.map((revision) => (
+                    <tr key={revision.id}>
+                      <td>{questionCodeOf(revision.questionId)}</td>
+                      <td className="num">
+                        {revision.previousScore === null ? "—" : formatScore(revision.previousScore)}
+                      </td>
+                      <td className="num">{formatScore(revision.newScore)}</td>
+                      <td>{revision.comment || "—"}</td>
+                      <td className="text-xs text-3">{formatTime(revision.occurredAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="card" style={{ marginTop: "var(--sp-5)" }}>
         <div className="card-head">
