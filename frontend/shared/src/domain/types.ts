@@ -492,6 +492,7 @@ export type AuditAction =
   | "auth.login"
   | "auth.login_failed"
   | "auth.refresh_reuse"
+  | "auth.logout"
   | "user.update"
   | "user.role_changed"
   | "user.tag_changed"

@@ -325,6 +325,33 @@ public sealed class AuthEndpointTests : IAsyncLifetime
         return await _client.SendAsync(request);
     }
 
+    [Fact]
+    public async Task 登出写审计日志()
+    {
+        const string username = "logoutaudit1";
+        await CreateUserAsync(username, "Pass123456");
+
+        var login = await _client.PostAsJsonAsync(
+            "/api/v1/auth/login", new { username, password = "Pass123456" });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+
+        var body = await login.Content.ReadFromJsonAsync<JsonElement>();
+        var token = body.GetProperty("accessToken").GetString()!;
+        var cookie = ReadRefreshCookie(login);
+
+        // 登出：访问令牌与刷新 Cookie 都带上。
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/logout");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Add("Cookie", cookie);
+        var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        var row = (await GetAuditLogsAsync("auth.logout"))
+            .LastOrDefault(l => l.OperatorName == username);
+        Assert.NotNull(row);
+        Assert.Equal("user", row!.TargetType);
+    }
+
     private async Task<List<AuditLog>> GetAuditLogsAsync(string action)
     {
         using var scope = _factory.Services.CreateScope();

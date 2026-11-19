@@ -19,22 +19,30 @@ public sealed class LogoutHandler : IRequestHandler<LogoutCommand, Unit>
     private readonly ITokenBlacklist _blacklist;
     private readonly ITokenService _tokenService;
     private readonly IClock _clock;
+    private readonly IAuditRecorder _audit;
+    private readonly ICurrentUser _currentUser;
 
     public LogoutHandler(
         IRefreshTokenRepository refreshTokens,
         ITokenBlacklist blacklist,
         ITokenService tokenService,
-        IClock clock)
+        IClock clock,
+        IAuditRecorder audit,
+        ICurrentUser currentUser)
     {
         _refreshTokens = refreshTokens;
         _blacklist = blacklist;
         _tokenService = tokenService;
         _clock = clock;
+        _audit = audit;
+        _currentUser = currentUser;
     }
 
     public async Task<Unit> Handle(LogoutCommand request, CancellationToken cancellationToken)
     {
         var now = _clock.UtcNow;
+
+        var revokedRefreshToken = false;
 
         if (!string.IsNullOrWhiteSpace(request.RawRefreshToken))
         {
@@ -50,6 +58,8 @@ public sealed class LogoutHandler : IRequestHandler<LogoutCommand, Unit>
                         _refreshTokens.Update(token);
                     }
                 }
+
+                revokedRefreshToken = true;
             }
         }
 
@@ -57,6 +67,18 @@ public sealed class LogoutHandler : IRequestHandler<LogoutCommand, Unit>
         {
             await _blacklist.RevokeAsync(request.AccessTokenJti, now.AddMinutes(30), cancellationToken);
         }
+
+        // 登出也要留痕（安全合规文档 §8.2 的必审计动作清单里列着「登出」）。
+        await _audit.RecordAsync(
+            "auth.logout",
+            "user",
+            _currentUser.UserId?.ToString(),
+            new Dictionary<string, object?>
+            {
+                ["username"] = _currentUser.Username,
+                ["refreshTokenRevoked"] = revokedRefreshToken,
+            },
+            cancellationToken);
 
         return Unit.Value;
     }

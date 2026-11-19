@@ -200,6 +200,18 @@ export const useAuth = create<AuthState>((set, get) => ({
     // 先通知服务端吊销刷新令牌族（HttpOnly Cookie 只能由服务端清除）。
     if (get().mode === "http") {
       void httpClient.post(ENDPOINTS.auth.logout).catch(() => undefined);
+    } else {
+      // mock 模式：登出也要留痕（http 模式由后端写）。
+      const user = get().user;
+      writeAudit({
+        operator: user?.name ?? "",
+        action: "auth.logout",
+        targetType: "user",
+        targetId: user?.id ?? "",
+        summary: "登出",
+        ip: MOCK_AUDIT_IP,
+        userAgent: MOCK_AUDIT_UA,
+      });
     }
     clearTokens();
     set({ status: "anonymous", user: null });

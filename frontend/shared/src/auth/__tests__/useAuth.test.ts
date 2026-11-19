@@ -33,6 +33,24 @@ describe("mock 模式登录留痕", () => {
     expect(row?.targetId).toBe("u-01");
   });
 
+  it("登出写一条登出审计", async () => {
+    await useAuth.getState().signIn("zhangsan", "whatever", {
+      id: "u-01",
+      account: "zhangsan",
+      name: "张三",
+      roles: ["student"],
+      orgTags: [],
+    });
+    useAdminOps.setState({ auditLogs: [] });
+
+    useAuth.getState().signOut();
+
+    const row = useAdminOps.getState().auditLogs[0];
+    expect(row?.action).toBe("auth.logout");
+    expect(row?.operator).toBe("张三");
+    expect(row?.targetId).toBe("u-01");
+  });
+
   it("登录失败也写一条失败审计", async () => {
     const result = await useAuth.getState().signIn("ghost", "wrong", null);
 
