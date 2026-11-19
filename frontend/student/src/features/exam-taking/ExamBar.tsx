@@ -5,6 +5,7 @@
    ========================================================================== */
 
 import type { ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatClock } from "@exam/shared";
 import { Icon } from "@/app/Icon";
 
@@ -28,6 +29,27 @@ export interface ExamBarProps {
   children?: ReactNode;
 }
 
+/**
+ * 分钟级播报。
+ *
+ * 视觉倒计时每秒都在变，交给读屏会一直刷屏——所以视觉部分对读屏隐藏，
+ * 这里只在**整分钟数变化**时更新一次播报文本（设计文档 §9「倒计时不播报」）。
+ */
+function useMinuteAnnouncement(remainingSec: number | undefined): string {
+  const [announcement, setAnnouncement] = useState("");
+  const announcedMinute = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (remainingSec === undefined) return;
+    const minute = Math.max(0, Math.ceil(remainingSec / 60));
+    if (minute === announcedMinute.current) return;
+    announcedMinute.current = minute;
+    setAnnouncement(minute === 0 ? "考试时间已到" : `剩余 ${minute} 分钟`);
+  }, [remainingSec]);
+
+  return announcement;
+}
+
 /** 答题页顶栏。 */
 export function ExamBar({
   title,
@@ -41,6 +63,7 @@ export function ExamBar({
   children,
 }: ExamBarProps) {
   const warn = remainingSec !== undefined && remainingSec <= warnThreshold;
+  const announcement = useMinuteAnnouncement(remainingSec);
 
   return (
     <div className="exam-bar">
@@ -52,11 +75,17 @@ export function ExamBar({
       {children}
       {remainingSec !== undefined ? (
         <div className="right">
-          <div className={`timer${warn ? " is-warn" : ""}`} role="timer" aria-live="off">
+          {/* 视觉倒计时对读屏隐藏：每秒变化会一直刷屏。 */}
+          <div className={`timer${warn ? " is-warn" : ""}`} aria-hidden="true">
             {formatClock(remainingSec)}
           </div>
           <div className="timer-note">剩余时间</div>
         </div>
+      ) : null}
+      {remainingSec !== undefined ? (
+        <span className="sr-only" aria-live="polite" aria-atomic="true">
+          {announcement}
+        </span>
       ) : null}
       <button type="button" className="btn" onClick={onToggleFlag}>
         <Icon name="flag" />
