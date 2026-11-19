@@ -105,6 +105,16 @@ export {
   type PaperWriteInput,
 } from "./paperApi";
 export {
+  loadExamSessionStatistics,
+  toExamSessionStatistics,
+  type ExamSessionStatistics,
+  type QuestionStatistic,
+  type ScoreBucket,
+  type StatisticsClient,
+  type StudentStatistic,
+  type TypeStatistic,
+} from "./statisticsApi";
+export {
   cancelAdminSession,
   closeAdminSession,
   createAdminSession,
@@ -157,6 +167,7 @@ export {
 } from "./questionApi";
 export {
   adoptImportBatch,
+  loadImportBatches,
   toImportBatch,
   toImportBatchDetail,
   updateImportMapping,

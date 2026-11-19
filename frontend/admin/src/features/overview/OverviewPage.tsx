@@ -5,14 +5,12 @@
    所有数字直接来自当前题库状态，可直接跳转处理。
    ========================================================================== */
 
-import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Badge, Button, Empty, PageHead, Stat, toast } from "@exam/shared";
-import { preflight, useCatalog } from "@exam/shared/mock/catalog";
 import { PAPER_MODES } from "@exam/shared/engine";
-import { useAdminOps } from "@exam/shared/mock/adminOps";
 import { Icon } from "@/app/Icon";
 import { modeLabelOf } from "../shared/scope";
+import { useAdminOverview } from "./useAdminOverview";
 
 /** 待办卡片。 */
 function TodoCard({
@@ -52,48 +50,32 @@ function TodoCard({
 /** 概览页。 */
 export function OverviewPage() {
   const navigate = useNavigate();
-  const questions = useCatalog((state) => state.questions);
-  const exams = useCatalog((state) => state.exams);
-  const practices = useCatalog((state) => state.practices);
-  const reviews = useCatalog((state) => state.reviews);
-  const imports = useCatalog((state) => state.imports);
-  const generations = useCatalog((state) => state.generations);
-  const templates = useCatalog((state) => state.paperTemplates);
-  const banks = useCatalog((state) => state.banks);
-  const sessions = useAdminOps((state) => state.sessions);
-  const users = useAdminOps((state) => state.users);
-
-  const drafts = questions.filter((q) => q.status === "draft");
-  const published = questions.filter((q) => q.status === "published");
-  const disabled = questions.filter((q) => q.status === "disabled");
-  const draftExams = exams.filter((e) => e.status === "draft" || !e.published);
-  const draftPractices = practices.filter((p) => p.status !== "published");
-  const pendingReviews = reviews.filter((r) => r.status === "pending");
-
-  // 发布校验未通过的卷对象。
-  const blocked = useMemo(() => {
-    const list: Array<{ kind: "exam" | "practice"; id: string; name: string }> = [];
-    for (const exam of exams) {
-      if (!preflight("exam", exam.id).ok) {
-        list.push({ kind: "exam", id: exam.id, name: exam.name });
-      }
-    }
-    for (const practice of practices) {
-      if (!preflight("practice", practice.id).ok) {
-        list.push({ kind: "practice", id: practice.id, name: practice.name });
-      }
-    }
-    return list;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [exams, practices, questions]);
-
-  const ongoingSessions = sessions.filter((s) => s.status === "in_progress");
+  // 看板的数字由各资源自己数，前端拼起来（数据通路见 useAdminOverview.ts）。
+  const { data } = useAdminOverview();
+  const {
+    questionTotal,
+    published,
+    drafts,
+    disabled,
+    bankCount,
+    examCount,
+    draftExams,
+    practiceCount,
+    draftPractices,
+    pendingReviews,
+    sessionCount,
+    ongoingSessions,
+    userCount,
+    blocked,
+    templates,
+    imports,
+  } = data;
 
   const todoCount =
-    drafts.length +
-    draftExams.length +
-    draftPractices.length +
-    pendingReviews.length +
+    drafts +
+    draftExams +
+    draftPractices +
+    pendingReviews +
     blocked.length;
 
   return (
@@ -116,16 +98,16 @@ export function OverviewPage() {
       />
 
       <div className="stat-row" style={{ marginBottom: "var(--sp-5)" }}>
-        <Stat label="题目总数" value={questions.length} unit="道" hint={`覆盖 ${banks.length} 个题库`} />
-        <Stat label="已发布" value={published.length} unit="道" hint="可被组卷与练习引用" />
-        <Stat label="试卷" value={exams.length} unit="份" hint={`${draftExams.length} 份待发布`} />
-        <Stat label="练习" value={practices.length} unit="个" hint={`${draftPractices.length} 个待上架`} />
-        <Stat label="待阅卷" value={pendingReviews.length} unit="份" hint="主观题评分队列" />
+        <Stat label="题目总数" value={questionTotal} unit="道" hint={`覆盖 ${bankCount} 个题库`} />
+        <Stat label="已发布" value={published} unit="道" hint="可被组卷与练习引用" />
+        <Stat label="试卷" value={examCount} unit="份" hint={`${draftExams} 份待发布`} />
+        <Stat label="练习" value={practiceCount} unit="个" hint={`${draftPractices} 个待上架`} />
+        <Stat label="待阅卷" value={pendingReviews} unit="份" hint="主观题评分队列" />
         <Stat
           label="进行中场次"
-          value={ongoingSessions.length}
+          value={ongoingSessions}
           unit="场"
-          hint={`共 ${sessions.length} 场 · ${users.length} 个账号`}
+          hint={`共 ${sessionCount} 场 · ${userCount} 个账号`}
         />
       </div>
 
@@ -140,37 +122,37 @@ export function OverviewPage() {
               <TodoCard
                 icon="layers"
                 label="候选题待审核"
-                count={drafts.length}
+                count={drafts}
                 hint="导入与 AI 生成的题目需审核发布后方可组卷"
                 actionLabel="去审核"
-                tone={drafts.length > 0 ? "todo" : "done"}
+                tone={drafts > 0 ? "todo" : "done"}
                 onAction={() => navigate("/banks/__all__?tab=candidates")}
               />
               <TodoCard
                 icon="clipboard"
                 label="试卷待发布"
-                count={draftExams.length}
+                count={draftExams}
                 hint="已配置但尚未发布到答题端"
                 actionLabel="去组卷"
-                tone={draftExams.length > 0 ? "todo" : "done"}
+                tone={draftExams > 0 ? "todo" : "done"}
                 onAction={() => navigate("/papers?kind=exam")}
               />
               <TodoCard
                 icon="book"
                 label="练习待上架"
-                count={draftPractices.length}
+                count={draftPractices}
                 hint="开放范围与规则就绪后即可上架"
                 actionLabel="去上架"
-                tone={draftPractices.length > 0 ? "todo" : "done"}
+                tone={draftPractices > 0 ? "todo" : "done"}
                 onAction={() => navigate("/papers?kind=practice")}
               />
               <TodoCard
                 icon="edit"
                 label="待人工阅卷"
-                count={pendingReviews.length}
+                count={pendingReviews}
                 hint="主观题提交后进入阅卷队列"
                 actionLabel="去阅卷"
-                tone={pendingReviews.length > 0 ? "todo" : "done"}
+                tone={pendingReviews > 0 ? "todo" : "done"}
                 onAction={() => navigate("/review")}
               />
               <TodoCard
@@ -189,10 +171,10 @@ export function OverviewPage() {
               <TodoCard
                 icon="flag"
                 label="已停用题目"
-                count={disabled.length}
+                count={disabled}
                 hint="停用后不可被组卷引用，可随时恢复"
                 actionLabel="去复核"
-                tone={disabled.length > 0 ? "todo" : "done"}
+                tone={disabled > 0 ? "todo" : "done"}
                 onAction={() => navigate("/banks/__all__?tab=questions")}
               />
             </div>
@@ -211,11 +193,11 @@ export function OverviewPage() {
                   <span
                     className="bar-fill is-ok"
                     style={{
-                      width: `${questions.length > 0 ? Math.round((published.length / questions.length) * 100) : 0}%`,
+                      width: `${questionTotal > 0 ? Math.round((published / questionTotal) * 100) : 0}%`,
                     }}
                   />
                 </span>
-                <span className="right num text-sm">{published.length} 道</span>
+                <span className="right num text-sm">{published} 道</span>
               </div>
               <div className="bar-row">
                 <span className="od-truncate">草稿（候选题）</span>
@@ -223,11 +205,11 @@ export function OverviewPage() {
                   <span
                     className="bar-fill is-warn"
                     style={{
-                      width: `${questions.length > 0 ? Math.round((drafts.length / questions.length) * 100) : 0}%`,
+                      width: `${questionTotal > 0 ? Math.round((drafts / questionTotal) * 100) : 0}%`,
                     }}
                   />
                 </span>
-                <span className="right num text-sm">{drafts.length} 道</span>
+                <span className="right num text-sm">{drafts} 道</span>
               </div>
               <div className="bar-row">
                 <span className="od-truncate">已停用</span>
@@ -235,11 +217,11 @@ export function OverviewPage() {
                   <span
                     className="bar-fill"
                     style={{
-                      width: `${questions.length > 0 ? Math.round((disabled.length / questions.length) * 100) : 0}%`,
+                      width: `${questionTotal > 0 ? Math.round((disabled / questionTotal) * 100) : 0}%`,
                     }}
                   />
                 </span>
-                <span className="right num text-sm">{disabled.length} 道</span>
+                <span className="right num text-sm">{disabled} 道</span>
               </div>
               <p className="section-note" style={{ marginTop: "var(--sp-3)" }}>
                 仅「已发布」题目可进入试卷与练习；草稿需审核发布，停用可恢复。
@@ -269,7 +251,7 @@ export function OverviewPage() {
                             " · " +
                             modeLabelOf(t.mode, PAPER_MODES) +
                             " · " +
-                            t.items.length +
+                            t.itemCount +
                             " 题 · " +
                             t.durationMin +
                             " 分钟"}
@@ -280,7 +262,7 @@ export function OverviewPage() {
                         onClick={() =>
                           toast.ok(
                             `${t.name}：${modeLabelOf(t.mode, PAPER_MODES)} · ${
-                              t.items.length
+                              t.itemCount
                             } 题 · ${t.durationMin} 分钟`,
                           )
                         }
@@ -299,11 +281,11 @@ export function OverviewPage() {
               <h2 className="card-title">最近生产批次</h2>
             </div>
             <div className="card-body is-flush">
-              {imports.length + generations.length === 0 ? (
+              {imports.length === 0 ? (
                 <Empty title="暂无批次" body="导入或 AI 生成后会在此留痕。" />
               ) : (
                 <ul className="list">
-                  {[...imports].reverse().slice(0, 3).map((b) => (
+                  {imports.slice(0, 3).map((b) => (
                     <li className="list-row" key={b.id}>
                       <div>
                         <div className="strong" style={{ fontWeight: 500 }}>
@@ -315,21 +297,6 @@ export function OverviewPage() {
                       </div>
                       <Badge tone={b.status === "adopted" ? "ok" : "warn"}>
                         {b.status === "adopted" ? "已采纳" : "待采纳"}
-                      </Badge>
-                    </li>
-                  ))}
-                  {[...generations].reverse().slice(0, 3).map((g) => (
-                    <li className="list-row" key={g.id}>
-                      <div>
-                        <div className="strong" style={{ fontWeight: 500 }}>
-                          {g.prompt}
-                        </div>
-                        <div className="text-xs text-3">
-                          {g.id} · {g.createdAt} · {g.count} 题
-                        </div>
-                      </div>
-                      <Badge tone={g.status === "adopted" ? "ok" : "warn"}>
-                        {g.status === "adopted" ? "已采纳" : "待采纳"}
                       </Badge>
                     </li>
                   ))}

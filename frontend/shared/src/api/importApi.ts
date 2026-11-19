@@ -96,6 +96,19 @@ export function toImportBatch(dto: Dto): ImportBatch {
   };
 }
 
+/** 读取导入批次列表（看板上的「最近生产批次」）。 */
+export async function loadImportBatches(
+  params: { page?: number | undefined; size?: number | undefined } = {},
+  client: ImportClient = httpClient,
+): Promise<{ items: ImportBatch[]; total: number }> {
+  const res = await client.get<{ items?: Record<string, unknown>[]; total?: number }>(
+    ENDPOINTS.catalog.imports,
+    { query: { page: params.page ?? 1, size: params.size ?? 20 } },
+  );
+  const items = (res.items ?? []).map(toImportBatch);
+  return { items, total: num(res.total, items.length) };
+}
+
 /** 上传试题文件并解析（服务端给出列映射建议与逐行结果）。 */
 export async function uploadImportBatch(
   file: File,
