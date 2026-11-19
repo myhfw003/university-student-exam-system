@@ -7,6 +7,13 @@
    与原型的差异：**新增「一键出卷」**（docs/design/03-domain-model.md §4.2）。
    原型只能手工勾选 + 套模板；本实现按配额矩阵确定性抽题，池量不足即报错并
    列出缺口（不静默降级），生成后仍可手工微调。
+
+   数据通路见 `useAdminPapers.ts`。真实后端模式下的三处差别：
+   1. **名单与开放时间不在试卷上**——它们属于**场次**（`/exam-sessions`），
+      向导里不再提供这两个输入。
+   2. **发布校验在服务端**：`POST /papers/{id}/validate` 给逐项结果，
+      警告项要填写覆盖理由才能发布（服务端只收一段总理由）。
+   3. **卷面预览用服务端的派生卷面**：只有已发布的试卷才有可预览的卷面。
    ========================================================================== */
 
 import { useEffect, useMemo, useState } from "react";
@@ -26,14 +33,26 @@ import {
   toast,
 } from "@exam/shared";
 import {
+  applyPaperTemplate,
+  createPaper as createRemotePaper,
+  createPaperTemplate,
+  generateBlueprint,
+  isBackendEnabled,
+  loadPaperTemplates,
+  previewPaper,
+  saveBlueprint,
+  validatePaper,
+  type AdminPaperTemplate,
+  type PaperValidation,
+  type PaperVariant,
+} from "@exam/shared/api";
+import {
   TAG_GROUP_ORDER,
   className as classNameOf,
   createExam,
   createPractice,
   difficultyLevels,
   getQuestion,
-  itemsOf,
-  plumCfgOf,
   preflight,
   publishedQuestionIds,
   savePaperTemplate,
@@ -52,13 +71,20 @@ import {
   selectQuestions,
   type BlueprintRules,
 } from "@exam/shared/engine";
-import type { ExamPaper, PaperItem, Practice } from "@exam/shared/domain/types";
+import type { ExamPaper, PaperItem, Practice, Question } from "@exam/shared/domain/types";
 import { Icon } from "@/app/Icon";
 import { DifficultyChip, TypeBadge } from "../shared/bits";
 import { EntityTagsDialog } from "../shared/EntityTagsDialog";
 import { scopeLabel, sumScore } from "../shared/scope";
 import { PaperPreviewTable } from "../shared/PaperPreviewTable";
+import { PaperVariantTable } from "../shared/PaperVariantTable";
 import { MultiSelect } from "../shared/MultiSelect";
+import { useCatalogTags } from "../shared/useCatalogTags";
+import {
+  useAdminPaper,
+  usePaperQuestionPool,
+  usePickedQuestions,
+} from "./useAdminPapers";
 
 /** 向导步骤。 */
 type Step = "basic" | "select" | "plum" | "publish";
@@ -130,47 +156,113 @@ const QUESTION_TYPE_OPTIONS = [
   { value: "comprehensive", label: "综合操作题" },
 ];
 
+/** 发布校验的展示口径（mock 与 HTTP 同一形状）。 */
+interface CheckView {
+  ok: boolean;
+  total: number;
+  failed: number;
+  warnings: number;
+  checks: Array<{
+    key: string;
+    label: string;
+    ok: boolean;
+    detail: string;
+    level: "error" | "warning";
+  }>;
+}
+
+/** 服务端校验结果 → 展示口径。 */
+function toCheckView(validation: PaperValidation): CheckView {
+  const checks = validation.items.map((item) => ({
+    key: item.key,
+    label: item.label,
+    ok: item.passed,
+    detail: item.detail,
+    level: (item.severity === "warning" ? "warning" : "error") as "error" | "warning",
+  }));
+  const failed = checks.filter((c) => !c.ok && c.level === "error").length;
+  const warnings = checks.filter((c) => !c.ok && c.level === "warning").length;
+  return { ok: failed === 0, total: checks.length, failed, warnings, checks };
+}
+
 /** 组卷向导。 */
 export function PaperWizardPage() {
   const { paperId = "" } = useParams();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
 
+  const remote = isBackendEnabled();
   const kind = (params.get("kind") as "exam" | "practice") || "exam";
   const step = (params.get("step") as Step) || "basic";
 
-  const exams = useCatalog((state) => state.exams);
-  const practices = useCatalog((state) => state.practices);
-  const questions = useCatalog((state) => state.questions);
-  const banks = useCatalog((state) => state.banks);
-  const classes = useCatalog((state) => state.classes);
-  const templates = useCatalog((state) => state.paperTemplates);
+  // 标签目录（HTTP 模式来自服务端）。
+  const { tags: catalogTags } = useCatalogTags();
+
+  // mock 模式的数据源。
+  const mockExams = useCatalog((state) => state.exams);
+  const mockPractices = useCatalog((state) => state.practices);
+  const mockQuestions = useCatalog((state) => state.questions);
+  const mockBanks = useCatalog((state) => state.banks);
+  const mockClasses = useCatalog((state) => state.classes);
+  const mockTemplates = useCatalog((state) => state.paperTemplates);
+
+  const {
+    paper,
+    loading: paperLoading,
+    refresh: refreshPaper,
+    saveMeta,
+    setItems,
+    setMode: saveMode,
+    publish: publishRemote,
+    unpublish: unpublishRemote,
+  } = useAdminPaper(paperId);
 
   // 新建：先落库再跳转，避免向导里出现「没有对象」的中间态。
   useEffect(() => {
     if (paperId !== "new") return;
-    if (kind === "exam") {
-      // 原型 admin-workbench.js:1492：对象名用「未命名试卷」，
-      // 创建后提示「已创建试卷，请完善基本信息」。
-      const result = createExam({ name: "未命名试卷", scope: [], orderRule: "type" });
-      if (!result.ok || !result.exam) {
-        toast.error(result.message ?? "创建失败");
-        return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        let id: string | undefined;
+        if (remote) {
+          const created = await createRemotePaper({
+            kind,
+            name: kind === "exam" ? "未命名试卷" : "未命名练习",
+            targetTotalScore: 100,
+            durationMinutes: kind === "exam" ? 60 : 20,
+            passScore: kind === "exam" ? 60 : null,
+            tagIds: [],
+            orderRule: "by_type",
+            variantRule: "standard",
+            answerPolicy: "after_close",
+            allowRetake: false,
+            retakeKeepsBest: true,
+          });
+          id = created.paper.id;
+        } else {
+          // 原型 admin-workbench.js:1492：对象名用「未命名试卷」，
+          // 创建后提示「已创建试卷，请完善基本信息」。
+          if (kind === "exam") {
+            const result = createExam({ name: "未命名试卷", scope: [], orderRule: "type" });
+            if (!result.ok || !result.exam) throw new Error(result.message ?? "创建失败");
+            id = result.exam.id;
+          } else {
+            const result = createPractice({ name: "未命名练习", scope: [], orderRule: "type" });
+            if (!result.ok || !result.practice) throw new Error(result.message ?? "创建失败");
+            id = result.practice.id;
+          }
+        }
+        if (!id || cancelled) return;
+        toast.ok(kind === "exam" ? "已创建试卷，请完善基本信息" : "已创建练习，请完善基本信息");
+        navigate(`/papers/${id}?kind=${kind}&step=basic`, { replace: true });
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "创建失败");
       }
-      toast.ok("已创建试卷，请完善基本信息");
-      navigate(`/papers/${result.exam.id}?kind=exam&step=basic`, { replace: true });
-      return;
-    }
-    const result = createPractice({ name: "未命名练习", scope: [], orderRule: "type" });
-    if (!result.ok || !result.practice) {
-      toast.error(result.message ?? "创建失败");
-      return;
-    }
-    toast.ok("已创建练习，请完善基本信息");
-    navigate(`/papers/${result.practice.id}?kind=practice&step=basic`, { replace: true });
-  }, [paperId, kind, navigate]);
-
-  const item = kind === "exam" ? exams.find((e) => e.id === paperId) : practices.find((p) => p.id === paperId);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [paperId, kind, navigate, remote]);
 
   /* ------------------------------------------------------- 基本信息表单 */
 
@@ -193,31 +285,30 @@ export function PaperWizardPage() {
 
   // 载入对象数据到表单。
   useEffect(() => {
-    if (!item || hydrated) return;
-    setName(item.name);
-    if (kind === "exam") {
-      const exam = item as ExamPaper;
-      setBatch(exam.batch ?? "");
-      setNote(exam.note ?? "");
-      setDurationMin(exam.durationMin || 60);
-      setTotalScore(exam.totalScore || 0);
-      setPassScore(exam.passScore || 0);
-      setOpenAt(exam.openAt ?? "");
-      setCloseAt(exam.closeAt ?? "");
-      setAllowRetake(exam.allowRetake ?? false);
-      setPublishAnswer(exam.publishAnswer ?? "after_close");
-    } else {
-      const practice = item as Practice;
-      setNote(practice.note ?? "");
-      setDurationMin(practice.durationMin || 20);
-      setRepeats(practice.repeats ?? 0);
-      setFeedback(practice.feedback ?? "after_submit");
-      setMistakeReflow(practice.mistakeReflow ?? true);
+    if (!paper || hydrated) return;
+    setName(paper.name);
+    setBatch(paper.batch);
+    setNote(paper.note);
+    setDurationMin(paper.durationMin || 60);
+    setTotalScore(paper.targetTotalScore || 0);
+    setPassScore(paper.passScore || 0);
+    setAllowRetake(paper.allowRetake);
+    setPublishAnswer(paper.publishAnswer);
+    setRepeats(paper.repeats);
+    setFeedback(paper.feedback);
+    setMistakeReflow(paper.mistakeReflow);
+    setOrderRule(paper.orderRule);
+    setScope([...paper.scope]);
+    if (!remote) {
+      // mock 的考试卷另有开考 / 结束时间。
+      const exam = mockExams.find((e) => e.id === paper.id);
+      if (exam) {
+        setOpenAt(exam.openAt ?? "");
+        setCloseAt(exam.closeAt ?? "");
+      }
     }
-    setOrderRule(item.orderRule);
-    setScope([...item.scope]);
     setHydrated(true);
-  }, [item, kind, hydrated]);
+  }, [paper, hydrated, remote, mockExams]);
 
   /* ------------------------------------------------------- 选题筛选状态 */
 
@@ -249,6 +340,9 @@ export function PaperWizardPage() {
   /* ------------------------------------------------------- 卷面预览状态 */
 
   const [previewStudent, setPreviewStudent] = useState("");
+  /** HTTP 模式：服务端给的派生卷面。 */
+  const [variant, setVariant] = useState<PaperVariant | null>(null);
+  const [variantError, setVariantError] = useState<string | null>(null);
 
   /* ------------------------------------------------------- 实体标签弹窗 */
 
@@ -260,80 +354,138 @@ export function PaperWizardPage() {
     tags: string[];
   } | null>(null);
 
-  const items = useMemo(() => (item ? itemsOf(item) : []), [item]);
+  /* ------------------------------------------------------- 服务端数据 */
+
+  const items = useMemo<PaperItem[]>(() => paper?.items ?? [], [paper]);
   const total = sumScore(items);
 
   /** 当前题序规则的说明文案（原型 ORDER_RULES desc）。 */
   const orderRuleMeta =
     ORDER_RULES.find((r) => r.id === orderRule) ?? ORDER_RULES[0]!;
 
-  const available = useMemo(
-    () => publishedQuestionIds(questions.map((q) => q.id)).map((id) => getQuestion(id)).filter((q): q is NonNullable<typeof q> => Boolean(q)),
-    [questions],
-  );
+  // 题目池：HTTP 模式在服务端筛。
+  const pool = usePaperQuestionPool({
+    bankIds: bankFilter,
+    types: typeFilter,
+    tagIds: tagFilter,
+    keyword,
+    enabled: step === "select" || step === "publish",
+  });
 
-  const filtered = useMemo(() => {
-    const pickedIds = items.map((i) => i.qid);
-    return available.filter((q) => {
-      if (bankFilter.length > 0) {
-        const inBank = useCatalog
-          .getState()
-          .banks.some((b) => bankFilter.includes(b.id) && b.questionIds.includes(q.id));
-        if (!inBank) return false;
-      }
-      if (typeFilter.length > 0 && !typeFilter.includes(q.type)) return false;
-      if (tagFilter.length > 0 && !q.tags.some((t) => tagFilter.includes(t))) return false;
-      if (keyword) {
-        const kw = keyword.toLowerCase();
-        if (!`${q.id} ${q.stem}`.toLowerCase().includes(kw)) return false;
-      }
-      return !pickedIds.includes(q.id);
-    });
-  }, [available, items, bankFilter, typeFilter, tagFilter, keyword]);
+  // 已选题目的详情（题库里可能翻不到已选的题）。
+  const pickedIds = useMemo(() => items.map((i) => i.qid), [items]);
+  const pickedDetails = usePickedQuestions(pickedIds);
+
+  const filtered = useMemo(
+    () => pool.questions.filter((question) => !pickedIds.includes(question.id)),
+    [pool.questions, pickedIds],
+  );
 
   // 多选筛选项：题库带已发布题数，题型带可选题数（原型 admin-workbench.js:940-946）。
   const bankFilterItems = useMemo(() => {
+    if (remote) {
+      return mockBanks.map((b) => ({ value: b.id, label: b.name, meta: "" }));
+    }
     const publishedByBank = new Map<string, number>();
-    for (const q of questions) {
+    for (const q of mockQuestions) {
       if (q.status !== "published") continue;
-      for (const b of banks) {
+      for (const b of mockBanks) {
         if (!b.questionIds.includes(q.id)) continue;
         publishedByBank.set(b.id, (publishedByBank.get(b.id) ?? 0) + 1);
       }
     }
-    return banks.map((b) => ({
+    return mockBanks.map((b) => ({
       value: b.id,
       label: b.name,
       meta: `${publishedByBank.get(b.id) ?? 0} 题`,
     }));
-  }, [banks, questions]);
+  }, [remote, mockBanks, mockQuestions]);
 
   const typeFilterItems = useMemo(
     () =>
       QUESTION_TYPE_OPTIONS.map((t) => ({
         value: t.value,
         label: t.label,
-        meta: `${available.filter((q) => q.type === t.value).length} 题`,
+        meta: remote ? "" : `${pool.questions.filter((q) => q.type === t.value).length} 题`,
       })),
-    [available],
+    [pool.questions, remote],
   );
 
   const pickedList = useMemo(() => {
-    if (!item) return [];
+    if (!paper) return [];
+    // mock：题序按规则重排（原型 canonicalOrder）。
+    const order = remote
+      ? items.map((item) => item.qid)
+      : (() => {
+          const mockItem =
+            kind === "exam"
+              ? mockExams.find((e) => e.id === paper.id)
+              : mockPractices.find((p) => p.id === paper.id);
+          return mockItem
+            ? canonicalOrder(mockItem, getQuestion, difficultyLevels())
+            : items.map((item) => item.qid);
+        })();
     const byQid = new Map(items.map((i) => [i.qid, i]));
-    const ordered = canonicalOrder(item, getQuestion, difficultyLevels());
-    return ordered.map((qid, index) => {
+    return order.map((qid, index) => {
       const picked = byQid.get(qid) ?? { qid, score: 0 };
-      return { ...picked, index: index + 1, question: getQuestion(qid) };
+      const detail = pickedDetails[qid];
+      return {
+        ...picked,
+        index: index + 1,
+        question: detail
+          ? ({
+              id: detail.id,
+              code: detail.code,
+              stem: detail.stem,
+              type: detail.type,
+              score: detail.score,
+              tags: detail.tagIds,
+            } as Question)
+          : undefined,
+      };
     });
-  }, [item, items]);
+  }, [paper, items, pickedDetails, remote, kind, mockExams, mockPractices]);
+
+  /* ------------------------------------------------------- 模板（服务端） */
+
+  const [remoteTemplates, setRemoteTemplates] = useState<AdminPaperTemplate[]>([]);
+
+  const paperIdOfPaper = paper?.id ?? "";
+  useEffect(() => {
+    if (!remote || !paperIdOfPaper) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const page = await loadPaperTemplates({ kind });
+        if (!cancelled) setRemoteTemplates(page.items);
+      } catch {
+        if (!cancelled) setRemoteTemplates([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [remote, kind, paperIdOfPaper]);
+
+  const templates = useMemo(() => {
+    if (remote) {
+      return remoteTemplates.map((t) => ({
+        id: t.id,
+        name: t.name,
+        kind: t.kind,
+        mode: t.variantRule,
+        items: new Array(t.itemCount).fill(null),
+      }));
+    }
+    return mockTemplates.filter((t) => t.kind === kind);
+  }, [remote, remoteTemplates, mockTemplates, kind]);
 
   /* ------------------------------------------------------------ 动作 */
 
   const goStep = (next: Step) => {
     // 离开第 4 步时回写考试设置（原型 admin-workbench.js:1534-1537）。
     if (step === "publish" && next !== "publish") {
-      savePublishSettings();
+      void savePublishSettings();
     }
     const nextParams = new URLSearchParams(params);
     nextParams.set("kind", kind);
@@ -341,88 +493,117 @@ export function PaperWizardPage() {
     setParams(nextParams);
   };
 
-  const saveBasic = () => {
-    if (!item) return;
-    const ok =
-      kind === "exam"
-        ? setExamMeta(item.id, {
-            name,
-            batch,
-            note,
-            durationMin,
-            totalScore,
-            passScore,
-            openAt,
-            closeAt,
-            allowRetake,
-            publishAnswer: publishAnswer as ExamPaper["publishAnswer"],
-            scope,
-            orderRule,
-          }).ok
-        : setPracticeMeta(item.id, {
-            name,
-            note,
-            durationMin,
-            scope,
-            repeats,
-            feedback: feedback as Practice["feedback"],
-            mistakeReflow,
-            orderRule,
-          }).ok;
-    if (!ok) {
-      toast.error("保存失败");
-      return;
+  const saveBasic = async () => {
+    if (!paper) return;
+    try {
+      if (remote) {
+        await saveMeta({
+          name,
+          batch,
+          note,
+          durationMin,
+          targetTotalScore: totalScore,
+          passScore,
+          orderRule,
+          publishAnswer: publishAnswer as "after_close" | "after_submit" | "on_open",
+          allowRetake,
+          repeats,
+          feedback: feedback as "after_submit" | "immediate",
+          mistakeReflow,
+        });
+      } else if (kind === "exam") {
+        const ok = setExamMeta(paper.id, {
+          name,
+          batch,
+          note,
+          durationMin,
+          totalScore,
+          passScore,
+          openAt,
+          closeAt,
+          allowRetake,
+          publishAnswer: publishAnswer as ExamPaper["publishAnswer"],
+          scope,
+          orderRule,
+        }).ok;
+        if (!ok) {
+          toast.error("保存失败");
+          return;
+        }
+      } else {
+        const ok = setPracticeMeta(paper.id, {
+          name,
+          note,
+          durationMin,
+          scope,
+          repeats,
+          feedback: feedback as Practice["feedback"],
+          mistakeReflow,
+          orderRule,
+        }).ok;
+        if (!ok) {
+          toast.error("保存失败");
+          return;
+        }
+      }
+      toast.ok("基本信息已保存");
+      goStep("select");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败");
     }
-    toast.ok("基本信息已保存");
-    goStep("select");
   };
 
-  const togglePick = (qid: string) => {
-    if (!item) return;
+  const togglePick = async (qid: string) => {
+    if (!paper) return;
     const next: PaperItem[] = items.some((i) => i.qid === qid)
       ? items.filter((i) => i.qid !== qid)
-      : [...items, { qid, score: getQuestion(qid)?.score ?? 5 }];
-    const result = setPaperItems(kind, item.id, next);
-    if (!result.ok) toast.error(result.message ?? "保存失败");
+      : [...items, { qid, score: pickedDetails[qid]?.score ?? 5 }];
+    try {
+      await setItems(next);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败");
+    }
   };
 
-  const setScore = (qid: string, score: number) => {
-    if (!item) return;
+  const setScore = async (qid: string, score: number) => {
+    if (!paper) return;
     const next = items.map((i) => (i.qid === qid ? { ...i, score } : i));
-    const result = setPaperItems(kind, item.id, next);
-    if (!result.ok) toast.error(result.message ?? "保存失败");
+    try {
+      await setItems(next);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败");
+    }
   };
 
-  const removePick = (qid: string) => {
-    if (!item) return;
-    const result = setPaperItems(
-      kind,
-      item.id,
-      items.filter((i) => i.qid !== qid),
-    );
-    if (!result.ok) toast.error(result.message ?? "保存失败");
+  const removePick = async (qid: string) => {
+    if (!paper) return;
+    try {
+      await setItems(items.filter((i) => i.qid !== qid));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败");
+    }
   };
 
   /** 按题量均分：余数逐个补齐，总和精确等于目标（原型 admin-workbench.js:1215-1222）。 */
-  const evenScores = () => {
-    if (!item || items.length === 0) {
+  const evenScores = async () => {
+    if (!paper || items.length === 0) {
       toast.error("请先选择题目");
       return;
     }
     const target = totalScore || total;
     const base = Math.floor(target / items.length);
     const rem = target - base * items.length;
-    const result = setPaperItems(
-      kind,
-      item.id,
-      items.map((it, index) => ({ qid: it.qid, score: base + (index < rem ? 1 : 0) })),
-    );
-    if (result.ok) toast.ok(`已按 ${items.length} 题均分为 ${base} 分`);
+    try {
+      await setItems(items.map((it, index) => ({ qid: it.qid, score: base + (index < rem ? 1 : 0) })));
+      toast.ok(`已按 ${items.length} 题均分为 ${base} 分`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败");
+    }
   };
 
   /** 对齐目标总分：余数逐项补齐，总和精确等于目标。 */
-  const alignScores = () => {
-    if (!item || items.length === 0) return;
+  const alignScores = async () => {
+    if (!paper || items.length === 0) return;
     const target = totalScore || total;
     const out = items.map((it) => ({ qid: it.qid, score: Number(it.score) || 0 }));
     const sum = out.reduce((a, b) => a + b.score, 0);
@@ -438,13 +619,17 @@ export function PaperWizardPage() {
       i = (i - 1 + out.length) % out.length;
       guard += 1;
     }
-    const result = setPaperItems(kind, item.id, out);
-    if (result.ok) toast.ok(`配分已对齐到 ${target} 分`);
+    try {
+      await setItems(out);
+      toast.ok(`配分已对齐到 ${target} 分`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败");
+    }
   };
 
-  /** 一键出卷：按配额矩阵确定性抽题。 */
-  const runBlueprint = () => {
-    if (!item) return;
+  /** 一键出卷：按配额矩阵确定性抽题（服务端抽题，前端只给规则）。 */
+  const runBlueprint = async () => {
+    if (!paper) return;
     const rules: BlueprintRules = {
       tagSelector: {
         tagIds: bpTagIds,
@@ -458,14 +643,66 @@ export function PaperWizardPage() {
       scoreAllocation: bpAllocation,
     };
 
-    const pool = available.filter((q) =>
+    if (remote) {
+      try {
+        // 服务端抽题：先存规则，再生成方案。
+        await saveBlueprint(paper.id, {
+          seed: autoSeed(paper.id),
+          rules: {
+            tagIds: bpTagIds,
+            includeDescendants: false,
+            matchMode: "any",
+            difficultyQuota: bpDifficultyQuota,
+            typeQuota: bpTypeQuota,
+            targetTotalScore: bpTotal,
+            orderRule: orderRule === "manual" ? "manual" : "by_type",
+            scoreAllocation: bpAllocation,
+          },
+        });
+        const result = await generateBlueprint(paper.id);
+        setBpShortfall([]);
+        setBlueprintOpen(false);
+
+        const next: PaperItem[] = result.items.map((item) => ({
+          qid: item.questionId,
+          score: item.score,
+        }));
+        const currentMap = new Map(items.map((i) => [i.qid, i.score]));
+        const nextMap = new Map(next.map((i) => [i.qid, i.score]));
+        const diff = {
+          added: next.filter((i) => !currentMap.has(i.qid)).map((i) => i.qid),
+          removed: items.filter((i) => !nextMap.has(i.qid)).map((i) => i.qid),
+          changed: next
+            .filter((i) => currentMap.has(i.qid) && currentMap.get(i.qid) !== i.score)
+            .map((i) => ({ qid: i.qid, from: currentMap.get(i.qid) ?? 0, to: i.score })),
+          next,
+        };
+        if (diff.added.length || diff.removed.length || diff.changed.length) {
+          setBpDiff(diff);
+          return;
+        }
+        await applyBlueprint(diff.next, result.totalScore);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "生成失败";
+        // 题池不足：服务端逐条列出缺口。
+        if (message.includes("题池") || message.includes("不足")) {
+          setBpShortfall([message]);
+          return;
+        }
+        toast.error(message);
+      }
+      return;
+    }
+
+    const pool2 = availableQuestions();
+    const poolFiltered = pool2.filter((q) =>
       bpTagIds.length === 0 ? true : q.tags.some((t) => bpTagIds.includes(t)),
     );
 
     try {
-      const result = selectQuestions(rules, pool, autoSeed(item.id), difficultyLevels());
+      const result = selectQuestions(rules, poolFiltered, autoSeed(paper.id), difficultyLevels());
       // 与当前卷面比对：新增 / 移除 / 分值变化。
-      const current = itemsOf(item);
+      const current = items;
       const currentMap = new Map(current.map((i) => [i.qid, i.score]));
       const nextMap = new Map(result.items.map((i) => [i.qid, i.score]));
       const diff = {
@@ -485,7 +722,7 @@ export function PaperWizardPage() {
         setBpDiff(diff);
         return;
       }
-      applyBlueprint(result.items, result.totalScore);
+      await applyBlueprint(result.items, result.totalScore);
     } catch (error) {
       if (error instanceof InsufficientQuestionPoolError) {
         setBpShortfall(
@@ -499,26 +736,48 @@ export function PaperWizardPage() {
     }
   };
 
+  /** mock 模式的题池：一键出卷要按全部已发布题目抽。 */
+  function availableQuestions(): Question[] {
+    return publishedQuestionIds(mockQuestions.map((q) => q.id))
+      .map((id) => getQuestion(id))
+      .filter((q): q is NonNullable<typeof q> => Boolean(q));
+  }
+
   /** 应用抽题结果。 */
-  const applyBlueprint = (next: PaperItem[], totalScore?: number) => {
-    if (!item) return;
-    const saved = setPaperItems(kind, item.id, next);
-    if (!saved.ok) {
-      toast.error(saved.message ?? "保存失败");
+  const applyBlueprint = async (next: PaperItem[], totalScoreValue?: number) => {
+    if (!paper) return;
+    try {
+      await setItems(next);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败");
       return;
     }
     setBpDiff(null);
     toast.ok(
-      totalScore === undefined
+      totalScoreValue === undefined
         ? `已生成 ${next.length} 题`
-        : `已生成 ${next.length} 题，合计 ${totalScore} 分`,
+        : `已生成 ${next.length} 题，合计 ${totalScoreValue} 分`,
     );
   };
 
   /** 套用卷型模板（FR-AUT-07：跳过已停用题目并提示）。 */
-  const applyTemplate = (templateId: string) => {
-    if (!item) return;
-    const template = templates.find((t) => t.id === templateId);
+  const applyTemplate = async (templateId: string) => {
+    if (!paper) return;
+    if (remote) {
+      try {
+        const result = await applyPaperTemplate(templateId, paper.id);
+        refreshPaper();
+        toast.ok(
+          result.skippedCount > 0
+            ? `已套用模板，跳过 ${result.skippedCount} 道未发布题目`
+            : `已套用模板，共 ${result.appliedCount} 道题`,
+        );
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "套用失败");
+      }
+      return;
+    }
+    const template = mockTemplates.find((t) => t.id === templateId);
     if (!template) return;
     // 已停用 / 非已发布的题目不进入卷面，但要明确告知跳过了哪些。
     const usable = template.items.filter((i) => getQuestion(i.qid)?.status === "published");
@@ -527,14 +786,14 @@ export function PaperWizardPage() {
       toast.error("模板中的题目均未发布，无法套用");
       return;
     }
-    const result = setPaperItems(kind, item.id, usable);
+    const result = setPaperItems(kind, paper.id, usable);
     if (!result.ok) {
       toast.error(result.message ?? "套用失败");
       return;
     }
     // 套用模板时同步卷型（原型 admin-workbench.js:1763-1765）。
     if (kind === "exam" && template.mode !== "fixed") {
-      setPlumCfg(item.id, { mode: template.mode });
+      setPlumCfg(paper.id, { mode: template.mode });
     }
     toast.ok(
       skipped.length > 0
@@ -543,17 +802,26 @@ export function PaperWizardPage() {
     );
   };
 
-  const saveAsTemplate = (templateName: string) => {
-    if (!item) return;
+  const saveAsTemplate = async (templateName: string) => {
+    if (!paper) return;
     // 原型 admin-workbench.js:1777 —— 空题库时先给出原型文案，不落到 shared 的通用报错。
     if (items.length === 0) {
       toast.error("请先选择题目再保存模板");
       return;
     }
+    if (remote) {
+      try {
+        await createPaperTemplate({ paperId: paper.id, name: templateName });
+        toast.ok(`已保存卷型模板「${templateName}」`);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "保存失败");
+      }
+      return;
+    }
     const result = savePaperTemplate({
       name: templateName,
       kind,
-      mode: kind === "exam" ? plumCfgOf(item.id).mode : "fixed",
+      mode: kind === "exam" ? plumModeOf(paper.id) : "fixed",
       durationMin,
       passScore: kind === "exam" ? passScore : 0,
       items,
@@ -565,23 +833,93 @@ export function PaperWizardPage() {
     toast.ok(`已保存卷型模板「${templateName}」`);
   };
 
-  const setMode = (mode: "standard" | "small" | "large") => {
-    if (!item) return;
-    setPlumCfg(item.id, { mode });
-    toast.ok(`卷型已切换为${PAPER_MODES[mode].label}`);
+  /** mock 模式：当前卷型。 */
+  function plumModeOf(id: string): "standard" | "small" | "large" {
+    const item = mockExams.find((e) => e.id === id);
+    return item ? (paper?.mode ?? "standard") : "standard";
+  }
+
+  const setMode = async (mode: "standard" | "small" | "large") => {
+    if (!paper) return;
+    try {
+      await saveMode(mode);
+      toast.ok(`卷型已切换为${PAPER_MODES[mode].label}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败");
+    }
   };
 
-  const publish = () => {
-    if (!item) return;
-    const check = preflight(kind, item.id);
-    if (!check.ok) {
-      toast.error(`仍有 ${check.failed} 项校验未通过，无法发布`);
+  /* ------------------------------------------------------- 发布校验状态 */
+
+  const [validation, setValidation] = useState<PaperValidation | null>(null);
+
+  // 进入发布步骤时拉一次服务端校验。
+  useEffect(() => {
+    if (!remote || !paper || step !== "publish") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await validatePaper(paper.id);
+        if (!cancelled) setValidation(result);
+      } catch {
+        if (!cancelled) setValidation(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [remote, paper?.id, step, paper]);
+
+  const check: CheckView = useMemo(() => {
+    if (remote) {
+      return validation
+        ? toCheckView(validation)
+        : { ok: false, total: 0, failed: 0, warnings: 0, checks: [] };
+    }
+    const result = preflight(kind, paper?.id ?? "");
+    return {
+      ok: result.ok,
+      total: result.total,
+      failed: result.failed,
+      warnings: result.warnings,
+      checks: result.checks,
+    };
+  }, [remote, validation, kind, paper?.id]);
+
+  const publish = async () => {
+    if (!paper) return;
+    if (remote) {
+      try {
+        const result = await validatePaper(paper.id);
+        setValidation(result);
+        const view = toCheckView(result);
+        if (!view.ok) {
+          toast.error(`仍有 ${view.failed} 项校验未通过，无法发布`);
+          return;
+        }
+        const warnings = view.checks.filter((c) => !c.ok && c.level === "warning");
+        if (warnings.length > 0) {
+          setOverrideReasons({});
+          setOverrideOpen(true);
+          return;
+        }
+        await doPublish();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "发布失败");
+      }
+      return;
+    }
+
+    const result = preflight(kind, paper.id);
+    if (!result.ok) {
+      toast.error(`仍有 ${result.failed} 项校验未通过，无法发布`);
       return;
     }
     // 有提醒项且没写覆盖理由时，先要理由再发布（FR-AUT-06）。
-    if (check.warnings > 0 && kind === "exam") {
-      const existing = (item as ExamPaper).overrideReasons ?? {};
-      const missing = check.checks.filter(
+    if (result.warnings > 0 && kind === "exam") {
+      const existing = (mockExams.find((e) => e.id === paper.id) as ExamPaper | undefined)
+        ?.overrideReasons ?? {};
+      const missing = result.checks.filter(
         (c) => !c.ok && c.level === "warning" && !existing[c.key],
       );
       if (missing.length > 0) {
@@ -590,57 +928,120 @@ export function PaperWizardPage() {
         return;
       }
     }
-    doPublish();
+    await doPublish();
   };
 
   /** 回写第 4 步的考试设置（答案公布时机 / 补考策略）。 */
-  const savePublishSettings = (): boolean => {
-    if (!item || kind !== "exam") return true;
-    return setExamMeta(item.id, {
-      publishAnswer: publishAnswer as ExamPaper["publishAnswer"],
-      allowRetake,
-    }).ok;
+  const savePublishSettings = async (): Promise<boolean> => {
+    if (!paper || kind !== "exam") return true;
+    try {
+      if (remote) {
+        await saveMeta({
+          publishAnswer: publishAnswer as "after_close" | "after_submit" | "on_open",
+          allowRetake,
+        });
+        return true;
+      }
+      return setExamMeta(paper.id, {
+        publishAnswer: publishAnswer as ExamPaper["publishAnswer"],
+        allowRetake,
+      }).ok;
+    } catch {
+      return false;
+    }
   };
 
-  const doPublish = (reasons?: Record<string, string>) => {
-    if (!item) return;
+  const doPublish = async (reasons?: Record<string, string>) => {
+    if (!paper) return;
     // 发布时回写第 4 步改动，避免丢失（原型 admin-workbench.js:1580-1583）。
-    if (!savePublishSettings()) {
+    if (!(await savePublishSettings())) {
       toast.error("保存失败");
       return;
     }
-    const ok =
-      kind === "exam"
-        ? setExamMeta(item.id, {
-            status: "ongoing",
-            published: true,
-            ...(reasons ? { overrideReasons: reasons } : {}),
-          }).ok
-        : setPracticeMeta(item.id, { status: "published", published: true }).ok;
-    if (!ok) {
-      toast.error("发布失败");
-      return;
+    try {
+      if (remote) {
+        // 服务端的覆盖理由是一整段（审计里也是这么记的）。
+        const reason = reasons
+          ? Object.entries(reasons)
+              .map(([key, text]) => {
+                const label = check.checks.find((c) => c.key === key)?.label ?? key;
+                return `${label}：${text}`;
+              })
+              .join("；")
+          : undefined;
+        await publishRemote(reason);
+        setOverrideOpen(false);
+        toast.ok(kind === "exam" ? "试卷已发布，答题端可见" : "练习已上架，答题端可见");
+        return;
+      }
+      const ok =
+        kind === "exam"
+          ? setExamMeta(paper.id, {
+              status: "ongoing",
+              published: true,
+              ...(reasons ? { overrideReasons: reasons } : {}),
+            }).ok
+          : setPracticeMeta(paper.id, { status: "published", published: true }).ok;
+      if (!ok) {
+        toast.error("发布失败");
+        return;
+      }
+      setOverrideOpen(false);
+      toast.ok(kind === "exam" ? "试卷已发布，答题端可见" : "练习已上架，答题端可见");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "发布失败");
     }
-    setOverrideOpen(false);
-    toast.ok(kind === "exam" ? "试卷已发布，答题端可见" : "练习已上架，答题端可见");
   };
 
-  const unpublish = () => {
-    if (!item) return;
-    const ok =
-      kind === "exam"
-        ? setExamMeta(item.id, { status: "draft", published: false }).ok
-        : setPracticeMeta(item.id, { status: "draft", published: false }).ok;
-    if (!ok) {
-      toast.error("撤回失败");
-      return;
+  const unpublish = async () => {
+    if (!paper) return;
+    try {
+      if (remote) {
+        await unpublishRemote();
+        toast.ok(kind === "exam" ? "试卷已撤回发布" : "练习已下架");
+        return;
+      }
+      const ok =
+        kind === "exam"
+          ? setExamMeta(paper.id, { status: "draft", published: false }).ok
+          : setPracticeMeta(paper.id, { status: "draft", published: false }).ok;
+      if (!ok) {
+        toast.error("撤回失败");
+        return;
+      }
+      toast.ok(kind === "exam" ? "试卷已撤回发布" : "练习已下架");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "撤回失败");
     }
-    toast.ok(kind === "exam" ? "试卷已撤回发布" : "练习已下架");
   };
+
+  /** 取服务端给的派生卷面（HTTP 模式）。 */
+  const loadVariant = async () => {
+    if (!paper) return;
+    setVariantError(null);
+    try {
+      const result = await previewPaper(paper.id, previewStudent || undefined);
+      setVariant(result);
+    } catch (error) {
+      setVariant(null);
+      setVariantError(error instanceof Error ? error.message : "卷面预览失败");
+    }
+  };
+
+  // 进入卷型步骤时取一次卷面。
+  useEffect(() => {
+    if (!remote || step !== "plum" || !paper) return;
+    void loadVariant();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remote, step, paper?.id, previewStudent]);
 
   /* ------------------------------------------------------------ 渲染 */
 
-  if (!item) {
+  if (remote && paperLoading) {
+    return <PageHead title={kind === "exam" ? "试卷" : "练习"} sub="正在载入…" />;
+  }
+
+  if (!paper) {
     return (
       <PageHead
         title={kind === "exam" ? "试卷" : "练习"}
@@ -656,10 +1057,7 @@ export function PaperWizardPage() {
 
   const steps = STEPS[kind];
   const currentIndex = steps.findIndex((s) => s.key === step);
-  const published = kind === "exam"
-    ? (item as ExamPaper).status !== "draft" && (item as ExamPaper).published
-    : (item as Practice).status === "published";
-  const check = preflight(kind, item.id);
+  const published = paper.published;
   const scopeStudents = useCatalog.getState().students.filter(
     (s) => scope.length === 0 || scope.includes(s.classId),
   );
@@ -667,8 +1065,8 @@ export function PaperWizardPage() {
   return (
     <>
       <PageHead
-        title={item.name}
-        sub={`${kind === "exam" ? "考试卷" : "练习"} · ${(item as ExamPaper).batch || item.note || "尚未填写说明"} · 第 ${currentIndex + 1} / ${steps.length} 步`}
+        title={paper.name}
+        sub={`${kind === "exam" ? "考试卷" : "练习"} · ${paper.batch || paper.note || "尚未填写说明"} · 第 ${currentIndex + 1} / ${steps.length} 步`}
         actions={
           <>
             <Button onClick={() => navigate(`/papers?kind=${kind}`)}>返回列表</Button>
@@ -676,9 +1074,9 @@ export function PaperWizardPage() {
               onClick={() =>
                 setTagTarget({
                   kind,
-                  id: item.id,
-                  name: item.name,
-                  tags: item.tags,
+                  id: paper.id,
+                  name: paper.name,
+                  tags: paper.tags,
                 })
               }
             >
@@ -717,7 +1115,9 @@ export function PaperWizardPage() {
         <section className="card">
           <div className="card-head">
             <h2 className="card-title">基本信息</h2>
-            <span className="text-sm text-3">{scopeLabel(scope, classNameOf)}</span>
+            <span className="text-sm text-3">
+              {remote ? "名单与开放时间在场次里配置" : scopeLabel(scope, classNameOf)}
+            </span>
           </div>
           <div className="card-body">
             <div className="grid-2">
@@ -780,25 +1180,29 @@ export function PaperWizardPage() {
                       onChange={(e) => setPassScore(Number(e.target.value) || 0)}
                     />
                   </Field>
-                  <Field label="开考时间" htmlFor="wiz-open">
-                    <TextInput
-                      id="wiz-open"
-                      value={openAt}
-                      placeholder="2026-11-09 08:30"
-                      onChange={(e) => setOpenAt(e.target.value)}
-                    />
-                  </Field>
+                  {remote ? null : (
+                    <Field label="开考时间" htmlFor="wiz-open">
+                      <TextInput
+                        id="wiz-open"
+                        value={openAt}
+                        placeholder="2026-11-09 08:30"
+                        onChange={(e) => setOpenAt(e.target.value)}
+                      />
+                    </Field>
+                  )}
                 </div>
-                <div style={{ marginTop: "var(--sp-4)" }}>
-                  <Field label="结束时间" htmlFor="wiz-close">
-                    <TextInput
-                      id="wiz-close"
-                      value={closeAt}
-                      placeholder="2026-11-09 12:00"
-                      onChange={(e) => setCloseAt(e.target.value)}
-                    />
-                  </Field>
-                </div>
+                {remote ? null : (
+                  <div style={{ marginTop: "var(--sp-4)" }}>
+                    <Field label="结束时间" htmlFor="wiz-close">
+                      <TextInput
+                        id="wiz-close"
+                        value={closeAt}
+                        placeholder="2026-11-09 12:00"
+                        onChange={(e) => setCloseAt(e.target.value)}
+                      />
+                    </Field>
+                  </div>
+                )}
               </>
             ) : null}
 
@@ -857,40 +1261,54 @@ export function PaperWizardPage() {
               </>
             ) : null}
 
-            <h3 className="section-title" style={{ marginTop: "var(--sp-5)" }}>
-              {kind === "exam" ? "考试名单" : "开放范围"}
-            </h3>
-            <div className="row-tight" style={{ marginTop: "var(--sp-3)" }}>
-              {classes.map((c) => {
-                const on = scope.includes(c.id);
-                const count = useCatalog
-                  .getState()
-                  .students.filter((s) => s.classId === c.id).length;
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    className={`chip${on ? " is-on" : ""}`}
-                    aria-pressed={on}
-                    onClick={() =>
-                      setScope((prev) =>
-                        prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id],
-                      )
-                    }
-                  >
-                    {c.name} · {count} 人
-                  </button>
-                );
-              })}
-            </div>
-            <p className="section-note" style={{ marginTop: "var(--sp-2)" }}>
-              {kind === "exam"
-                ? "不选任何名单组即为全员开放。考试发布时名单会被物化。"
-                : "不选任何名单组即为全员开放。"}
-            </p>
+            {remote ? (
+              <>
+                <h3 className="section-title" style={{ marginTop: "var(--sp-5)" }}>
+                  {kind === "exam" ? "考试名单" : "开放范围"}
+                </h3>
+                <Callout icon={<Icon name="info" />} title="名单与开放时间在场次里配置">
+                  真实后端的试卷只管内容：谁参加、什么时候开考、开放给谁，都属于**场次**
+                  （考试场次 / 练习开放单）。在这里配置的是卷面本身。
+                </Callout>
+              </>
+            ) : (
+              <>
+                <h3 className="section-title" style={{ marginTop: "var(--sp-5)" }}>
+                  {kind === "exam" ? "考试名单" : "开放范围"}
+                </h3>
+                <div className="row-tight" style={{ marginTop: "var(--sp-3)" }}>
+                  {mockClasses.map((c) => {
+                    const on = scope.includes(c.id);
+                    const count = useCatalog
+                      .getState()
+                      .students.filter((s) => s.classId === c.id).length;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        className={`chip${on ? " is-on" : ""}`}
+                        aria-pressed={on}
+                        onClick={() =>
+                          setScope((prev) =>
+                            prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id],
+                          )
+                        }
+                      >
+                        {c.name} · {count} 人
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="section-note" style={{ marginTop: "var(--sp-2)" }}>
+                  {kind === "exam"
+                    ? "不选任何名单组即为全员开放。考试发布时名单会被物化。"
+                    : "不选任何名单组即为全员开放。"}
+                </p>
+              </>
+            )}
           </div>
           <div className="card-foot">
-            <Button variant="primary" onClick={saveBasic}>
+            <Button variant="primary" onClick={() => void saveBasic()}>
               保存并选择题目
             </Button>
           </div>
@@ -938,9 +1356,8 @@ export function PaperWizardPage() {
                 <div className="filter-group-label">标签筛选</div>
                 <div className="row-tight">
                   {TAG_GROUP_ORDER.flatMap((group) =>
-                    useCatalog
-                      .getState()
-                      .tags.filter((t) => t.group === group)
+                    catalogTags
+                      .filter((t) => t.group === group)
                       .map((tag) => (
                         <button
                           key={tag.id}
@@ -975,9 +1392,9 @@ export function PaperWizardPage() {
                       <input
                         type="checkbox"
                         checked={false}
-                        onChange={() => togglePick(q.id)}
+                        onChange={() => void togglePick(q.id)}
                       />
-                      <span className="pick-id mono">{q.id}</span>
+                      <span className="pick-id mono">{q.code || q.id}</span>
                       <span className="pick-text">{q.stem}</span>
                       <span className="text-xs text-3">{q.score} 分</span>
                     </label>
@@ -1006,8 +1423,13 @@ export function PaperWizardPage() {
                   onChange={(e) => {
                     const next = e.target.value as "type" | "manual";
                     setOrderRule(next);
-                    if (kind === "exam") setExamMeta(item.id, { orderRule: next });
-                    else setPracticeMeta(item.id, { orderRule: next });
+                    if (remote) {
+                      void saveMeta({ orderRule: next });
+                    } else if (kind === "exam") {
+                      setExamMeta(paper.id, { orderRule: next });
+                    } else {
+                      setPracticeMeta(paper.id, { orderRule: next });
+                    }
                     toast.ok(
                       next === "type"
                         ? "题序已按题型分块、组内由易到难排布"
@@ -1024,10 +1446,10 @@ export function PaperWizardPage() {
               </Field>
 
               <div className="row" style={{ margin: "var(--sp-3) 0" }}>
-                <Button size="sm" onClick={evenScores}>
+                <Button size="sm" onClick={() => void evenScores()}>
                   按题量均分
                 </Button>
-                <Button size="sm" onClick={alignScores}>
+                <Button size="sm" onClick={() => void alignScores()}>
                   对齐目标总分
                 </Button>
                 <Button size="sm" variant="primary" onClick={() => setBlueprintOpen(true)}>
@@ -1061,13 +1483,13 @@ export function PaperWizardPage() {
                         max={40}
                         value={p.score}
                         aria-label={`${p.qid} 分值`}
-                        onChange={(e) => setScore(p.qid, Number(e.target.value) || 0)}
+                        onChange={(e) => void setScore(p.qid, Number(e.target.value) || 0)}
                       />
                       <button
                         type="button"
                         className="icon-btn"
                         aria-label={`移除 ${p.qid}`}
-                        onClick={() => removePick(p.qid)}
+                        onClick={() => void removePick(p.qid)}
                       >
                         <Icon name="trash" />
                       </button>
@@ -1078,24 +1500,22 @@ export function PaperWizardPage() {
             </div>
             <div className="card-body" style={{ borderTop: "1px solid var(--c-border)" }}>
               <div className="row">
-                {templates.filter((t) => t.kind === kind).length > 0 ? (
+                {templates.length > 0 ? (
                   <>
                     <SelectInput
                       id="wiz-tpl"
                       aria-label="卷型模板"
                       value=""
                       onChange={(e) => {
-                        if (e.target.value) applyTemplate(e.target.value);
+                        if (e.target.value) void applyTemplate(e.target.value);
                       }}
                     >
                       <option value="">选择卷型模板…</option>
-                      {templates
-                        .filter((t) => t.kind === kind)
-                        .map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name}（{t.items.length} 题）
-                          </option>
-                        ))}
+                      {templates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}（{t.items.length} 题）
+                        </option>
+                      ))}
                     </SelectInput>
                   </>
                 ) : (
@@ -1115,7 +1535,7 @@ export function PaperWizardPage() {
                       toast.error("请填写模板名称");
                       return;
                     }
-                    saveAsTemplate(templateName);
+                    void saveAsTemplate(templateName);
                     if (input) input.value = "";
                   }}
                 >
@@ -1154,7 +1574,7 @@ export function PaperWizardPage() {
                   <dt>时长</dt>
                   <dd>{durationMin} 分钟</dd>
                   <dt>开放范围</dt>
-                  <dd>{scopeLabel(scope, classNameOf)}</dd>
+                  <dd>{remote ? "在练习开放单中配置" : scopeLabel(scope, classNameOf)}</dd>
                 </dl>
               </div>
               <div className="card-foot">
@@ -1173,14 +1593,14 @@ export function PaperWizardPage() {
                 <div className="card-body">
                   <div className="grid-3">
                     {MODE_CARDS.map((mode) => {
-                      const on = plumCfgOf(item.id).mode === mode.id;
+                      const on = paper.mode === mode.id;
                       return (
                         <button
                           key={mode.id}
                           type="button"
                           className={`mode-card${on ? " is-on" : ""}`}
                           aria-pressed={on}
-                          onClick={() => setMode(mode.id)}
+                          onClick={() => void setMode(mode.id)}
                         >
                           <span className="mode-name">{mode.label}</span>
                           <span className="mode-desc">{mode.desc}</span>
@@ -1199,9 +1619,9 @@ export function PaperWizardPage() {
                     <div className="field">
                       <span className="field-label">卷面生成方式</span>
                       <div className="text-sm text-3">
-                        {plumCfgOf(item.id).mode === "standard"
+                        {paper.mode === "standard"
                           ? "固定卷面，全体一致"
-                          : plumCfgOf(item.id).mode === "small"
+                          : paper.mode === "small"
                             ? "题序统一，逐人打乱选项"
                             : "题型分块保留，组内题序与选项逐人打乱"}
                       </div>
@@ -1209,9 +1629,9 @@ export function PaperWizardPage() {
                   </div>
 
                   <Callout icon={<Icon name="info" />} title="置换口径">
-                    {plumCfgOf(item.id).mode === "standard"
+                    {paper.mode === "standard"
                       ? "标准卷不生成变体，全体答题者共用同一份卷面。"
-                      : plumCfgOf(item.id).mode === "small"
+                      : paper.mode === "small"
                         ? `当前名单 ${scopeStudents.length} 名答题者 → 共 ${scopeStudents.length} 种不同卷面（题序统一，仅选项顺序逐人打乱）。`
                         : `当前名单 ${scopeStudents.length} 名答题者 → 共 ${scopeStudents.length} 种不同卷面（题型分块顺序不变，组内题序与选项顺序逐人打乱）。`}{" "}
                     小梅花保留统一题序、仅逐人打乱选项；大梅花保留题型分块顺序（单选→多选→判断→简答→综合），仅在每个题型内部打乱题目顺序，选项也逐人打乱。{" "}
@@ -1228,17 +1648,26 @@ export function PaperWizardPage() {
               <section className="card" style={{ marginTop: "var(--sp-4)" }}>
                 <div className="card-head">
                   <h2 className="card-title">答题者卷面预览</h2>
-                  <SelectInput
-                    aria-label="选择答题者"
-                    value={previewStudent}
-                    onChange={(e) => setPreviewStudent(e.target.value)}
-                  >
-                    {scopeStudents.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}（{classNameOf(s.classId)}）
-                      </option>
-                    ))}
-                  </SelectInput>
+                  {remote ? (
+                    <TextInput
+                      aria-label="答题者标识"
+                      placeholder="答题者标识（学号）"
+                      value={previewStudent}
+                      onChange={(event) => setPreviewStudent(event.target.value)}
+                    />
+                  ) : (
+                    <SelectInput
+                      aria-label="选择答题者"
+                      value={previewStudent}
+                      onChange={(e) => setPreviewStudent(e.target.value)}
+                    >
+                      {scopeStudents.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}（{classNameOf(s.classId)}）
+                        </option>
+                      ))}
+                    </SelectInput>
+                  )}
                 </div>
                 <div className="card-body">
                   {items.length === 0 ? (
@@ -1246,11 +1675,36 @@ export function PaperWizardPage() {
                       <span className="empty-title">尚未选题</span>
                       <span className="empty-body">先在第 2 步选题，再回到这里预览卷面。</span>
                     </div>
+                  ) : remote ? (
+                    variantError ? (
+                      <Callout tone="warn" icon={<Icon name="alert" />} title="没有可预览的卷面">
+                        {variantError}
+                        {" "}
+                        {published
+                          ? "服务端只为已发布的试卷生成可预览的卷面。"
+                          : "试卷还没有发布，服务端没有可预览的卷面——发布后可回到这里逐人对照。"}
+                      </Callout>
+                    ) : variant ? (
+                      <>
+                        <div className="row" style={{ marginBottom: "var(--sp-3)" }}>
+                          <span className="variant-tag">{variant.ruleLabel}</span>
+                          <span className="text-sm text-3">
+                            卷面 {variant.ruleLabel} · 置换号 {variant.variantKey}
+                          </span>
+                          <span className="text-sm text-3">· {GRAIN_TEXT[paper.mode]}</span>
+                        </div>
+                        <PaperVariantTable variant={variant} />
+                      </>
+                    ) : (
+                      <div className="empty">
+                        <span className="empty-title">正在取卷面…</span>
+                      </div>
+                    )
                   ) : (
                     (() => {
                       const studentId = previewStudent || scopeStudents[0]?.id || "2023120101";
-                      const paper = buildPaper(
-                        item as ExamPaper,
+                      const built = buildPaper(
+                        mockExams.find((e) => e.id === paper.id) as ExamPaper,
                         studentId,
                         undefined,
                         getQuestion,
@@ -1259,15 +1713,15 @@ export function PaperWizardPage() {
                       return (
                         <>
                           <div className="row" style={{ marginBottom: "var(--sp-3)" }}>
-                            <span className="variant-tag">{paper.variantLabel}</span>
+                            <span className="variant-tag">{built.variantLabel}</span>
                             <span className="text-sm text-3">
-                              卷型 {PAPER_MODES[paper.mode].label} · 置换号 {paper.seedLabel}（系统自动生成）
+                              卷型 {PAPER_MODES[built.mode].label} · 置换号 {built.seedLabel}（系统自动生成）
                             </span>
-                            <span className="text-sm text-3">· {GRAIN_TEXT[paper.mode]}</span>
+                            <span className="text-sm text-3">· {GRAIN_TEXT[built.mode]}</span>
                           </div>
                           <PaperPreviewTable
-                            paper={paper}
-                            showBase={paper.mode === "large"}
+                            paper={built}
+                            showBase={built.mode === "large"}
                           />
                         </>
                       );
@@ -1334,66 +1788,84 @@ export function PaperWizardPage() {
                 <h3 className="section-title" style={{ marginTop: "var(--sp-5)" }}>
                   考试名单
                 </h3>
-                <div className="row-tight" style={{ marginTop: "var(--sp-3)" }}>
-                  {classes.map((c) => {
-                    const on = scope.includes(c.id);
-                    const count = useCatalog
-                      .getState()
-                      .students.filter((s) => s.classId === c.id).length;
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        className={`chip${on ? " is-on" : ""}`}
-                        aria-pressed={on}
-                        onClick={() => {
-                          const next = scope.includes(c.id)
-                            ? scope.filter((x) => x !== c.id)
-                            : [...scope, c.id];
-                          setScope(next);
-                          setExamMeta(item.id, { scope: next });
-                        }}
-                      >
-                        {c.name} · {count} 人
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="section-note" style={{ marginTop: "var(--sp-2)" }}>
-                  当前覆盖 {scopeStudents.length} 名答题者；名单为空时不可发布。
-                </p>
+                {remote ? (
+                  <Callout icon={<Icon name="info" />} title="名单在场次里配置">
+                    真实后端的试卷不带名单：参加考试的人由**考试场次**的名单决定
+                    （考试场次 → 参与人）。发布试卷后到「场次」里指定名单与时间即可。
+                  </Callout>
+                ) : (
+                  <>
+                    <div className="row-tight" style={{ marginTop: "var(--sp-3)" }}>
+                      {mockClasses.map((c) => {
+                        const on = scope.includes(c.id);
+                        const count = useCatalog
+                          .getState()
+                          .students.filter((s) => s.classId === c.id).length;
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            className={`chip${on ? " is-on" : ""}`}
+                            aria-pressed={on}
+                            onClick={() => {
+                              const next = scope.includes(c.id)
+                                ? scope.filter((x) => x !== c.id)
+                                : [...scope, c.id];
+                              setScope(next);
+                              setExamMeta(paper.id, { scope: next });
+                            }}
+                          >
+                            {c.name} · {count} 人
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="section-note" style={{ marginTop: "var(--sp-2)" }}>
+                      当前覆盖 {scopeStudents.length} 名答题者；名单为空时不可发布。
+                    </p>
+                  </>
+                )}
               </>
             ) : (
               <>
                 <h3 className="section-title">开放范围</h3>
-                <div className="row-tight" style={{ marginTop: "var(--sp-3)" }}>
-                  {classes.map((c) => {
-                    const on = scope.includes(c.id);
-                    const count = useCatalog
-                      .getState()
-                      .students.filter((s) => s.classId === c.id).length;
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        className={`chip${on ? " is-on" : ""}`}
-                        aria-pressed={on}
-                        onClick={() => {
-                          const next = scope.includes(c.id)
-                            ? scope.filter((x) => x !== c.id)
-                            : [...scope, c.id];
-                          setScope(next);
-                          setPracticeMeta(item.id, { scope: next });
-                        }}
-                      >
-                        {c.name} · {count} 人
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="section-note" style={{ marginTop: "var(--sp-2)" }}>
-                  不选名单组即为全员开放；上架后答题端可见。
-                </p>
+                {remote ? (
+                  <Callout icon={<Icon name="info" />} title="开放范围在练习开放单里配置">
+                    真实后端的练习卷不带开放范围：开放给谁由**练习开放单**决定
+                    （可按人开放或全员开放）。
+                  </Callout>
+                ) : (
+                  <>
+                    <div className="row-tight" style={{ marginTop: "var(--sp-3)" }}>
+                      {mockClasses.map((c) => {
+                        const on = scope.includes(c.id);
+                        const count = useCatalog
+                          .getState()
+                          .students.filter((s) => s.classId === c.id).length;
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            className={`chip${on ? " is-on" : ""}`}
+                            aria-pressed={on}
+                            onClick={() => {
+                              const next = scope.includes(c.id)
+                                ? scope.filter((x) => x !== c.id)
+                                : [...scope, c.id];
+                              setScope(next);
+                              setPracticeMeta(paper.id, { scope: next });
+                            }}
+                          >
+                            {c.name} · {count} 人
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="section-note" style={{ marginTop: "var(--sp-2)" }}>
+                      不选名单组即为全员开放；上架后答题端可见。
+                    </p>
+                  </>
+                )}
               </>
             )}
 
@@ -1439,9 +1911,11 @@ export function PaperWizardPage() {
           <div className="card-foot">
             <Button onClick={() => goStep("plum")}>上一步 · 卷型</Button>{" "}
             {published ? (
-              <Button onClick={unpublish}>{kind === "exam" ? "撤回发布" : "下架"}</Button>
+              <Button onClick={() => void unpublish()}>
+                {kind === "exam" ? "撤回发布" : "下架"}
+              </Button>
             ) : (
-              <Button variant="primary" disabled={!check.ok} onClick={publish}>
+              <Button variant="primary" disabled={!check.ok} onClick={() => void publish()}>
                 {kind === "exam" ? "发布考试" : "上架练习"}
               </Button>
             )}
@@ -1507,9 +1981,8 @@ export function PaperWizardPage() {
               <div style={{ marginTop: "var(--sp-3)" }}>
                 <span className="field-label">难度配额</span>
                 <div className="grid-3" style={{ marginTop: "var(--sp-2)" }}>
-                  {useCatalog
-                    .getState()
-                    .tags.filter((t) => t.group === "difficulty")
+                  {catalogTags
+                    .filter((t) => t.group === "difficulty")
                     .map((tag) => (
                       <Field key={tag.id} label={tag.name} htmlFor={`bp-diff-${tag.id}`}>
                         <TextInput
@@ -1534,9 +2007,8 @@ export function PaperWizardPage() {
                 <span className="field-label">标签选择</span>
                 <div className="row-tight" style={{ marginTop: "var(--sp-2)" }}>
                   {TAG_GROUP_ORDER.flatMap((group) =>
-                    useCatalog
-                      .getState()
-                      .tags.filter((t) => t.group === group)
+                    catalogTags
+                      .filter((t) => t.group === group)
                       .map((tag) => (
                         <button
                           key={tag.id}
@@ -1574,7 +2046,7 @@ export function PaperWizardPage() {
           setBlueprintOpen(false);
           setBpShortfall([]);
         }}
-        onConfirm={runBlueprint}
+        onConfirm={() => void runBlueprint()}
       />
 
       {/* 重新生成的二次确认与差异清单（FR-AUT-03）。 */}
@@ -1591,7 +2063,7 @@ export function PaperWizardPage() {
               variant="primary"
               onClick={() => {
                 if (!bpDiff) return;
-                applyBlueprint(bpDiff.next);
+                void applyBlueprint(bpDiff.next);
               }}
             >
               确认替换
@@ -1611,7 +2083,7 @@ export function PaperWizardPage() {
                   <li key={qid}>
                     <span className="rule-dot">+</span>
                     <span>
-                      {qid} · {getQuestion(qid)?.stem ?? ""}
+                      {pickedDetails[qid]?.code ?? qid} · {pickedDetails[qid]?.stem ?? ""}
                     </span>
                   </li>
                 ))}
@@ -1626,7 +2098,7 @@ export function PaperWizardPage() {
                   <li key={qid}>
                     <span className="rule-dot">−</span>
                     <span>
-                      {qid} · {getQuestion(qid)?.stem ?? ""}
+                      {pickedDetails[qid]?.code ?? qid} · {pickedDetails[qid]?.stem ?? ""}
                     </span>
                   </li>
                 ))}
@@ -1641,7 +2113,8 @@ export function PaperWizardPage() {
                   <li key={item.qid}>
                     <span className="rule-dot">≈</span>
                     <span>
-                      {item.qid} · {getQuestion(item.qid)?.stem ?? ""} · {item.from} → {item.to} 分
+                      {pickedDetails[item.qid]?.code ?? item.qid} ·{" "}
+                      {pickedDetails[item.qid]?.stem ?? ""} · {item.from} → {item.to} 分
                     </span>
                   </li>
                 ))}
@@ -1661,7 +2134,7 @@ export function PaperWizardPage() {
             <Button variant="secondary" onClick={() => setOverrideOpen(false)}>
               取消
             </Button>
-            <Button variant="primary" onClick={() => doPublish(overrideReasons)}>
+            <Button variant="primary" onClick={() => void doPublish(overrideReasons)}>
               确认发布
             </Button>
           </>
@@ -1689,6 +2162,14 @@ export function PaperWizardPage() {
       <EntityTagsDialog
         target={tagTarget}
         onClose={() => setTagTarget(null)}
+        {...(remote
+          ? {
+              onSave: async (tags: string[]) => {
+                await saveMeta({ tags });
+              },
+              catalogTags,
+            }
+          : {})}
       />
     </>
   );

@@ -28,6 +28,8 @@ export const ENDPOINTS = {
     banks: "/question-banks",
     questions: "/questions",
     papers: "/papers",
+    /** 卷型模板：套用与另存。 */
+    paperTemplates: "/paper-templates",
     questionFilters: "/questions/filters",
   },
   delivery: {

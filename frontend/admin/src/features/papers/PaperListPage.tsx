@@ -3,32 +3,39 @@
    --------------------------------------------------------------------------
    对应原型 admin.papers。试卷与练习都是「卷对象」：先定基本信息，再选题配分、
    设卷型，最后配置名单与发布。每一步都有发布前校验。
+
+   数据通路见 `useAdminPapers.ts`：真实后端模式下
+   - **卷型**不在列表摘要里（要看卷型得进向导）；
+   - **名单不在试卷上**——名单与开放时间属于**场次**（`/exam-sessions`）；
+   - **发布校验**要逐卷调校验接口才拿得到，列表里给一个入口进向导查看。
    ========================================================================== */
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Badge, Button, ConfirmDialog, PageHead, Segmented, toast } from "@exam/shared";
-import {
-  className as classNameOf,
-  itemsOf,
-  preflight,
-  removePaper,
-  useCatalog,
-} from "@exam/shared/mock/catalog";
+import { isBackendEnabled, loadPaper, updatePaper } from "@exam/shared/api";
 import { Icon } from "@/app/Icon";
-import { PaperBadge, TagChips } from "../shared/bits";
 import { EntityTagsDialog } from "../shared/EntityTagsDialog";
-import { scopeLabel, sumScore } from "../shared/scope";
+import { useAdminPapers } from "./useAdminPapers";
 
 /** 组卷列表页。 */
 export function PaperListPage() {
   const navigate = useNavigate();
-  const exams = useCatalog((state) => state.exams);
-  const practices = useCatalog((state) => state.practices);
+  const remote = isBackendEnabled();
   const [kind, setKind] = useState<"exam" | "practice">("exam");
-  const [pendingDelete, setPendingDelete] = useState<{ kind: "exam" | "practice"; id: string; name: string } | null>(
-    null,
-  );
+
+  // 两个分段各自取一次：分段上要显示各自的卷数量。
+  const examPapers = useAdminPapers("exam");
+  const practicePapers = useAdminPapers("practice");
+  const current = kind === "exam" ? examPapers : practicePapers;
+  const papers = current.papers;
+  const remove = current.remove;
+
+  const [pendingDelete, setPendingDelete] = useState<{
+    kind: "exam" | "practice";
+    id: string;
+    name: string;
+  } | null>(null);
   // 「标签」弹窗（原型 admin.entity.tags）。
   const [tagTarget, setTagTarget] = useState<{
     kind: "exam" | "practice";
@@ -37,29 +44,62 @@ export function PaperListPage() {
     tags: string[];
   } | null>(null);
 
-  const list = kind === "exam" ? exams : practices;
+  const list = papers;
 
-  const openTagDialog = (
+  /** 打开标签弹窗：HTTP 模式要先取回卷详情（列表摘要里没有标签）。 */
+  const openTagDialog = async (
     tagKind: "exam" | "practice",
     id: string,
     name: string,
     tags: string[],
   ) => {
-    setTagTarget({ kind: tagKind, id, name, tags });
-  };
-
-  const handleDelete = () => {
-    if (!pendingDelete) return;
-    const result = removePaper(pendingDelete.kind, pendingDelete.id);
-    if (!result.ok) {
-      toast.error(result.message ?? "删除失败");
-      setPendingDelete(null);
+    if (!remote) {
+      setTagTarget({ kind: tagKind, id, name, tags });
       return;
     }
-    toast.ok(
-      `已删除${pendingDelete.kind === "exam" ? "试卷" : "练习"}「${pendingDelete.name}」`,
-    );
-    setPendingDelete(null);
+    try {
+      const detail = await loadPaper(id);
+      setTagTarget({ kind: tagKind, id, name, tags: detail.tagIds });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "标签加载失败");
+    }
+  };
+
+  /** 保存标签：HTTP 模式要带上卷的其余字段（服务端是整份覆盖）。 */
+  const saveTags = async (id: string, tags: string[]) => {
+    if (!remote) return;
+    const detail = await loadPaper(id);
+    await updatePaper(id, {
+      name: detail.paper.name,
+      batch: detail.paper.batch,
+      description: detail.paper.description,
+      targetTotalScore: detail.paper.targetTotalScore,
+      durationMinutes: detail.paper.durationMinutes,
+      passScore: detail.paper.passScore,
+      note: detail.note,
+      tagIds: tags,
+      orderRule: detail.orderRule,
+      variantRule: detail.variantRule,
+      answerPolicy: detail.answerPolicy,
+      allowRetake: detail.allowRetake,
+      retakeKeepsBest: detail.retakeKeepsBest,
+      examRules: detail.examRules,
+      practiceRules: detail.practiceRules,
+    });
+  };
+
+  const handleDelete = async () => {
+    if (!pendingDelete) return;
+    try {
+      await remove(pendingDelete.id);
+      toast.ok(
+        `已删除${pendingDelete.kind === "exam" ? "试卷" : "练习"}「${pendingDelete.name}」`,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "删除失败");
+    } finally {
+      setPendingDelete(null);
+    }
   };
 
   return (
@@ -86,8 +126,8 @@ export function PaperListPage() {
         value={kind}
         onChange={(next) => setKind(next)}
         options={[
-          { value: "exam", label: `考试卷 ${exams.length}` },
-          { value: "practice", label: `练习 ${practices.length}` },
+          { value: "exam", label: `考试卷 ${examPapers.papers.length}` },
+          { value: "practice", label: `练习 ${practicePapers.papers.length}` },
         ]}
         className="seg"
       />
@@ -133,104 +173,82 @@ export function PaperListPage() {
                     </td>
                   </tr>
                 ) : (
-                  list.map((item) => {
-                    const items = itemsOf(item);
-                    const check = preflight(kind, item.id);
-                    return (
-                      <tr key={item.id}>
-                        <td>
-                          <div className="strong" style={{ fontWeight: 500 }}>
-                            {item.name}
-                          </div>
-                          <div className="text-xs text-3">
-                            {kind === "exam"
-                              ? ((item as { batch?: string }).batch || "—")
-                              : ((item as { note?: string }).note || "—")}
-                          </div>
-                        </td>
-                        <td>
-                          <PaperBadge kind={kind} item={item} />
-                        </td>
-                        <td className="num">{items.length}</td>
-                        <td className="num">{sumScore(items)}</td>
-                        <td className="num">{item.durationMin || 0}</td>
-                        {kind === "exam" ? (
-                          <>
-                            <td>
-                              {(
-                                item as unknown as { plum?: { mode: string } }
-                              ).plum?.mode === "small"
-                                ? "小梅花"
-                                : (item as unknown as { plum?: { mode: string } }).plum?.mode ===
-                                    "large"
-                                  ? "大梅花"
-                                  : "标准卷"}
-                            </td>
-                            <td>
-                              {scopeLabel(item.scope, classNameOf)}
-                              <div style={{ marginTop: "var(--sp-1)" }}>
-                                <TagChips tags={item.tags} limit={3} />
-                              </div>
-                            </td>
-                          </>
+                  list.map((item) => (
+                    <tr key={item.id}>
+                      <td>
+                        <div className="strong" style={{ fontWeight: 500 }}>
+                          {item.name}
+                        </div>
+                        <div className="text-xs text-3">{item.sub || "—"}</div>
+                      </td>
+                      <td>
+                        <Badge tone={item.published ? "ok" : "neutral"}>
+                          {item.statusLabel || (item.published ? "已发布" : "草稿")}
+                        </Badge>
+                      </td>
+                      <td className="num">{item.itemCount}</td>
+                      <td className="num">{item.totalScore}</td>
+                      <td className="num">{item.durationMin}</td>
+                      {kind === "exam" ? (
+                        <>
+                          <td className="text-xs text-3">
+                            {remote ? "进向导查看" : item.mode === "small" ? "小梅花" : item.mode === "large" ? "大梅花" : "标准卷"}
+                          </td>
+                          <td className="text-xs text-3">
+                            {remote ? "名单在场次中配置" : "—"}
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="text-xs text-3">
+                            {remote ? "开放范围在练习分配中配置" : "—"}
+                          </td>
+                          <td className="num">—</td>
+                        </>
+                      )}
+                      <td>
+                        {remote ? (
+                          <button
+                            type="button"
+                            className="badge badge-neutral"
+                            onClick={() =>
+                              navigate(`/papers/${item.id}?kind=${kind}&step=publish`)
+                            }
+                          >
+                            查看校验
+                          </button>
                         ) : (
-                          <>
-                            <td>
-                              {scopeLabel(item.scope, classNameOf)}
-                              <div style={{ marginTop: "var(--sp-1)" }}>
-                                <TagChips tags={item.tags} limit={3} />
-                              </div>
-                            </td>
-                            <td className="num">
-                              {(item as unknown as { repeats?: number }).repeats || 0}
-                            </td>
-                          </>
+                          <Badge tone="ok">校验通过</Badge>
                         )}
-                        <td>
-                          {check.ok ? (
-                            <Badge tone="ok">校验通过</Badge>
-                          ) : (
-                            <button
-                              type="button"
-                              className="badge badge-warn"
-                              title={`${check.failed} 项未通过，点击进入发布校验`}
-                              onClick={() =>
-                                navigate(`/papers/${item.id}?kind=${kind}&step=publish`)
-                              }
-                            >
-                              {check.failed} 项未通过
-                            </button>
-                          )}
-                        </td>
-                        <td className="col-actions">
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            onClick={() => navigate(`/papers/${item.id}?kind=${kind}`)}
-                          >
-                            {kind === "exam" ? "组卷向导" : "练习设置"}
-                          </Button>{" "}
-                          <Button
-                            size="sm"
-                            onClick={() =>
-                              openTagDialog(kind, item.id, item.name, item.tags)
-                            }
-                          >
-                            标签
-                          </Button>{" "}
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            onClick={() =>
-                              setPendingDelete({ kind, id: item.id, name: item.name })
-                            }
-                          >
-                            删除
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })
+                      </td>
+                      <td className="col-actions">
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          onClick={() => navigate(`/papers/${item.id}?kind=${kind}`)}
+                        >
+                          {kind === "exam" ? "组卷向导" : "练习设置"}
+                        </Button>{" "}
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            void openTagDialog(kind, item.id, item.name, [])
+                          }
+                        >
+                          标签
+                        </Button>{" "}
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() =>
+                            setPendingDelete({ kind, id: item.id, name: item.name })
+                          }
+                        >
+                          删除
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
@@ -241,6 +259,9 @@ export function PaperListPage() {
       <EntityTagsDialog
         target={tagTarget}
         onClose={() => setTagTarget(null)}
+        {...(remote
+          ? { onSave: (tags: string[]) => saveTags(tagTarget?.id ?? "", tags) }
+          : {})}
       />
 
       <ConfirmDialog
@@ -258,7 +279,7 @@ export function PaperListPage() {
         confirmText="确认删除"
         confirmVariant="danger"
         onCancel={() => setPendingDelete(null)}
-        onConfirm={handleDelete}
+        onConfirm={() => void handleDelete()}
       />
     </>
   );
