@@ -495,3 +495,45 @@ export async function setSessionAssignments(
     assignedAt: String(dto.assignedAt ?? ""),
   }));
 }
+
+/** 成绩发布的结果。 */
+export interface GradePublication {
+  /** 发布范围：`all`（全部成绩）/ `objective_only`（仅客观题）。 */
+  scope: string;
+  /** 发布范围的中文名。 */
+  scopeLabel: string;
+  /** 发布时间。 */
+  publishedAt: string;
+  /** 这次发布覆盖的作答数。 */
+  affectedAttempts: number;
+  /** 这次发布覆盖的作答 ID。 */
+  includedAttemptIds: string[];
+}
+
+/**
+ * 发布场次成绩。
+ *
+ * 范围只有两种：`all`（全部成绩）与 `objective_only`（仅客观题）——
+ * 主观题还没阅完时，可以先把客观题得分公布出去。
+ */
+export async function publishSessionGrades(
+  id: string,
+  scope: "all" | "objective_only",
+  client: ExamSessionAdminClient = httpClient,
+): Promise<GradePublication> {
+  const res = await client.post<{
+    scope?: string;
+    scopeLabel?: string;
+    publishedAt?: string;
+    affectedAttempts?: number;
+    includedAttemptIds?: number[];
+  }>(ENDPOINTS.delivery.examSessionPublishGrades(id), { scope });
+
+  return {
+    scope: String(res.scope ?? scope),
+    scopeLabel: String(res.scopeLabel ?? ""),
+    publishedAt: String(res.publishedAt ?? ""),
+    affectedAttempts: Number(res.affectedAttempts ?? 0),
+    includedAttemptIds: (res.includedAttemptIds ?? []).map(String),
+  };
+}

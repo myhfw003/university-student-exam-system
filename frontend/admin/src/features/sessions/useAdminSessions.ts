@@ -26,10 +26,12 @@ import {
   loadSessionGrades,
   loadSessionParticipants,
   publishAdminSession,
+  publishSessionGrades,
   setSessionAssignments,
   updateAdminSession,
   type AdminSessionCreate,
   type ExamParticipantImportResult,
+  type GradePublication,
 } from "@exam/shared/api";
 import type {
   AdminSessionRules,
@@ -129,6 +131,8 @@ export interface AdminSessionDetailView {
   assignments: SessionAssignment[];
   /** 保存场次负责人（覆盖式）。 */
   saveAssignments: (userIds: string[]) => Promise<void>;
+  /** 发布成绩（全部成绩 / 仅客观题）。 */
+  publishGrades: (scope: "all" | "objective_only") => Promise<GradePublication>;
   /** 重新拉取。 */
   refresh: () => void;
 }
@@ -488,6 +492,24 @@ export function useAdminSessionDetail(id: string): AdminSessionDetailView {
     [remote, id, refresh],
   );
 
+  /**
+   * 发布场次成绩。
+   *
+   * 范围两种：全部成绩、仅客观题（主观题还没阅完时先公布客观分）。
+   * mock 模式没有「成绩发布」这个模型（本地内容仓库里没有发布记录）。
+   */
+  const publishGrades = useCallback(
+    async (scope: "all" | "objective_only"): Promise<GradePublication> => {
+      if (!remote) {
+        throw new Error("成绩发布只在真实后端模式下可用。");
+      }
+      const published = await publishSessionGrades(id, scope);
+      refresh();
+      return published;
+    },
+    [remote, id, refresh],
+  );
+
   /* ---------------------------------------------------------- 视图 */
 
   if (remote) {
@@ -527,6 +549,7 @@ export function useAdminSessionDetail(id: string): AdminSessionDetailView {
         importParticipants,
         assignments,
         saveAssignments,
+        publishGrades,
         refresh,
       };
     }
@@ -566,6 +589,7 @@ export function useAdminSessionDetail(id: string): AdminSessionDetailView {
       importParticipants,
       assignments,
       saveAssignments,
+      publishGrades,
       refresh,
     };
   }
@@ -607,6 +631,7 @@ export function useAdminSessionDetail(id: string): AdminSessionDetailView {
       importParticipants,
       assignments,
       saveAssignments,
+      publishGrades,
       refresh,
     };
   }
@@ -644,6 +669,7 @@ export function useAdminSessionDetail(id: string): AdminSessionDetailView {
     importParticipants,
     assignments: [],
     saveAssignments,
+    publishGrades,
     refresh,
   };
 }

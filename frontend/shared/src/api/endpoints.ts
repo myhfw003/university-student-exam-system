@@ -62,6 +62,9 @@ export const ENDPOINTS = {
     monitoring: (id: string | number) => `/exam-sessions/${id}/monitoring`,
     /** 场次负责人：被指派的人看得到这场考试的作答与成绩。 */
     examSessionAssignments: (id: string | number) => `/exam-sessions/${id}/assignments`,
+    /** 发布场次成绩（全部成绩 / 仅客观题）。 */
+    examSessionPublishGrades: (id: string | number) =>
+      `/exam-sessions/${id}/publish-grades`,
     /** 监考处置：警告 / 备注 / 强制交卷，按**一次作答**维度。 */
     attemptProctorActions: (id: string | number) => `/attempts/${id}/proctor-actions`,
   },

@@ -55,6 +55,11 @@ export function ExamSessionDetailPage() {
   const [assignSaving, setAssignSaving] = useState(false);
   const assignees = usePeopleCandidates(assignOpen);
 
+  // 发布成绩（真实后端模式）。
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishScope, setPublishScope] = useState<"all" | "objective_only">("all");
+  const [publishing, setPublishing] = useState(false);
+
   const candidates = feed.candidates;
   const submitted = candidates.filter((c) => c.status === "submitted" || c.status === "forced_submitted");
   const answering = candidates.filter((c) => c.status === "answering");
@@ -197,6 +202,22 @@ export function ExamSessionDetailPage() {
       toast.error(error instanceof Error ? error.message : "保存失败");
     } finally {
       setAssignSaving(false);
+    }
+  };
+
+  /** 发布成绩：全部成绩，或只先公布客观题的分。 */
+  const handlePublishGrades = async () => {
+    setPublishing(true);
+    try {
+      const result = await view.publishGrades(publishScope);
+      toast.ok(
+        `已发布${result.scopeLabel || "成绩"}：覆盖 ${result.affectedAttempts} 份作答`,
+      );
+      setPublishOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "发布失败");
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -435,6 +456,17 @@ export function ExamSessionDetailPage() {
                 导入名单
               </Button>
             ) : null}
+            {remote ? (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setPublishScope("all");
+                  setPublishOpen(true);
+                }}
+              >
+                发布成绩
+              </Button>
+            ) : null}
             <Button size="sm" onClick={handleExportScores}>
               导出成绩
             </Button>
@@ -649,6 +681,54 @@ export function ExamSessionDetailPage() {
               ))}
             </div>
           )}
+        </div>
+      </Dialog>
+
+      {/* 发布成绩。 */}
+      <Dialog
+        open={publishOpen}
+        onClose={() => setPublishOpen(false)}
+        title="发布成绩"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setPublishOpen(false)}>
+              关闭
+            </Button>
+            <Button
+              variant="primary"
+              disabled={publishing}
+              onClick={() => void handlePublishGrades()}
+            >
+              {publishing ? "发布中…" : "确认发布"}
+            </Button>
+          </>
+        }
+      >
+        <div className="stack">
+          <Callout tone="info" title="发布后学生才看得到分">
+            成绩没发布之前，学生在自己的成绩列表里看不到这场考试的分。
+          </Callout>
+
+          <label className="checkline">
+            <input
+              type="radio"
+              name="publish-scope"
+              checked={publishScope === "all"}
+              onChange={() => setPublishScope("all")}
+            />
+            <span className="checkline-text">全部成绩（含主观题）</span>
+          </label>
+          <label className="checkline">
+            <input
+              type="radio"
+              name="publish-scope"
+              checked={publishScope === "objective_only"}
+              onChange={() => setPublishScope("objective_only")}
+            />
+            <span className="checkline-text">
+              仅客观题（主观题还没阅完时，先把客观分公布出去）
+            </span>
+          </label>
         </div>
       </Dialog>
     </>

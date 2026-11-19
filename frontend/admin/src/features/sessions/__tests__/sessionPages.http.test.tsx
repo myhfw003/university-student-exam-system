@@ -26,6 +26,7 @@ const api = {
   importExamParticipants: vi.fn(),
   loadSessionAssignments: vi.fn(),
   setSessionAssignments: vi.fn(),
+  publishSessionGrades: vi.fn(),
 };
 
 vi.mock("@exam/shared/api", async (importOriginal) => ({
@@ -118,6 +119,13 @@ describe("管理端场次页面 · HTTP 模式", () => {
     });
     api.loadSessionAssignments.mockResolvedValue([]);
     api.setSessionAssignments.mockResolvedValue([]);
+    api.publishSessionGrades.mockResolvedValue({
+      scope: "all",
+      scopeLabel: "全部成绩",
+      publishedAt: "2026-11-19T10:00:00Z",
+      affectedAttempts: 2,
+      includedAttemptIds: ["9001"],
+    });
   });
 
   it("列表页显示后端场次与名单纳入方式", async () => {
@@ -219,6 +227,32 @@ describe("管理端场次页面 · HTTP 模式", () => {
     // 结果与被跳过的行都给管理员看。
     expect(await screen.findByText(/导入完成：成功 2 人，跳过 1 行/)).toBeInTheDocument();
     expect(screen.getByText(/账号不存在：s103/)).toBeInTheDocument();
+  });
+
+  it("详情页能发布成绩，并选发布范围", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/exam-sessions/12"]}>
+        <Routes>
+          <Route path="/exam-sessions/:id" element={<ExamSessionDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "发布成绩" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "发布成绩" }));
+    // 默认是「全部成绩」；也可以只先公布客观题。
+    await user.click(screen.getByRole("radio", { name: /仅客观题/ }));
+    await user.click(screen.getByRole("button", { name: "确认发布" }));
+
+    await waitFor(() => {
+      expect(api.publishSessionGrades).toHaveBeenCalledTimes(1);
+    });
+    // 场次 ID 与发布范围都交给服务端。
+    expect(api.publishSessionGrades.mock.calls[0]).toEqual(["12", "objective_only"]);
   });
 
   it("详情页能指派负责教师", async () => {
