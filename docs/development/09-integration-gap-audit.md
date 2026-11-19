@@ -59,7 +59,7 @@
 |---|---|---|---|---|
 | A1 | 场次列表与生命周期 | `features/sessions/ExamSessionListPage.tsx` | `GET/POST /exam-sessions`、`/{id}/publish`、`/close`、`/cancel` | 存在（无「推进到进行中」这一跳，发布即进入进行中） |
 | A2 | 场次详情：防作弊规则、名单、导出 | `features/sessions/ExamSessionDetailPage.tsx` | `PUT /exam-sessions/{id}`、`GET /exam-sessions/{id}/participants`、`/{id}/grades` | 存在 |
-| A3 | 场次负责人 | 无 UI | `GET/PUT /exam-sessions/{id}/assignments` | 存在 |
+| A3 | 场次负责人 | 场次详情页「负责教师」卡片 | `GET/PUT /exam-sessions/{id}/assignments` | 存在（T-P10-12 补上 UI） |
 | A4 | 用户与角色 | `features/users/UsersPage.tsx` | `GET /users`、`PUT /users/{id}`、`PUT/DELETE /users/{id}/roles`、`PUT /users/{id}/tags` | 存在 |
 | A5 | 名单批量导入 | `features/users/UsersPage.tsx` | `POST /users/import`（multipart） | 存在 |
 | A6 | 审计日志 | `features/audit/AuditLogPage.tsx` | `GET /audit-logs` | 存在 |
@@ -571,3 +571,21 @@ HTTP 模式只显示作答原文；这属于接口能力缺口，不是前端映
 | 发布后 | 名单就是导入的 2 人（发布时物化） |
 | 已发布的场次再导入 | 422「场次已发布，不能再修改配置。」 |
 | 缺少账号列的文件 | 422「名单文件缺少「账号」列（也可用 account / 学号）。」 |
+
+### T-P10-12 场次负责人指派（已完成）
+
+**缺口**：审计 §2 的 A3 写着「端点存在、无 UI」——后端有
+`GET` / `PUT /exam-sessions/{id}/assignments`，前端也只有 API 封装。
+
+**前端**
+
+- `admin/src/features/sessions/useAssignees.ts`：负责人候选（除学生与社会人士以外的活跃账号）。
+- 场次详情页加「负责教师」卡片与指派对话框；指派覆盖式保存。
+
+**要注意的**
+
+- **指派不授予权限**：只界定「谁负责这场考试」；被指派的人仍要有阅卷或监考的权限点。
+- 候选口径是近似做法（不做角色白名单），**待产品确认**；后端不校验角色。
+
+**实测结论**（真实后端）：指派 200 并返回 `userId` / `username` / `displayName` /
+`assignedAt`；回读一致；指派不存在的账号 422；传空数组即清空。
