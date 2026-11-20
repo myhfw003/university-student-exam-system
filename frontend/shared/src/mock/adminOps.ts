@@ -10,6 +10,7 @@
 
 import { create } from "zustand";
 import { ROLE_PERMISSIONS } from "../auth/permissions";
+import type { AdminRole } from "../domain/admin";
 import type { PracticeAssignmentStatus } from "../domain/practice";
 import type {
   AntiCheatPolicy,
@@ -509,6 +510,8 @@ export interface AdminOpsState {
   practiceAssignments: MockPracticeAssignment[];
   /** 角色的权限集合：角色码 → 权限码数组。 */
   rolePermissions: Record<string, string[]>;
+  /** 自定义角色（系统内置角色之外新建的）。 */
+  customRoles: AdminRole[];
 }
 
 const initialState = (): AdminOpsState => ({
@@ -523,6 +526,7 @@ const initialState = (): AdminOpsState => ({
   rolePermissions: Object.fromEntries(
     Object.entries(ROLE_PERMISSIONS).map(([code, permissions]) => [code, [...permissions]]),
   ),
+  customRoles: [],
 });
 
 /** 管理端运维数据 store。 */
@@ -740,6 +744,41 @@ export function advanceSession(id: string): { ok: boolean; message?: string; sta
 /* ==========================================================================
    角色权限
    ========================================================================== */
+
+/**
+ * 新建自定义角色（mock）。
+ *
+ * 编码全局唯一：与内置角色或已有自定义角色撞上就拒绝（与后端同一个口径）。
+ */
+export function createRole(input: {
+  code: string;
+  name: string;
+  description: string;
+  permissionCodes: string[];
+}): { ok: boolean; message?: string; role?: AdminRole } {
+  const code = input.code.trim();
+  if (!code) return { ok: false, message: "角色编码不能为空。" };
+  if (!input.name.trim()) return { ok: false, message: "角色名称不能为空。" };
+
+  const state = useAdminOps.getState();
+  if (state.customRoles.some((role) => role.code === code) || code in state.rolePermissions) {
+    return { ok: false, message: `角色编码「${code}」已存在。` };
+  }
+
+  const role: AdminRole = {
+    id: code,
+    code,
+    name: input.name.trim(),
+    description: input.description,
+    isSystem: false,
+    permissions: [...input.permissionCodes],
+  };
+  useAdminOps.setState({
+    customRoles: [...state.customRoles, role],
+    rolePermissions: { ...state.rolePermissions, [code]: [...input.permissionCodes] },
+  });
+  return { ok: true, role };
+}
 
 /**
  * 改角色的权限集合（mock）。

@@ -456,6 +456,23 @@ describe("管理端角色页", () => {
     expect(lastToast()).toBe("角色权限已更新，变更即时生效");
     expect(useAdminOps.getState().rolePermissions.student).toContain("paper:write");
   });
+
+  it("角色页：mock 模式能新建自定义角色", async () => {
+    const user = userEvent.setup();
+    renderPage(<RoleListPage />);
+
+    await user.click(screen.getByRole("button", { name: "新建角色" }));
+    const dialog = screen.getByRole("dialog");
+
+    await user.type(within(dialog).getByLabelText(/角色编码/), "review_lead");
+    await user.type(within(dialog).getByLabelText(/角色名称/), "阅卷组长");
+    await user.click(within(dialog).getByRole("button", { name: "查看试卷" }));
+    await user.click(within(dialog).getByRole("button", { name: "创建" }));
+
+    expect(lastToast()).toBe("角色已创建");
+    expect(screen.getByText("阅卷组长")).toBeInTheDocument();
+    expect(useAdminOps.getState().customRoles.map((role) => role.code)).toContain("review_lead");
+  });
 });
 
 describe("管理端用户页", () => {

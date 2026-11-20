@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   assignUserRoles,
   assignUserTags,
+  createRole as createRoleApi,
   importUserRoster,
   isBackendEnabled,
   loadOrgTags,
@@ -36,6 +37,7 @@ import type {
 import type { AuditAction, UserRole } from "@exam/shared/domain/types";
 import {
   USER_ROLE_LABEL,
+  createRole,
   setRolePermissions,
   setUserRoles,
   updateUser,
@@ -124,18 +126,23 @@ export function useAdminRoles(): {
   }, [remote, token]);
 
   const mockRolePermissions = useAdminOps((state) => state.rolePermissions);
+  const mockCustomRoles = useAdminOps((state) => state.customRoles);
 
   const effective = useMemo<AdminRole[]>(() => {
     if (remote) return roles;
-    return BUILTIN_ROLE_CODES.map((code) => ({
-      id: code,
-      code,
-      name: USER_ROLE_LABEL[code],
-      description: "",
-      isSystem: true,
-      permissions: mockRolePermissions[code] ?? [],
-    }));
-  }, [remote, roles, mockRolePermissions]);
+    return [
+      ...BUILTIN_ROLE_CODES.map((code) => ({
+        id: code,
+        code,
+        name: USER_ROLE_LABEL[code],
+        description: "",
+        isSystem: true,
+        permissions: mockRolePermissions[code] ?? [],
+      })),
+      // 自定义角色：mock 模式下新建出来的。
+      ...mockCustomRoles,
+    ];
+  }, [remote, roles, mockRolePermissions, mockCustomRoles]);
 
   const byCode = useMemo(() => {
     const map: Record<string, AdminRole> = {};
@@ -186,6 +193,33 @@ export function usePermissionCatalog(): AdminPermission[] {
     () => (remote ? permissions : MOCK_PERMISSION_CATALOG),
     [remote, permissions],
   );
+}
+
+/**
+ * 新建自定义角色。
+ *
+ * 编码全局唯一：重复会被后端判为 422「角色编码「x」已存在。」。
+ */
+export async function createRoleSettings(input: {
+  code: string;
+  name: string;
+  description: string;
+  permissionCodes: string[];
+}): Promise<{ ok: boolean; message?: string }> {
+  if (!isBackendEnabled()) {
+    const result = createRole(input);
+    return result.ok ? { ok: true } : { ok: false, message: result.message ?? "创建失败" };
+  }
+
+  try {
+    await createRoleApi(input);
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error && error.message ? error.message : "创建失败",
+    };
+  }
 }
 
 /**

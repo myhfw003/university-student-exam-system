@@ -204,6 +204,7 @@ export {
   assignUserRoles,
   assignUserTags,
   countUsers,
+  createRole,
   importUserRoster,
   loadAdminUser,
   loadAuditLogs,

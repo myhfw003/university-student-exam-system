@@ -345,6 +345,31 @@ export async function loadPermissions(
 }
 
 /**
+ * 新建自定义角色。
+ *
+ * 角色编码全局唯一：重复会被后端判为 422「角色编码「x」已存在。」。
+ */
+export async function createRole(
+  input: { code: string; name: string; description: string; permissionCodes: string[] },
+  client: AdminClient = httpClient,
+): Promise<AdminRole> {
+  const res = await client.post<Dto>(ENDPOINTS.admin.roles, {
+    code: input.code.trim(),
+    name: input.name.trim(),
+    description: input.description,
+    permissionCodes: input.permissionCodes,
+  });
+  return {
+    id: str(res.id),
+    code: str(res.code),
+    name: str(res.name),
+    description: str(res.description),
+    isSystem: bool(res.isSystem),
+    permissions: strList(res.permissions),
+  };
+}
+
+/**
  * 修改角色的名称、说明与权限集合。
  *
  * 权限集合是**整体覆盖**（不是增量）：传什么就是什么，

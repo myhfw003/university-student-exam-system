@@ -10,7 +10,7 @@
    ========================================================================== */
 
 import { describe, expect, it, vi } from "vitest";
-import { loadPermissions, updateRole, type AdminClient } from "../adminApi";
+import { createRole, loadPermissions, updateRole, type AdminClient } from "../adminApi";
 
 /** 后端的权限点目录。 */
 const PERMISSIONS = [
@@ -32,8 +32,9 @@ const ROLE = {
 function fakeClient() {
   const get = vi.fn(async (_path: string, _options?: unknown) => PERMISSIONS);
   const put = vi.fn(async (_path: string, _body?: unknown) => ROLE);
-  const client = { get, put, post: vi.fn(), delete: vi.fn() } as unknown as AdminClient;
-  return { client, get, put };
+  const post = vi.fn(async (_path: string, _body?: unknown) => ROLE);
+  const client = { get, put, post, delete: vi.fn() } as unknown as AdminClient;
+  return { client, get, put, post };
 }
 
 describe("adminApi · 权限点目录与角色权限", () => {
@@ -64,6 +65,27 @@ describe("adminApi · 权限点目录与角色权限", () => {
     expect(body.permissionCodes).toEqual(["paper:read"]);
     expect(role.code).toBe("grader_teacher");
     expect(role.permissions).toEqual(["paper:read"]);
+  });
+
+  it("新建角色：编码去空白后发出，权限码原样带上", async () => {
+    const { client, post } = fakeClient();
+
+    const role = await createRole(
+      {
+        code: "  review_lead  ",
+        name: "  阅卷组长  ",
+        description: "负责派单",
+        permissionCodes: ["paper:read", "review:grade"],
+      },
+      client,
+    );
+
+    const [path, body] = post.mock.calls[0]! as [string, Record<string, unknown>];
+    expect(path).toBe("/roles");
+    expect(body.code).toBe("review_lead");
+    expect(body.name).toBe("阅卷组长");
+    expect(body.permissionCodes).toEqual(["paper:read", "review:grade"]);
+    expect(role.code).toBe("grader_teacher");
   });
 
   it("改角色权限时权限码原样发出（前端用字符串，后端认码本身）", async () => {

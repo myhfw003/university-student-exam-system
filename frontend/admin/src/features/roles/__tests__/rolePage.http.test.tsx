@@ -16,6 +16,7 @@ const api = {
   loadRoles: vi.fn(),
   loadPermissions: vi.fn(),
   updateRole: vi.fn(),
+  createRole: vi.fn(),
 };
 
 vi.mock("@exam/shared/api", async (importOriginal) => ({
@@ -50,6 +51,14 @@ describe("管理端角色页 · HTTP 模式", () => {
     api.loadRoles.mockResolvedValue(ROLES);
     api.loadPermissions.mockResolvedValue(PERMISSIONS);
     api.updateRole.mockResolvedValue({ ...ROLES[0], permissions: ["paper:write"] });
+    api.createRole.mockResolvedValue({
+      id: "9",
+      code: "review_lead",
+      name: "阅卷组长",
+      description: "负责派单",
+      isSystem: false,
+      permissions: ["paper:read"],
+    });
   });
 
   function renderPage() {
@@ -103,6 +112,33 @@ describe("管理端角色页 · HTTP 模式", () => {
     expect(api.updateRole.mock.calls[0]![0]).toBe("4");
     expect(api.updateRole.mock.calls[0]![1]).toMatchObject({
       permissionCodes: ["paper:write"],
+    });
+  });
+
+  it("新建角色：编码、名称与勾上的权限点都发给服务端", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("阅卷教师")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "新建角色" }));
+    const dialog = screen.getByRole("dialog");
+
+    await user.type(within(dialog).getByLabelText(/角色编码/), "review_lead");
+    await user.type(within(dialog).getByLabelText(/角色名称/), "阅卷组长");
+    await user.click(within(dialog).getByRole("button", { name: "查看试卷" }));
+    await user.click(within(dialog).getByRole("button", { name: "创建" }));
+
+    await waitFor(() => {
+      expect(api.createRole).toHaveBeenCalledTimes(1);
+    });
+    // createRole(input) 只带一个实参：请求体就是 input。
+    expect(api.createRole.mock.calls[0]![0]).toMatchObject({
+      code: "review_lead",
+      name: "阅卷组长",
+      permissionCodes: ["paper:read"],
     });
   });
 });

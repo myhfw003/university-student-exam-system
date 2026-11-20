@@ -51,6 +51,41 @@ function expectOk(result: { status: number; raw: string }, what: string) {
 }
 
 test.describe("角色权限（真实后端）", () => {
+  test("能新建自定义角色，编码重复会被拒", async () => {
+    const admin = await login(apiRoot, adminUsername, adminPassword);
+    // 编码全局唯一：每次跑都用新的。
+    const code = `e2e_role_${Date.now()}`;
+
+    const created = await api(admin, "POST", "/api/v1/roles", {
+      code,
+      name: "端到端角色",
+      description: "端到端用例建的角色",
+      permissionCodes: ["paper:read", "review:grade"],
+    });
+    expectOk(created, "新建角色");
+    expect(created.json?.code).toBe(code);
+    expect(created.json?.isSystem, "新建的角色不是系统内置").toBe(false);
+    expect(created.json?.permissions?.length, "带了两个权限点").toBe(2);
+
+    // 编码重复：422，并说清楚为什么。
+    const duplicate = await api(admin, "POST", "/api/v1/roles", {
+      code,
+      name: "再来一个",
+      description: "",
+      permissionCodes: [],
+    });
+    expect(duplicate.status, "编码重复应当是 422").toBe(422);
+    expect(duplicate.raw, "拒绝的原因要说清楚").toContain("已存在");
+
+    // 角色目录里有它。
+    const roles = await api(admin, "GET", "/api/v1/roles");
+    expectOk(roles, "角色目录");
+    expect(
+      (roles.json ?? []).some((role: any) => role.code === code),
+      "角色目录里要有新建的角色",
+    ).toBe(true);
+  });
+
   test("能看权限点目录，也能改角色的权限集合", async () => {
     const admin = await login(apiRoot, adminUsername, adminPassword);
 

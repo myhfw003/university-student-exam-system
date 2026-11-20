@@ -22,8 +22,10 @@ import {
   TextInput,
   toast,
 } from "@exam/shared";
+import { Icon } from "@/app/Icon";
 import type { AdminPermission, AdminRole } from "@exam/shared/domain/admin";
 import {
+  createRoleSettings,
   saveRoleSettings,
   useAdminRoles,
   usePermissionCatalog,
@@ -34,8 +36,10 @@ export function RoleListPage() {
   const { roles, loading, refresh } = useAdminRoles();
   const permissions = usePermissionCatalog();
 
-  // 正在编辑的角色（null = 没在编辑）。
+  // 对话框：新建一个角色，还是改已有角色的权限。
+  const [dialogMode, setDialogMode] = useState<"create" | "edit" | null>(null);
   const [editing, setEditing] = useState<AdminRole | null>(null);
+  const [roleCode, setRoleCode] = useState("");
   const [roleName, setRoleName] = useState("");
   const [roleDescription, setRoleDescription] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
@@ -51,16 +55,45 @@ export function RoleListPage() {
     return [...groups.entries()].map(([module, items]) => ({ module, items }));
   }, [permissions]);
 
+  /** 新建一个自定义角色。 */
+  const openCreate = () => {
+    setDialogMode("create");
+    setEditing(null);
+    setRoleCode("");
+    setRoleName("");
+    setRoleDescription("");
+    setSelected([]);
+  };
+
   /** 打开某个角色的权限矩阵。 */
   const openEditor = (role: AdminRole) => {
+    setDialogMode("edit");
     setEditing(role);
+    setRoleCode(role.code);
     setRoleName(role.name);
     setRoleDescription(role.description);
     setSelected([...role.permissions]);
   };
 
-  /** 保存角色的权限集合。 */
+  /** 保存：新建走 POST /roles，改权限走 PUT /roles/{id}。 */
   const handleSave = async () => {
+    if (dialogMode === "create") {
+      const result = await createRoleSettings({
+        code: roleCode.trim(),
+        name: roleName.trim(),
+        description: roleDescription,
+        permissionCodes: selected,
+      });
+      if (!result.ok) {
+        toast.error(result.message ?? "创建失败");
+        return;
+      }
+      toast.ok("角色已创建");
+      setDialogMode(null);
+      refresh();
+      return;
+    }
+
     if (!editing) return;
     const result = await saveRoleSettings(editing, {
       name: roleName.trim() || editing.name,
@@ -72,7 +105,7 @@ export function RoleListPage() {
       return;
     }
     toast.ok("角色权限已更新，变更即时生效");
-    setEditing(null);
+    setDialogMode(null);
     refresh();
   };
 
@@ -81,6 +114,12 @@ export function RoleListPage() {
       <PageHead
         title="角色"
         sub="角色决定用户能做什么：用户可拥有多个角色，权限点按并集计算。系统内置角色不可删除，只能调整其权限集合；变更即时生效，无需重新登录。"
+        actions={
+          <Button variant="primary" onClick={openCreate}>
+            <Icon name="plus" />
+            新建角色
+          </Button>
+        }
       />
 
       <section className="card">
@@ -141,20 +180,43 @@ export function RoleListPage() {
       </section>
 
       <Dialog
-        open={editing !== null}
-        onClose={() => setEditing(null)}
-        title={editing ? `角色权限 · ${editing.name}` : "角色权限"}
+        open={dialogMode !== null}
+        onClose={() => setDialogMode(null)}
+        title={
+          dialogMode === "create"
+            ? "新建角色"
+            : editing
+              ? `角色权限 · ${editing.name}`
+              : "角色权限"
+        }
         footer={
           <>
-            <Button variant="secondary" onClick={() => setEditing(null)}>
+            <Button variant="secondary" onClick={() => setDialogMode(null)}>
               取消
             </Button>
             <Button variant="primary" onClick={() => void handleSave()}>
-              保存
+              {dialogMode === "create" ? "创建" : "保存"}
             </Button>
           </>
         }
       >
+        {dialogMode === "create" ? (
+          <div style={{ marginBottom: "var(--sp-4)" }}>
+            <Field
+              label="角色编码"
+              required
+              htmlFor="role-code"
+              hint="全局唯一，建议用小写字母加下划线（如 review_lead）。"
+            >
+              <TextInput
+                id="role-code"
+                value={roleCode}
+                placeholder="review_lead"
+                onChange={(event) => setRoleCode(event.target.value)}
+              />
+            </Field>
+          </div>
+        ) : null}
         <div className="grid-2">
           <Field label="角色名称" htmlFor="role-name">
             <TextInput
