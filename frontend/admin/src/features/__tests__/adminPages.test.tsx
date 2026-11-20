@@ -193,6 +193,20 @@ describe("管理端题库工作台", () => {
     expect(screen.getByRole("tab", { name: /题目/ })).toBeInTheDocument();
   });
 
+  it("内容生产：能打开已有的导入批次看逐行结果", async () => {
+    const user = userEvent.setup();
+    renderPage(<BankWorkbenchPage />, "/banks/__all__?tab=produce", "/banks/:bankId");
+
+    const batch = useCatalog.getState().imports[0]!;
+    expect(batch.rows.length, "种子批次应当有逐行结果").toBeGreaterThan(0);
+
+    const row = screen.getByText(new RegExp(batch.id)).closest("li")!;
+    await user.click(within(row).getByRole("button", { name: "打开" }));
+
+    // 预览表里能看到这一批的行。
+    expect(screen.getByText(batch.rows[0]!.stem)).toBeInTheDocument();
+  });
+
   it("切到候选题页展示审核队列", async () => {
     const user = userEvent.setup();
     renderPage(<BankWorkbenchPage />, "/banks/__all__?tab=questions", "/banks/:bankId");

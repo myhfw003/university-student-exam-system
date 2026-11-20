@@ -57,6 +57,7 @@ import {
   type ParsedTable,
 } from "./importFile";
 import { useAdminBanks, useAdminQuestions, type AdminBankRow } from "./useAdminBanks";
+import { fetchImportBatchDetail, useImportBatches } from "./useImportBatches";
 
 /** 工作台标签页。 */
 type WorkbenchTab = "questions" | "candidates" | "produce";
@@ -155,6 +156,8 @@ export function BankWorkbenchPage() {
   const generations = useCatalog((state) => state.generations);
 
   const { banks } = useAdminBanks();
+  // 导入批次：上传当次就能看到逐行结果，重新打开已有批次要另外取。
+  const { batches: importBatches, refresh: refreshImportBatches } = useImportBatches();
   const bank = banks.find((b) => b.id === bankId) ?? null;
   const title = !bankId || bankId === "__all__" ? "全部题库" : (bank?.name ?? "全部题库");
   const stats = statsOf(bankId, banks);
@@ -265,6 +268,15 @@ export function BankWorkbenchPage() {
     if (remote) return (serverImport?.rows ?? []).map(toPreviewRow);
     return activeBatch?.rows ?? [];
   }, [remote, serverImport, activeBatch]);
+
+  /**
+   * 列映射被锁住。
+   *
+   * 重新打开的批次拿不到**文件表头**（后端只在解析当场返回，没存），
+   * 列下拉里没有可选的列名——这时改列映射是改不动的，索性锁上并说明原因，
+   * 别让人对着一个只有「（不映射）」的下拉发呆。
+   */
+  const mappingLocked = Boolean(serverImport) && (serverImport?.headers.length ?? 0) === 0;
 
   /** 选文件 → 真实解析（.csv / .xlsx）。 */
   const handleFilePick = async (file: File | null): Promise<void> => {
@@ -421,6 +433,8 @@ export function BankWorkbenchPage() {
         setBatchId("");
         setServerImport(null);
         candidateQuery.refresh();
+        // 批次状态变了（已采纳），列表要跟着更新。
+        refreshImportBatches();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "采纳失败");
       }
@@ -437,6 +451,36 @@ export function BankWorkbenchPage() {
     }
     toast.ok(`已采纳 ${result.count} 道候选题，请到候选题队列审核`);
     setBatchId("");
+  };
+
+  /**
+   * 打开一个已有的导入批次。
+   *
+   * 上传当次就有逐行结果，但那些结果存在**服务端**：
+   * 过一阵再回来看这个批次，得重新取（`GET /imports/{id}`）。
+   *
+   * 注意：批次详情**不给文件表头**（表头只在解析当场拿得到，后端没存），
+   * 所以重新打开的批次改不了列映射——要改得重新上传原文件。
+   */
+  const handleOpenBatch = async (id: string) => {
+    if (!remote) {
+      // mock 模式：整份批次就在本地内容仓库里。
+      setBatchId(id);
+      setParsed(null);
+      setFileName("");
+      return;
+    }
+    try {
+      const detail = await fetchImportBatchDetail(id);
+      if (!detail) return;
+      setServerImport(detail);
+      setBatchId(detail.batch.id);
+      setMapping(detail.batch.columnMapping);
+      setParsed(null);
+      toast.ok(`已打开批次「${detail.batch.fileName}」`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "批次详情加载失败");
+    }
   };
 
   /**
@@ -910,6 +954,44 @@ export function BankWorkbenchPage() {
                         。请在下方确认列映射，解析结果进入草稿候选题。
                       </Callout>
                     ) : null}
+                    {/* 已有批次：上传当次的结果在手里，隔一阵再看要重新取。 */}
+                    <div>
+                      <span className="field-label">已有导入批次</span>
+                      {importBatches.length === 0 ? (
+                        <p className="section-note">
+                          还没有导入批次。上传一个文件会生成一个批次。
+                        </p>
+                      ) : (
+                        <ul className="list">
+                          {importBatches.map((batch) => (
+                            <li className="list-row" key={batch.id}>
+                              <div>
+                                <div style={{ fontWeight: 500 }}>{batch.fileName}</div>
+                                <div className="text-xs text-3">
+                                  {batch.id} · {batch.createdAt} · {batch.rowCount} 行
+                                </div>
+                              </div>
+                              <div className="row-tight">
+                                <Badge tone={batch.status === "adopted" ? "ok" : "warn"}>
+                                  {batch.status === "adopted" ? "已采纳" : "待采纳"}
+                                </Badge>
+                                <Button
+                                  size="sm"
+                                  onClick={() => void handleOpenBatch(batch.id)}
+                                >
+                                  打开
+                                </Button>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <p className="section-note">
+                        打开批次可以看它的逐行结果（哪些行有问题、为什么）。
+                        批次详情不给文件表头，所以重新打开的批次改不了列映射——
+                        要改得重新上传原文件。
+                      </p>
+                    </div>
                   </div>
                 ) : (
                   <div className="grid-3">
@@ -1047,6 +1129,13 @@ export function BankWorkbenchPage() {
                 {produceMode === "import" && (parsed || serverImport) ? (
                   <div className="filter-block">
                     <div className="filter-group-label">列映射</div>
+                    {mappingLocked ? (
+                      <p className="section-note">
+                        这个批次是重新打开的：文件表头只在解析当场拿得到，
+                        服务端没有存，所以现在改不了列映射——
+                        要改得重新上传原文件。
+                      </p>
+                    ) : null}
                     <div className="table-wrap">
                       <table className="table">
                         <thead>
@@ -1064,6 +1153,7 @@ export function BankWorkbenchPage() {
                                 <SelectInput
                                   aria-label={`${field.label}来源列`}
                                   value={mapping[field.key] ?? ""}
+                                  disabled={mappingLocked}
                                   onChange={(event) =>
                                     handleMappingChange(field.key, event.target.value)
                                   }

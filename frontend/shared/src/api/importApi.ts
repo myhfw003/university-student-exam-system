@@ -109,6 +109,20 @@ export async function loadImportBatches(
   return { items, total: num(res.total, items.length) };
 }
 
+/**
+ * 读取导入批次详情（含逐行结果与文件表头）。
+ *
+ * 上传后拿到的是**当次**的详情；过一阵再回来看这个批次，
+ * 要靠这个接口重新取——批次的逐行结果存在服务端，不在前端手里。
+ */
+export async function loadImportBatch(
+  id: string,
+  client: ImportClient = httpClient,
+): Promise<ImportBatchDetail> {
+  const res = await client.get<Dto>(`${ENDPOINTS.catalog.imports}/${id}`);
+  return toImportBatchDetail(res);
+}
+
 /** 上传试题文件并解析（服务端给出列映射建议与逐行结果）。 */
 export async function uploadImportBatch(
   file: File,

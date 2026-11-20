@@ -172,6 +172,7 @@ export {
 export {
   adoptImportBatch,
   loadImportBatches,
+  loadImportBatch,
   toImportBatch,
   toImportBatchDetail,
   updateImportMapping,

@@ -31,6 +31,8 @@ const api = {
   uploadQuestionAttachment: vi.fn(),
   updateImportMapping: vi.fn(),
   adoptImportBatch: vi.fn(),
+  loadImportBatches: vi.fn(),
+  loadImportBatch: vi.fn(),
 };
 
 vi.mock("@exam/shared/api", async (importOriginal) => ({
@@ -380,5 +382,75 @@ describe("管理端题库 · HTTP 模式", () => {
         expect.objectContaining({ matchMode: "all" }),
       );
     });
+  });
+
+  it("内容生产：重新打开已有批次能看到逐行结果", async () => {
+    const user = userEvent.setup();
+    const batch = {
+      id: "77",
+      fileName: "2026秋季期中试题汇总.csv",
+      fileType: "csv",
+      status: "parsed",
+      totalRows: 2,
+      validRows: 1,
+      invalidRows: 1,
+      adoptedCount: 0,
+      columnMapping: { stem: "题干" },
+      adoptedBy: null,
+      adoptedAt: null,
+      createdAt: "2026-11-18T08:00:00Z",
+    };
+    api.loadImportBatches.mockResolvedValue({ items: [batch], total: 1 });
+    api.loadImportBatch.mockResolvedValue({
+      batch,
+      // 批次详情**不给文件表头**（后端只在解析当场返回，没存）。
+      headers: [],
+      rows: [
+        {
+          rowNumber: 1,
+          valid: true,
+          errors: [],
+          parsed: JSON.stringify({
+            stem: "重开的批次里的行：TCP 属于哪一层协议？",
+            type: "single",
+            score: 5,
+            options: [],
+          }),
+        },
+        {
+          rowNumber: 2,
+          valid: false,
+          // loadImportBatch 返回的是**已经映射过**的形状：错误明细是字符串数组。
+          errors: ["选项不足"],
+          parsed: "{}",
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/banks/3?tab=produce"]}>
+        <Routes>
+          <Route path="/banks/:bankId" element={<BankWorkbenchPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("2026秋季期中试题汇总.csv")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "打开" }));
+
+    await waitFor(() => {
+      expect(api.loadImportBatch).toHaveBeenCalledWith("77");
+    });
+
+    // 逐行结果回来了：好行与坏行都在。
+    expect(screen.getByText("重开的批次里的行：TCP 属于哪一层协议？")).toBeInTheDocument();
+    expect(screen.getByText("选项不足")).toBeInTheDocument();
+
+    // 表头没有存 → 列映射锁住，并把原因说出来（别让人对着空下拉发呆）。
+    expect(screen.getByText(/文件表头只在解析当场拿得到/)).toBeInTheDocument();
+    expect(screen.getByLabelText("题干来源列")).toBeDisabled();
   });
 });
