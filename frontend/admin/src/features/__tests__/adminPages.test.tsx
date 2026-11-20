@@ -327,6 +327,14 @@ describe("管理端组卷向导", () => {
     expect(screen.getByRole("heading", { name: "答题者卷面预览" })).toBeInTheDocument();
   });
 
+  it("发布步骤展示校验清单与版本历史说明", () => {
+    renderPage(<PaperWizardPage />, "/papers/exam-net-mid?kind=exam&step=publish", "/papers/:paperId");
+    expect(screen.getByText("发布前校验")).toBeInTheDocument();
+    // mock 模式没有「发布」，也就没有冻结的版本：说清楚，不假装有。
+    expect(screen.getByText("版本历史")).toBeInTheDocument();
+    expect(screen.getByText("版本快照在真实后端上")).toBeInTheDocument();
+  });
+
   it("发布步骤展示校验清单", () => {
     renderPage(<PaperWizardPage />, "/papers/exam-net-mid?kind=exam&step=publish", "/papers/:paperId");
     expect(screen.getByText("发布前校验")).toBeInTheDocument();

@@ -673,6 +673,175 @@ export async function previewPaper(
   return toPaperVariant(res);
 }
 
+/* ------------------------------------------------------------------ 快照 */
+
+/**
+ * 快照摘要（版本列表里的一行）。
+ *
+ * 快照是**发布时冻结的一份卷面**：发布一次就是个版本，
+ * 之后改卷不影响已经发出去的版本。
+ */
+export interface PaperSnapshotSummary {
+  id: string;
+  paperId: string;
+  /** 版本号（从 1 起）。 */
+  version: number;
+  /** 内容指纹：同一份内容算出来的哈希。 */
+  contentHash: string;
+  /** 这一版有多少道题。 */
+  itemCount: number;
+  /** 这一版的总分。 */
+  totalScore: number;
+  createdAt: string;
+  createdBy: string | null;
+}
+
+/** 快照里的一道题（冻结内容）。 */
+export interface PaperSnapshotItem {
+  id: string;
+  questionId: string;
+  questionCode: string;
+  questionType: string;
+  stem: string;
+  options: Array<{ key: string; text: string }>;
+  /** 冻结的正确答案键。 */
+  correctKeys: string[];
+  keypoints: Array<{ text: string; keywords: string[] }>;
+  steps: Array<{
+    code: string;
+    prompt: string;
+    referenceAnswer: string | null;
+    keywords: string[];
+    score: number;
+  }>;
+  analysis: string | null;
+  referenceAnswer: string | null;
+  attachments: Array<{
+    objectKey: string;
+    fileName: string;
+    contentType: string;
+    sizeBytes: number;
+  }>;
+  score: number;
+  sortOrder: number;
+  sectionTitle: string | null;
+}
+
+/** 快照详情。 */
+export interface PaperSnapshotDetail extends PaperSnapshotSummary {
+  items: PaperSnapshotItem[];
+}
+
+/** 快照摘要 DTO → 前端口径。 */
+function toPaperSnapshotSummary(dto: Dto): PaperSnapshotSummary {
+  return {
+    id: str(dto.id),
+    paperId: str(dto.paperId),
+    version: num(dto.version),
+    contentHash: str(dto.contentHash),
+    itemCount: num(dto.itemCount),
+    totalScore: num(dto.totalScore),
+    createdAt: str(dto.createdAt),
+    createdBy: dto.createdBy === null || dto.createdBy === undefined ? null : str(dto.createdBy),
+  };
+}
+
+/** 快照里的题目 DTO → 前端口径。 */
+function toPaperSnapshotItem(dto: Dto): PaperSnapshotItem {
+  return {
+    id: str(dto.id),
+    questionId: str(dto.questionId),
+    questionCode: str(dto.questionCode),
+    questionType: str(dto.questionType),
+    stem: str(dto.stem),
+    options: Array.isArray(dto.options)
+      ? (dto.options as Dto[]).map((option) => ({
+          key: str(option.key),
+          text: str(option.text),
+        }))
+      : [],
+    correctKeys: numList(dto.correctKeys),
+    keypoints: Array.isArray(dto.keypoints)
+      ? (dto.keypoints as Dto[]).map((point) => ({
+          text: str(point.text),
+          keywords: numList(point.keywords),
+        }))
+      : [],
+    steps: Array.isArray(dto.steps)
+      ? (dto.steps as Dto[]).map((step) => ({
+          code: str(step.code),
+          prompt: str(step.prompt),
+          referenceAnswer:
+            step.referenceAnswer === null || step.referenceAnswer === undefined
+              ? null
+              : str(step.referenceAnswer),
+          keywords: numList(step.keywords),
+          score: num(step.score),
+        }))
+      : [],
+    analysis: dto.analysis === null || dto.analysis === undefined ? null : str(dto.analysis),
+    referenceAnswer:
+      dto.referenceAnswer === null || dto.referenceAnswer === undefined
+        ? null
+        : str(dto.referenceAnswer),
+    attachments: Array.isArray(dto.attachments)
+      ? (dto.attachments as Dto[]).map((attachment) => ({
+          objectKey: str(attachment.objectKey),
+          fileName: str(attachment.fileName),
+          contentType: str(attachment.contentType),
+          sizeBytes: num(attachment.sizeBytes),
+        }))
+      : [],
+    score: num(dto.score),
+    sortOrder: num(dto.sortOrder),
+    sectionTitle:
+      dto.sectionTitle === null || dto.sectionTitle === undefined ? null : str(dto.sectionTitle),
+  };
+}
+
+/** 快照详情 DTO → 前端口径。 */
+function toPaperSnapshotDetail(dto: Dto): PaperSnapshotDetail {
+  return {
+    ...toPaperSnapshotSummary(dto),
+    items: Array.isArray(dto.items) ? (dto.items as Dto[]).map(toPaperSnapshotItem) : [],
+  };
+}
+
+/**
+ * 读取试卷的版本快照列表（新版本在前）。
+ *
+ * 快照里冻结着正确答案与解析，所以这个接口要的是 `paper:write`——
+ * 只有出题的人能看。
+ */
+export async function loadPaperSnapshots(
+  id: string,
+  client: PaperClient = httpClient,
+): Promise<PaperSnapshotSummary[]> {
+  const res = await client.get<{ items?: Dto[] }>(
+    `${ENDPOINTS.catalog.papers}/${id}/snapshots`,
+  );
+  return (res.items ?? []).map(toPaperSnapshotSummary);
+}
+
+/** 取回指定版本的快照。 */
+export async function loadPaperSnapshot(
+  id: string,
+  version: number,
+  client: PaperClient = httpClient,
+): Promise<PaperSnapshotDetail> {
+  const res = await client.get<Dto>(`${ENDPOINTS.catalog.papers}/${id}/snapshots/${version}`);
+  return toPaperSnapshotDetail(res);
+}
+
+/** 取回最新一版快照。 */
+export async function loadLatestPaperSnapshot(
+  id: string,
+  client: PaperClient = httpClient,
+): Promise<PaperSnapshotDetail> {
+  const res = await client.get<Dto>(`${ENDPOINTS.catalog.papers}/${id}/snapshots/latest`);
+  return toPaperSnapshotDetail(res);
+}
+
 /** 取回试卷的组卷方案。 */
 export async function loadBlueprint(
   id: string,

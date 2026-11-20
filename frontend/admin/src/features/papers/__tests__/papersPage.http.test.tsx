@@ -30,6 +30,9 @@ const api = {
   loadQuestions: vi.fn(),
   loadQuestion: vi.fn(),
   loadQuestionTags: vi.fn(),
+  loadPaperSnapshots: vi.fn(),
+  loadPaperSnapshot: vi.fn(),
+  loadLatestPaperSnapshot: vi.fn(),
 };
 
 vi.mock("@exam/shared/api", async (importOriginal) => ({
@@ -182,6 +185,76 @@ describe("管理端组卷 · HTTP 模式", () => {
     api.loadQuestionTags.mockResolvedValue([
       { id: "1", name: "基础", group: "difficulty", groupLabel: "难度", level: 1 },
     ]);
+    api.loadPaperSnapshots.mockResolvedValue([
+      {
+        id: "5",
+        paperId: "12",
+        version: 2,
+        contentHash: "abcdef0123456789",
+        itemCount: 1,
+        totalScore: 40,
+        createdAt: "2026-11-19T09:00:00Z",
+        createdBy: "3",
+      },
+    ]);
+    api.loadLatestPaperSnapshot.mockResolvedValue({
+      id: "6",
+      paperId: "12",
+      version: 3,
+      contentHash: "beef0123456789ab",
+      itemCount: 1,
+      totalScore: 40,
+      createdAt: "2026-11-20T09:00:00Z",
+      createdBy: "3",
+      items: [
+        {
+          id: "31",
+          questionId: "5",
+          questionCode: "Q-5",
+          questionType: "single",
+          stem: "当前生效版本里的题目",
+          options: [{ key: "B", text: "网络层" }],
+          correctKeys: ["B"],
+          keypoints: [],
+          steps: [],
+          analysis: null,
+          referenceAnswer: null,
+          attachments: [],
+          score: 40,
+          sortOrder: 1,
+          sectionTitle: null,
+        },
+      ],
+    });
+    api.loadPaperSnapshot.mockResolvedValue({
+      id: "5",
+      paperId: "12",
+      version: 2,
+      contentHash: "abcdef0123456789",
+      itemCount: 1,
+      totalScore: 40,
+      createdAt: "2026-11-19T09:00:00Z",
+      createdBy: "3",
+      items: [
+        {
+          id: "30",
+          questionId: "5",
+          questionCode: "Q-5",
+          questionType: "single",
+          stem: "TCP 属于哪一层协议？",
+          options: [{ key: "A", text: "传输层" }],
+          correctKeys: ["A"],
+          keypoints: [],
+          steps: [],
+          analysis: "传输层负责端到端传输。",
+          referenceAnswer: null,
+          attachments: [],
+          score: 40,
+          sortOrder: 1,
+          sectionTitle: null,
+        },
+      ],
+    });
   });
 
   it("组卷清单显示服务端试卷与题量", async () => {
@@ -289,5 +362,42 @@ describe("管理端组卷 · HTTP 模式", () => {
       expect(api.publishPaper).toHaveBeenCalledTimes(1);
     });
     expect(api.publishPaper.mock.calls[0]![1]).toContain("本次侧重主观题作答能力");
+  });
+
+  it("版本历史：能打开某一版快照看冻结的卷面", async () => {
+    const user = userEvent.setup();
+    renderWizard("publish");
+
+    await waitFor(() => {
+      expect(screen.getByText("第 2 版")).toBeInTheDocument();
+    });
+
+    const row = screen.getByText("第 2 版").closest("tr")!;
+    await user.click(within(row).getByRole("button", { name: "查看" }));
+
+    await waitFor(() => {
+      expect(api.loadPaperSnapshot).toHaveBeenCalledWith("12", 2);
+    });
+
+    // 冻结的题目与正确答案都在弹窗里。
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("TCP 属于哪一层协议？")).toBeInTheDocument();
+    expect(within(dialog).getByText("A")).toBeInTheDocument();
+  });
+
+  it("当前生效版本：走 /snapshots/latest", async () => {
+    const user = userEvent.setup();
+    renderWizard("publish");
+
+    await waitFor(() => {
+      expect(screen.getByText("第 2 版")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "查看当前生效版本" }));
+
+    await waitFor(() => {
+      expect(api.loadLatestPaperSnapshot).toHaveBeenCalledWith("12");
+    });
+    expect(screen.getByText("当前生效版本里的题目")).toBeInTheDocument();
   });
 });

@@ -21,7 +21,10 @@ import {
   createPaper as createRemotePaper,
   deletePaper as deleteRemotePaper,
   isBackendEnabled,
+  loadLatestPaperSnapshot,
   loadPaper,
+  loadPaperSnapshot,
+  loadPaperSnapshots,
   loadPapers,
   loadQuestion,
   loadQuestions,
@@ -30,6 +33,8 @@ import {
   unpublishPaper,
   updatePaper,
   type AdminPaperDetail,
+  type PaperSnapshotDetail,
+  type PaperSnapshotSummary,
 } from "@exam/shared/api";
 import type {
   ExamPaper,
@@ -764,4 +769,74 @@ export function usePickedQuestions(ids: readonly string[]): Record<string, PoolQ
     }
     return remoteDetails;
   }, [remote, mockQuestions, remoteDetails]);
+}
+
+/* -------------------------------------------------------------- 版本快照 */
+
+/**
+ * 试卷的版本快照。
+ *
+ * 快照是**发布时冻结的一份卷面**：发布一次就是一个版本，
+ * 之后改卷不影响已经发出去的版本。快照里冻结着正确答案与解析，
+ * 所以这个接口要的是 `paper:write`——只有出题的人能看。
+ *
+ * mock 模式没有这个概念（mock 里没有「发布」这一步，也就没有版本），
+ * 所以返回空列表。
+ */
+export function usePaperSnapshots(paperId: string): {
+  snapshots: PaperSnapshotSummary[];
+  loading: boolean;
+  refresh: () => void;
+} {
+  const remote = isBackendEnabled();
+  const [snapshots, setSnapshots] = useState<PaperSnapshotSummary[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [token, setToken] = useState(0);
+
+  useEffect(() => {
+    if (!remote || !paperId) return;
+    let cancelled = false;
+
+    void (async () => {
+      setLoading(true);
+      try {
+        const list = await loadPaperSnapshots(paperId);
+        if (!cancelled) setSnapshots(list);
+      } catch {
+        if (!cancelled) setSnapshots([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [remote, paperId, token]);
+
+  const refresh = useCallback(() => setToken((value) => value + 1), []);
+
+  return { snapshots: remote ? snapshots : [], loading, refresh };
+}
+
+/** 取回某一版快照的冻结内容（mock 模式没有快照，返回 null）。 */
+export async function fetchPaperSnapshot(
+  paperId: string,
+  version: number,
+): Promise<PaperSnapshotDetail | null> {
+  if (!isBackendEnabled()) return null;
+  return loadPaperSnapshot(paperId, version);
+}
+
+/**
+ * 取回**当前生效**的那一版快照（学生拿到的那一版）。
+ *
+ * 与「按版本号取」分开：当前生效版本由服务端说了算，
+ * 前端不自己猜它是第几版。
+ */
+export async function fetchLatestPaperSnapshot(
+  paperId: string,
+): Promise<PaperSnapshotDetail | null> {
+  if (!isBackendEnabled()) return null;
+  return loadLatestPaperSnapshot(paperId);
 }

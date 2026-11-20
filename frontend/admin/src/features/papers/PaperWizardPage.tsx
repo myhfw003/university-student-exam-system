@@ -43,6 +43,7 @@ import {
   saveBlueprint,
   validatePaper,
   type AdminPaperTemplate,
+  type PaperSnapshotDetail,
   type PaperValidation,
   type PaperVariant,
 } from "@exam/shared/api";
@@ -81,8 +82,11 @@ import { PaperVariantTable } from "../shared/PaperVariantTable";
 import { MultiSelect } from "../shared/MultiSelect";
 import { useCatalogTags } from "../shared/useCatalogTags";
 import {
+  fetchLatestPaperSnapshot,
+  fetchPaperSnapshot,
   useAdminPaper,
   usePaperQuestionPool,
+  usePaperSnapshots,
   usePickedQuestions,
 } from "./useAdminPapers";
 
@@ -216,6 +220,30 @@ export function PaperWizardPage() {
     publish: publishRemote,
     unpublish: unpublishRemote,
   } = useAdminPaper(paperId);
+
+  // 版本快照：发布一次冻结一版卷面，改卷不影响已经发出去的版本。
+  const { snapshots, refresh: refreshSnapshots } = usePaperSnapshots(paperId);
+  const [snapshotDetail, setSnapshotDetail] = useState<PaperSnapshotDetail | null>(null);
+
+  /** 打开某一版快照，看冻结下来的卷面。 */
+  const openSnapshot = async (version: number) => {
+    try {
+      const detail = await fetchPaperSnapshot(paperId, version);
+      if (detail) setSnapshotDetail(detail);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "快照加载失败");
+    }
+  };
+
+  /** 打开当前生效的那一版（学生实际拿到的那份卷面）。 */
+  const openLatestSnapshot = async () => {
+    try {
+      const detail = await fetchLatestPaperSnapshot(paperId);
+      if (detail) setSnapshotDetail(detail);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "快照加载失败");
+    }
+  };
 
   // 新建：先落库再跳转，避免向导里出现「没有对象」的中间态。
   useEffect(() => {
@@ -970,6 +998,8 @@ export function PaperWizardPage() {
               .join("；")
           : undefined;
         await publishRemote(reason);
+        // 发布即冻结一版卷面，版本列表要跟着更新。
+        refreshSnapshots();
         setOverrideOpen(false);
         toast.ok(kind === "exam" ? "试卷已发布，答题端可见" : "练习已上架，答题端可见");
         return;
@@ -1913,6 +1943,66 @@ export function PaperWizardPage() {
                 请先修正上述问题，发布按钮在全部校验通过后才会启用。
               </Callout>
             ) : null}
+
+            {/* 版本历史：发布一次冻结一版卷面。 */}
+            <div className="row" style={{ marginTop: "var(--sp-5)" }}>
+              <h3 className="section-title" style={{ marginTop: 0 }}>
+                版本历史
+              </h3>
+              <div className="spacer" />
+              <Button
+                size="sm"
+                disabled={snapshots.length === 0}
+                onClick={() => void openLatestSnapshot()}
+              >
+                查看当前生效版本
+              </Button>
+            </div>
+            {remote ? (
+              snapshots.length === 0 ? (
+                <p className="section-note" style={{ marginTop: "var(--sp-2)" }}>
+                  还没有版本。发布一次就冻结一版卷面——之后改卷不影响已经发出去的版本。
+                </p>
+              ) : (
+                <div className="table-wrap" style={{ marginTop: "var(--sp-2)" }}>
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th scope="col">版本</th>
+                        <th scope="col">题量</th>
+                        <th scope="col">总分</th>
+                        <th scope="col">冻结时间</th>
+                        <th scope="col">内容指纹</th>
+                        <th scope="col"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {snapshots.map((snap) => (
+                        <tr key={snap.id}>
+                          <td>第 {snap.version} 版</td>
+                          <td className="num">{snap.itemCount}</td>
+                          <td className="num">{snap.totalScore}</td>
+                          <td className="text-xs">{snap.createdAt}</td>
+                          <td className="text-xs mono">{snap.contentHash.slice(0, 12)}</td>
+                          <td className="col-actions">
+                            <Button size="sm" onClick={() => void openSnapshot(snap.version)}>
+                              查看
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            ) : (
+              <div style={{ marginTop: "var(--sp-2)" }}>
+                <Callout icon={<Icon name="info" />} title="版本快照在真实后端上">
+                  mock 模式没有「发布」这一步，也就没有冻结的版本；
+                  真实后端每发布一次就冻结一版卷面，改卷不影响已发布的版本。
+                </Callout>
+              </div>
+            )}
           </div>
           <div className="card-foot">
             <Button onClick={() => goStep("plum")}>上一步 · 卷型</Button>{" "}
@@ -1928,6 +2018,47 @@ export function PaperWizardPage() {
           </div>
         </section>
       ) : null}
+
+      {/* 某一版快照的冻结卷面。 */}
+      <Dialog
+        open={snapshotDetail !== null}
+        onClose={() => setSnapshotDetail(null)}
+        title={snapshotDetail ? `第 ${snapshotDetail.version} 版卷面（冻结于 ${snapshotDetail.createdAt}）` : ""}
+        footer={
+          <Button variant="secondary" onClick={() => setSnapshotDetail(null)}>
+            关闭
+          </Button>
+        }
+      >
+        {snapshotDetail ? (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">#</th>
+                  <th scope="col">题号</th>
+                  <th scope="col">题干</th>
+                  <th scope="col">题型</th>
+                  <th scope="col">分值</th>
+                  <th scope="col">正确答案</th>
+                </tr>
+              </thead>
+              <tbody>
+                {snapshotDetail.items.map((item) => (
+                  <tr key={item.id}>
+                    <td className="num">{item.sortOrder}</td>
+                    <td className="text-xs mono">{item.questionCode}</td>
+                    <td>{item.stem}</td>
+                    <td>{item.questionType}</td>
+                    <td className="num">{item.score}</td>
+                    <td className="mono">{item.correctKeys.join("、") || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </Dialog>
 
       {/* --------------------------------------------------- 一键出卷 */}
       <ConfirmDialog
