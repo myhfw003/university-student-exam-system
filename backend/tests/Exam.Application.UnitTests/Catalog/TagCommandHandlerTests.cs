@@ -19,6 +19,7 @@ public sealed class TagCommandHandlerTests
     private readonly ICurrentUser _currentUser = Substitute.For<ICurrentUser>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IUserTagRepository _userTags = Substitute.For<IUserTagRepository>();
+    private readonly IAuditRecorder _audit = Substitute.For<IAuditRecorder>();
 
     /// <summary>给标签赋主键，模拟已持久化的实体。</summary>
     private static Tag WithId(Tag tag, long id)
@@ -29,7 +30,7 @@ public sealed class TagCommandHandlerTests
         return tag;
     }
 
-    private CreateTagHandler CreateHandler() => new(_tags, _clock, _currentUser, _unitOfWork);
+    private CreateTagHandler CreateHandler() => new(_tags, _clock, _currentUser, _unitOfWork, _audit);
 
     private UpdateTagHandler UpdateHandler() => new(_tags, _clock, _currentUser);
 
