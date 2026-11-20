@@ -126,6 +126,42 @@ export async function loadAdminTags(client: TagClient = httpClient): Promise<Adm
   return tags.map(toAdminTag);
 }
 
+/** 标签子树（后代，含子孙）。 */
+export interface TagDescendants {
+  /** 根标签 ID。 */
+  rootId: string;
+  /** 后代标签 ID。 */
+  ids: string[];
+  /** 后代标签。 */
+  tags: AdminTag[];
+}
+
+/**
+ * 展开标签的全部后代（含子孙）。
+ *
+ * 标签是树：同维度内可设父标签（领域 → 知识点、能力 → 子能力）。
+ * 这份子树由服务端给——前端本地按 `parentId` 推只是「按列表推」，
+ * 标签列表被筛选过的时候就不准了。
+ *
+ * `includeSelf` 默认**不把自己算进去**：调用方要的多半是「这个标签底下
+ * 挂着谁」，把自己列进去会重复。（服务端接口的默认值是包含自己。）
+ */
+export async function loadTagDescendants(
+  id: string,
+  options: { includeSelf?: boolean } = {},
+  client: TagClient = httpClient,
+): Promise<TagDescendants> {
+  const res = await client.get<{ rootId?: Dto; ids?: Dto[]; tags?: Dto[] }>(
+    `${ENDPOINTS.catalog.tags}/${id}/descendants`,
+    { query: { includeSelf: options.includeSelf === true ? "true" : "false" } },
+  );
+  return {
+    rootId: str(res.rootId),
+    ids: Array.isArray(res.ids) ? res.ids.map((value) => str(value)) : [],
+    tags: Array.isArray(res.tags) ? res.tags.map(toAdminTag) : [],
+  };
+}
+
 /** 新建标签。 */
 export async function createAdminTag(
   input: {

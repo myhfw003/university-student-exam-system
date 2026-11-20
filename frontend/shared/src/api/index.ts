@@ -196,11 +196,13 @@ export {
   deleteAdminTag,
   loadAdminTags,
   loadQuestionTags,
+  loadTagDescendants,
   toAdminTag,
   updateAdminTag,
   type AdminTag,
   type QuestionTag,
   type TagClient,
+  type TagDescendants,
 } from "./tagApi";
 export {
   assignUserRoles,

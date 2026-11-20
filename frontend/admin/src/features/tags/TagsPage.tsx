@@ -30,7 +30,7 @@ import { deriveTagCode, useAdminTags, type TagRow } from "./useAdminTags";
 /** 标签管理页。 */
 export function TagsPage() {
   const remote = isBackendEnabled();
-  const { tags, create, update, remove } = useAdminTags();
+  const { tags, create, update, remove, descendants } = useAdminTags();
 
   const [editing, setEditing] = useState<TagRow | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -39,8 +39,38 @@ export function TagsPage() {
   const [code, setCode] = useState("");
   const [parentId, setParentId] = useState("");
   const [pendingDelete, setPendingDelete] = useState<TagRow | null>(null);
+  /** 正在看子标签的标签；null = 没打开。 */
+  const [subtreeTag, setSubtreeTag] = useState<TagRow | null>(null);
+  const [subtreeRows, setSubtreeRows] = useState<TagRow[]>([]);
+  const [subtreeLoading, setSubtreeLoading] = useState(false);
 
   const totalUsage = tags.reduce((sum, tag) => sum + tag.usageCount, 0);
+
+  /** 这个标签下面有没有子标签（直接子标签）。 */
+  const hasChildren = (tag: TagRow): boolean => tags.some((item) => item.parentId === tag.id);
+
+  /** 标签 ID → 名称（父标签那一列用）。 */
+  const nameOf = (id: string | null): string =>
+    tags.find((item) => item.id === id)?.name ?? "—";
+
+  /**
+   * 打开某个标签的子树。
+   *
+   * 删除带子标签的标签会被服务端拒（「下仍有子标签，请先移除子标签」），
+   * 但那句话不说是哪些——这里把它们列出来，管理员才知道先删哪个。
+   */
+  const openSubtree = async (tag: TagRow) => {
+    setSubtreeTag(tag);
+    setSubtreeRows([]);
+    setSubtreeLoading(true);
+    try {
+      setSubtreeRows(await descendants(tag.id));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "读取子标签失败");
+    } finally {
+      setSubtreeLoading(false);
+    }
+  };
 
   // 上级标签只能取同一维度里的标签（维度隔离）。
   const parentOptions = useMemo(
@@ -181,6 +211,13 @@ export function TagsPage() {
                             {showBreakdown ? <td className="num">{usage?.practices ?? 0}</td> : null}
                             <td className="num">{tag.usageCount}</td>
                             <td className="col-actions">
+                              {hasChildren(tag) ? (
+                                <>
+                                  <Button size="sm" onClick={() => void openSubtree(tag)}>
+                                    子标签
+                                  </Button>{" "}
+                                </>
+                              ) : null}
                               <Button size="sm" onClick={() => openEdit(tag)}>
                                 编辑
                               </Button>{" "}
@@ -301,6 +338,46 @@ export function TagsPage() {
               : ""}
           </p>
         ) : null}
+      </Dialog>
+
+      {/* 子标签：这个标签下面挂着哪些标签（含子孙）。 */}
+      <Dialog
+        open={subtreeTag !== null}
+        onClose={() => setSubtreeTag(null)}
+        title={subtreeTag ? `「${subtreeTag.name}」下面挂着的标签` : ""}
+        footer={
+          <Button variant="secondary" onClick={() => setSubtreeTag(null)}>
+            关闭
+          </Button>
+        }
+      >
+        {subtreeLoading ? <p className="section-note">读取子标签…</p> : null}
+        {subtreeRows.length > 0 ? (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">标签</th>
+                  <th scope="col">编码</th>
+                  <th scope="col">父标签</th>
+                  <th scope="col">挂载</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subtreeRows.map((row) => (
+                  <tr key={row.id}>
+                    <td>{row.name}</td>
+                    <td className="text-xs mono">{row.code || "—"}</td>
+                    <td>{nameOf(row.parentId)}</td>
+                    <td className="num">{row.usageCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : subtreeLoading ? null : (
+          <p className="section-note">这个标签下面没有子标签。</p>
+        )}
       </Dialog>
 
       <ConfirmDialog

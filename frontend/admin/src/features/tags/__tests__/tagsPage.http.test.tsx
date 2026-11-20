@@ -6,7 +6,7 @@
    ========================================================================== */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
@@ -16,6 +16,7 @@ const api = {
   createAdminTag: vi.fn(),
   updateAdminTag: vi.fn(),
   deleteAdminTag: vi.fn(),
+  loadTagDescendants: vi.fn(),
 };
 
 vi.mock("@exam/shared/api", async (importOriginal) => ({
@@ -54,6 +55,21 @@ const TAGS = [
     isSystem: true,
     usageCount: 30,
   },
+  // 「极限与连续」的子标签：删除带子标签的标签会被服务端拒，
+  // 管理员得先看得见底下挂着谁。
+  {
+    id: "3",
+    code: "domain.极限的定义",
+    name: "极限的定义",
+    group: "domain",
+    groupLabel: "领域",
+    parentId: "1",
+    level: null,
+    description: "",
+    sortOrder: 0,
+    isSystem: false,
+    usageCount: 4,
+  },
 ];
 
 describe("管理端标签页 · HTTP 模式", () => {
@@ -63,6 +79,7 @@ describe("管理端标签页 · HTTP 模式", () => {
     api.createAdminTag.mockResolvedValue(TAGS[0]);
     api.updateAdminTag.mockResolvedValue(TAGS[0]);
     api.deleteAdminTag.mockResolvedValue(undefined);
+    api.loadTagDescendants.mockResolvedValue({ rootId: "1", ids: ["3"], tags: [TAGS[2]] });
   });
 
   function renderPage() {
@@ -123,6 +140,30 @@ describe("管理端标签页 · HTTP 模式", () => {
     const payload = api.createAdminTag.mock.calls[0]![0];
     expect(payload.group).toBe("difficulty");
     expect(payload.level).toBe(3);
+  });
+
+  it("能看一个标签下面挂着哪些子标签（含子孙）", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("domain.极限的定义")).toBeInTheDocument();
+    });
+
+    // 只有带子标签的那一行才有「子标签」入口。
+    const row = screen.getByText("domain.极限与连续").closest("tr")!;
+    await user.click(within(row).getByRole("button", { name: "子标签" }));
+
+    await waitFor(() => {
+      // 要「底下挂着谁」，所以不含它自己。
+      expect(api.loadTagDescendants).toHaveBeenCalledWith("1", { includeSelf: false });
+    });
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("极限的定义")).toBeInTheDocument();
+    expect(within(dialog).getByText("domain.极限的定义")).toBeInTheDocument();
+    // 父标签那一列说清楚它挂在谁下面。
+    expect(within(dialog).getByText("极限与连续")).toBeInTheDocument();
   });
 
   it("删除标签先二次确认，再调用服务端", async () => {

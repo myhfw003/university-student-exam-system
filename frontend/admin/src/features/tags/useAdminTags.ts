@@ -19,6 +19,7 @@ import {
   deleteAdminTag,
   isBackendEnabled,
   loadAdminTags,
+  loadTagDescendants,
   updateAdminTag,
 } from "@exam/shared/api";
 import { DIFFICULTY_LABEL } from "@exam/shared/engine/paper";
@@ -41,6 +42,8 @@ export interface TagRow {
   group: TagGroup;
   /** 难度等级；只有难度维度有。 */
   level: number | null;
+  /** 父标签；顶级为 null。 */
+  parentId: string | null;
   /** 挂载总数。 */
   usageCount: number;
   /** 按对象的挂载明细；真实后端只给总数，这里为空。 */
@@ -85,6 +88,8 @@ export function useAdminTags(): {
     parentId?: string | null;
   }) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  /** 这个标签下面挂着哪些标签（子树，含子孙）。 */
+  descendants: (id: string) => Promise<TagRow[]>;
 } {
   const remote = isBackendEnabled();
   const mockTags = useCatalog((state) => state.tags);
@@ -108,6 +113,7 @@ export function useAdminTags(): {
             name: tag.name,
             group: tag.group,
             level: tag.level,
+            parentId: tag.parentId,
             usageCount: tag.usageCount,
             breakdown: null,
           })),
@@ -133,6 +139,7 @@ export function useAdminTags(): {
           name: tag.name,
           group: tag.group,
           level: tag.level ?? null,
+          parentId: tag.parentId ?? null,
           usageCount: usage.total,
           breakdown: {
             questions: usage.questions,
@@ -213,6 +220,50 @@ export function useAdminTags(): {
     [remote, refresh],
   );
 
+  /**
+   * 标签子树。
+   *
+   * HTTP 模式问服务端（权威）；mock 模式在本地内容仓库里按 parentId 推——
+   * 同一套形状，页面不感知。
+   */
+  const descendants = useCallback(
+    async (id: string): Promise<TagRow[]> => {
+      if (remote) {
+        // 要「这个标签底下挂着谁」，不含它自己（服务端接口的默认值是包含自己）。
+        const subtree = await loadTagDescendants(id, { includeSelf: false });
+        return subtree.tags.map((tag) => ({
+          id: tag.id,
+          code: tag.code,
+          name: tag.name,
+          group: tag.group,
+          level: tag.level,
+          parentId: tag.parentId,
+          usageCount: tag.usageCount,
+          breakdown: null,
+        }));
+      }
+      // 本地推：父 → 子 → 孙。用访问过的集合防环。
+      const childrenOf = new Map<string, string[]>();
+      for (const tag of mockTags) {
+        if (!tag.parentId) continue;
+        const list = childrenOf.get(tag.parentId) ?? [];
+        list.push(tag.id);
+        childrenOf.set(tag.parentId, list);
+      }
+      const ids: string[] = [];
+      const walk = (parentId: string) => {
+        for (const childId of childrenOf.get(parentId) ?? []) {
+          if (ids.includes(childId)) continue;
+          ids.push(childId);
+          walk(childId);
+        }
+      };
+      walk(id);
+      return mockRows.filter((row) => ids.includes(row.id));
+    },
+    [remote, mockTags, mockRows],
+  );
+
   return {
     tags: remote ? remoteTags : mockRows,
     loading,
@@ -220,5 +271,6 @@ export function useAdminTags(): {
     create,
     update,
     remove,
+    descendants,
   };
 }
