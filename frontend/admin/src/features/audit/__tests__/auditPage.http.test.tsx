@@ -27,8 +27,8 @@ const { AuditLogPage } = await import("../AuditLogPage");
 const LOGS = {
   items: [
     {
-      id: "997",
-      at: "2026-11-18T08:06:17Z",
+      id: "998",
+      at: "2026-11-18T08:07:00Z",
       operatorId: "1",
       operator: "admin",
       action: "user.import-roster",
@@ -39,11 +39,35 @@ const LOGS = {
       userAgent: "Chrome 131",
     },
     {
+      id: "997",
+      at: "2026-11-18T08:06:17Z",
+      operatorId: "1",
+      operator: "admin",
+      action: "entity.user.updated",
+      targetType: "user",
+      targetId: "32",
+      summary: '{"entity": "user", "changes": [{"field": "DisplayName"}]}',
+      ip: "127.0.0.1",
+      userAgent: "Chrome 131",
+    },
+    {
+      id: "996",
+      at: "2026-11-18T08:05:30Z",
+      operatorId: "1",
+      operator: "admin",
+      action: "legacy.old_action",
+      targetType: "user",
+      targetId: "32",
+      summary: "前端不认识的旧动作码",
+      ip: "127.0.0.1",
+      userAgent: "Chrome 131",
+    },
+    {
       id: "996",
       at: "2026-11-18T08:05:00Z",
       operatorId: "2",
       operator: "陈砚之",
-      action: "user.role_changed",
+      action: "user.assign-roles",
       targetType: "user",
       targetId: "32",
       summary: "为「林知遥」调整角色",
@@ -51,7 +75,7 @@ const LOGS = {
       userAgent: "Chrome 131",
     },
   ],
-  total: 2,
+  total: 4,
 };
 
 function renderPage() {
@@ -79,8 +103,12 @@ describe("管理端审计页 · HTTP 模式", () => {
 
     // 登记过的动作给中文名（筛选项与徽标上都有）。
     expect(screen.getAllByText("变更角色").length).toBeGreaterThan(0);
-    // 没登记过的动作原样显示动作码，不能显示成空白。
-    expect(screen.getByText("user.import-roster")).toBeInTheDocument();
+    // 导入名单也是后端真写出来的动作码，有中文名。
+    expect(screen.getAllByText("导入人员名单").length).toBeGreaterThan(0);
+    // 实体字段自动留痕（entity.<类型>.updated）也认得出来。
+    expect(screen.getAllByText("自动留痕：更新用户").length).toBeGreaterThan(0);
+    // 完全不认识的动作码原样显示，不能显示成空白。
+    expect(screen.getByText("legacy.old_action")).toBeInTheDocument();
     // IP 与 UA 在同一个单元格里（中间有换行），按文本片段找。
     expect(screen.getByText(/10\.12\.0\.21/)).toBeInTheDocument();
   });
@@ -93,11 +121,12 @@ describe("管理端审计页 · HTTP 模式", () => {
       expect(api.loadAuditLogs).toHaveBeenCalled();
     });
 
-    await user.click(screen.getByRole("button", { name: "变更角色" }));
+    // 动作筛选是下拉：选中「变更角色」后把动作码交给服务端。
+    await user.selectOptions(screen.getByLabelText("动作筛选"), "user.assign-roles");
 
     await waitFor(() => {
       const last = api.loadAuditLogs.mock.calls.at(-1)![0];
-      expect(last.action).toBe("user.role_changed");
+      expect(last.action).toBe("user.assign-roles");
     });
   });
 
@@ -115,7 +144,7 @@ describe("管理端审计页 · HTTP 模式", () => {
     await waitFor(() => {
       expect(screen.queryByText("为「林知遥」调整角色")).not.toBeInTheDocument();
     });
-    expect(screen.getByText("user.import-roster")).toBeInTheDocument();
+    expect(screen.getAllByText("导入人员名单").length).toBeGreaterThan(0);
     // 服务端请求参数里没有操作者——后端按 ID 筛，页面上选的是名字。
     const last = api.loadAuditLogs.mock.calls.at(-1)![0];
     expect(last.operatorId).toBeUndefined();
@@ -224,7 +253,7 @@ describe("管理端审计页 · 登录审计", () => {
       expect(api.loadAuditLogs).toHaveBeenCalled();
     });
 
-    await user.click(screen.getByRole("button", { name: "登录失败" }));
+    await user.selectOptions(screen.getByLabelText("动作筛选"), "auth.login_failed");
 
     await waitFor(() => {
       const last = api.loadAuditLogs.mock.calls.at(-1)![0];

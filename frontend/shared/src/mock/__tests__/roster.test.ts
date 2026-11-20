@@ -174,7 +174,7 @@ describe("roster · 导入", () => {
     const checked = validateRosterRows([row()]);
     importRoster(checked);
     const logs = useAdminOps.getState().auditLogs;
-    expect(logs[0]?.action).toBe("data.import");
+    expect(logs[0]?.action).toBe("user.import-roster");
     expect(logs[0]?.summary).toMatch(/批量导入人员名单/);
   });
 

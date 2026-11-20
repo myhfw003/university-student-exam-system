@@ -12,7 +12,6 @@ import { create } from "zustand";
 import type {
   AntiCheatPolicy,
   AppUser,
-  AuditAction,
   AuditLog,
   CandidateStatus,
   ExamSession,
@@ -72,31 +71,6 @@ export const CANDIDATE_STATUS_LABEL: Record<CandidateStatus, string> = {
   submitted: "已交卷",
   forced_submitted: "已强制交卷",
   disconnected: "断连中",
-};
-
-/** 审计动作中文名。 */
-export const AUDIT_ACTION_LABEL: Record<AuditAction, string> = {
-  "auth.login": "登录成功",
-  "auth.login_failed": "登录失败",
-  "auth.refresh_reuse": "刷新令牌异常使用",
-  "auth.logout": "登出",
-  "tag.create": "新建标签",
-  "user.update": "修改用户",
-  "user.role_changed": "变更角色",
-  "user.tag_changed": "变更用户标签",
-  "user.password_reset": "重置用户密码",
-  "question.publish": "发布题目",
-  "question.disable": "停用题目",
-  "question.delete": "删除题目",
-  "paper.publish": "发布试卷",
-  "paper.unpublish": "撤回试卷",
-  "session.publish": "发布场次",
-  "session.cancel": "取消场次",
-  "attempt.force_submit": "强制交卷",
-  "grade.publish": "发布成绩",
-  "grade.modify": "修改成绩",
-  "data.import": "数据导入",
-  "blueprint.generate": "规则生成",
 };
 
 /** 监考处置中文名。 */
@@ -320,7 +294,7 @@ function buildAuditLogs(): AuditLog[] {
     {
       at: "2026-11-11 16:42",
       operator: "陈砚之",
-      action: "session.publish",
+      action: "exam_session.publish",
       targetType: "exam_session",
       targetId: "sess-ds-quiz",
       summary: "发布场次「数据结构随堂测验 · 第 2 场」，物化名单 6 人",
@@ -350,7 +324,7 @@ function buildAuditLogs(): AuditLog[] {
     {
       at: "2026-11-10 09:26",
       operator: "陈砚之",
-      action: "data.import",
+      action: "import.adopt",
       targetType: "import_batch",
       targetId: "imp-2026-11-10-01",
       summary: "采纳导入批次「2026秋季期中试题汇总.csv」，入库 3 道候选题",
@@ -360,7 +334,7 @@ function buildAuditLogs(): AuditLog[] {
     {
       at: "2026-11-10 10:11",
       operator: "陈砚之",
-      action: "data.import",
+      action: "import.adopt",
       targetType: "generation_batch",
       targetId: "gen-2026-11-10-01",
       summary: "采纳生成批次「围绕数据结构中的排序与树结构生成基础选择题」，入库 3 道候选题",
@@ -370,7 +344,7 @@ function buildAuditLogs(): AuditLog[] {
     {
       at: "2026-11-09 11:30",
       operator: "陈砚之",
-      action: "grade.publish",
+      action: "exam_session.publish_grades",
       targetType: "exam_session",
       targetId: "exam-math-final",
       summary: "发布「高等数学期末考试」成绩，12 人平均 74.8 分",
@@ -380,7 +354,7 @@ function buildAuditLogs(): AuditLog[] {
     {
       at: "2026-11-09 10:14",
       operator: "何知微",
-      action: "grade.modify",
+      action: "review_task.grade",
       targetType: "review",
       targetId: "rv-1",
       summary: "主观题「连续与可导的关系」评分由 6 调整为 8（附评语）",
@@ -390,7 +364,7 @@ function buildAuditLogs(): AuditLog[] {
     {
       at: "2026-11-08 09:05",
       operator: "陈砚之",
-      action: "user.role_changed",
+      action: "user.assign-roles",
       targetType: "user",
       targetId: "u-reviewer-01",
       summary: "为「何知微」授予角色「阅卷教师」",
@@ -400,7 +374,7 @@ function buildAuditLogs(): AuditLog[] {
     {
       at: "2026-11-07 17:22",
       operator: "陈砚之",
-      action: "user.tag_changed",
+      action: "user.assign-tags",
       targetType: "user",
       targetId: "u-2023120101",
       summary: "为「林知远」挂载组织标签「计算机科学 2023 级 1 班」",

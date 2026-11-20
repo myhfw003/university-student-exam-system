@@ -99,7 +99,7 @@ export function UsersPage() {
   const { setRoles, setStatus, setOrgTags } = useAdminUserActions({
     roleIdOf: (code) => byCode[code]?.id ?? "",
     refresh,
-    audit: (userId, summary) => writeUserAudit(userId, summary),
+    audit: (userId, summary, action) => writeUserAudit(userId, summary, action),
   });
 
   const activeCount = rows.filter((u) => u.status === "active").length;

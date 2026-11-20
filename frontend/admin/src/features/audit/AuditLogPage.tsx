@@ -9,8 +9,8 @@
    ========================================================================== */
 
 import { useMemo, useState } from "react";
-import { Badge, Empty, PageHead, SearchInput, Segmented, TextInput } from "@exam/shared";
-import { AUDIT_ACTION_LABEL } from "@exam/shared/mock/adminOps";
+import { Badge, Empty, Field, PageHead, SearchInput, Segmented, SelectInput, TextInput } from "@exam/shared";
+import { AUDIT_ACTION_GROUPS, AUDIT_ACTION_LABEL } from "@exam/shared/domain/audit";
 import type { AuditAction } from "@exam/shared/domain/types";
 import { useAuditLogs } from "./useAuditLogs";
 
@@ -58,18 +58,25 @@ export function AuditLogPage() {
             />
           </div>
           <div className="row" style={{ marginBottom: "var(--sp-3)" }}>
-            <Segmented
-              label="动作筛选"
-              value={action}
-              onChange={setAction}
-              options={[
-                { value: "all" as const, label: "全部动作" },
-                ...(Object.keys(AUDIT_ACTION_LABEL) as AuditAction[]).map((a) => ({
-                  value: a,
-                  label: AUDIT_ACTION_LABEL[a],
-                })),
-              ]}
-            />
+            {/* 69 个动作塞不进分段控件，按业务域分组下拉。 */}
+            <Field label="动作筛选" htmlFor="audit-action">
+              <SelectInput
+                id="audit-action"
+                value={action}
+                onChange={(event) => setAction(event.target.value as "all" | AuditAction)}
+              >
+                <option value="all">全部动作</option>
+                {AUDIT_ACTION_GROUPS.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.actions.map((code) => (
+                      <option key={code} value={code}>
+                        {AUDIT_ACTION_LABEL[code]}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </SelectInput>
+            </Field>
           </div>
           <div className="row">
             <SearchInput

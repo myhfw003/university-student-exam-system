@@ -200,7 +200,7 @@ export function ProctoringPage() {
 
     writeAudit({
       operator: "陈砚之",
-      action: "attempt.force_submit",
+      action: "proctor_action.create",
       targetType: "exam_session",
       targetId: session.id,
       summary: `对考生「${displayName}」执行${PROCTOR_ACTION_LABEL[dialog.kind]}${

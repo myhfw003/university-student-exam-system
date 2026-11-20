@@ -50,6 +50,10 @@ jobs:
           if grep -q '"vulnerabilities": \[{' vulnerabilities.json; then
             echo "检测到高危漏洞"; cat vulnerabilities.json; exit 1
           fi
+      - name: 审计动作码前后端一致
+        # 前端登记的动作码必须与后端真正写出来的那些一致，
+        # 否则审计页上一半动作显示成原始码，筛选项里也选不到它们。
+        run: python3 ../scripts/check-audit-action-codes.py
 
   monitoring:
     name: 监控配置校验

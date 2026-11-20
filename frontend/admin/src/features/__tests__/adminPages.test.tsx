@@ -427,7 +427,7 @@ describe("管理端用户页", () => {
 
     const updated = useAdminOps.getState().users[0];
     expect(updated?.roles).toContain("author_teacher");
-    expect(useAdminOps.getState().auditLogs.some((l) => l.action === "user.role_changed")).toBe(true);
+    expect(useAdminOps.getState().auditLogs.some((l) => l.action === "user.assign-roles")).toBe(true);
   });
 });
 

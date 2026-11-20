@@ -30,7 +30,7 @@ import type {
   AdminUserStatus,
   OrgTag,
 } from "@exam/shared/domain/admin";
-import type { UserRole } from "@exam/shared/domain/types";
+import type { AuditAction, UserRole } from "@exam/shared/domain/types";
 import {
   USER_ROLE_LABEL,
   setUserRoles,
@@ -302,7 +302,7 @@ export function useAdminUserActions(options: {
   /** 变更后刷新列表。 */
   refresh: () => void;
   /** 写审计日志（mock 模式；HTTP 模式由后端记录）。 */
-  audit?: (userId: string, summary: string) => void;
+  audit?: (userId: string, summary: string, action: AuditAction) => void;
 }): {
   setRoles: (userId: string, roleCodes: string[]) => Promise<void>;
   setStatus: (user: AdminUserRow, status: AdminUserStatus) => Promise<void>;
@@ -319,6 +319,7 @@ export function useAdminUserActions(options: {
         options.audit?.(
           userId,
           `调整用户角色为：${roleCodes.map((c) => USER_ROLE_LABEL[c as UserRole] ?? c).join("、")}`,
+          "user.assign-roles",
         );
         options.refresh();
         return;
@@ -334,7 +335,11 @@ export function useAdminUserActions(options: {
       if (!remote) {
         const result = updateUser(user.id, { status: status as "active" | "disabled" });
         if (!result.ok) throw new Error(result.message ?? "状态更新失败");
-        options.audit?.(user.id, `将用户置为${status === "active" ? "正常" : "已停用"}`);
+        options.audit?.(
+          user.id,
+          `将用户置为${status === "active" ? "正常" : "已停用"}`,
+          "user.update",
+        );
         options.refresh();
         return;
       }
@@ -355,7 +360,7 @@ export function useAdminUserActions(options: {
       if (!remote) {
         const result = updateUser(userId, { orgTags: tagIds });
         if (!result.ok) throw new Error(result.message ?? "组织标签更新失败");
-        options.audit?.(userId, "调整用户的组织归属标签");
+        options.audit?.(userId, "调整用户的组织归属标签", "user.assign-tags");
         options.refresh();
         return;
       }
@@ -405,10 +410,10 @@ export async function importRosterFile(
 }
 
 /** mock 模式的审计写入（HTTP 模式由后端记录）。 */
-export function writeUserAudit(userId: string, summary: string): void {
+export function writeUserAudit(userId: string, summary: string, action: AuditAction): void {
   writeAudit({
     operator: "陈砚之",
-    action: "user.update",
+    action,
     targetType: "user",
     targetId: userId,
     summary,

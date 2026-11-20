@@ -5,6 +5,16 @@
 /* 内容域：题目 / 题库 / 试卷 / 练习 / 标签 / 学生等（design 03 §3–§4）。 */
 export * from "./types";
 
+/* 审计域：动作码、中文名与业务分组（与后端写出的动作码一一对应）。 */
+export {
+  AUDIT_ACTION_GROUPS,
+  AUDIT_ACTION_LABEL,
+  AUDIT_ENTITY_TYPE_LABEL,
+  auditActionGroupOf,
+  auditActionLabel,
+  type AuditActionGroup,
+} from "./audit";
+
 /* 管理域：场次、名单、成绩与组织标签。 */
 export {
   type AdminAuditLog,

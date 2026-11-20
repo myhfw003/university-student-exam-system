@@ -333,7 +333,7 @@ export function importRoster(
 
   writeAudit({
     operator,
-    action: "data.import",
+    action: "user.import-roster",
     targetType: "user",
     targetId: "roster",
     summary: `批量导入人员名单：成功 ${succeeded}（新建 ${created} / 更新 ${updated}），失败 ${failed}`,

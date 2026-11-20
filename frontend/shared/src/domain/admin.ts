@@ -160,7 +160,7 @@ export interface AdminAuditLog {
   operatorId: string | null;
   /** 操作者名。 */
   operator: string;
-  /** 动作码（如 `user.role_changed`）。 */
+  /** 动作码（如 `user.assign-roles`）。 */
   action: string;
   /** 目标对象类型。 */
   targetType: string;

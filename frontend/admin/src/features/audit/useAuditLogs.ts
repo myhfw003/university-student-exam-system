@@ -10,8 +10,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { isBackendEnabled, loadAuditLogs } from "@exam/shared/api";
-import { AUDIT_ACTION_LABEL, useAdminOps } from "@exam/shared/mock/adminOps";
-import type { AuditAction } from "@exam/shared/domain/types";
+import { useAdminOps } from "@exam/shared/mock/adminOps";
+import { auditActionLabel } from "@exam/shared/domain/audit";
 
 /** 审计日志的一行（mock 与 HTTP 同一形状）。 */
 export interface AuditLogRow {
@@ -34,12 +34,6 @@ export interface AuditLogRow {
   ip: string;
   /** 客户端 UA。 */
   userAgent: string;
-}
-
-/** 动作码 → 中文名；没登记过的动作原样返回。 */
-function actionLabelOf(action: string): string {
-  const label = AUDIT_ACTION_LABEL[action as AuditAction];
-  return label ?? action;
 }
 
 /**
@@ -72,7 +66,7 @@ export function useAuditLogs(filter: {
           targetType: filter.targetType.trim() || undefined,
         });
         if (cancelled) return;
-        setRows(page.items.map((item) => ({ ...item, actionLabel: actionLabelOf(item.action) })));
+        setRows(page.items.map((item) => ({ ...item, actionLabel: auditActionLabel(item.action) })));
         setServerTotal(page.total);
       } catch {
         if (!cancelled) {
@@ -101,7 +95,7 @@ export function useAuditLogs(filter: {
         at: log.at,
         operator: log.operator,
         action: log.action,
-        actionLabel: actionLabelOf(log.action),
+        actionLabel: auditActionLabel(log.action),
         targetType: log.targetType,
         targetId: log.targetId,
         summary: log.summary,

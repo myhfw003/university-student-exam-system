@@ -154,7 +154,7 @@ export function ExamSessionListPage() {
     }
     writeAudit({
       operator: "陈砚之",
-      action: "session.publish",
+      action: "exam_session.publish",
       targetType: "exam_session",
       targetId: result.session.id,
       summary: `创建场次「${result.session.name}」`,
@@ -200,7 +200,7 @@ export function ExamSessionListPage() {
     }
     writeAudit({
       operator: "陈砚之",
-      action: "session.publish",
+      action: "exam_session.publish",
       targetType: "exam_session",
       targetId: id,
       summary: `发布场次「${sessionName}」，物化名单 ${result.count} 人`,
@@ -243,7 +243,7 @@ export function ExamSessionListPage() {
     }
     writeAudit({
       operator: "陈砚之",
-      action: "session.cancel",
+      action: "exam_session.cancel",
       targetType: "exam_session",
       targetId: pendingCancel.id,
       summary: `取消场次「${pendingCancel.name}」`,

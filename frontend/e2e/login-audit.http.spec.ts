@@ -64,11 +64,11 @@ test.describe("认证审计（真实后端）", () => {
     await expect(page.getByRole("heading", { name: "审计", exact: true })).toBeVisible();
 
     // 登录成功：动作交给服务端筛，筛完只剩登录成功的行。
-    await page.getByRole("button", { name: "登录成功" }).click();
+    await page.getByLabel("动作筛选").selectOption("auth.login");
     await expect(page.getByRole("cell", { name: adminUsername }).first()).toBeVisible();
 
     // 登录失败：失败那次的操作者是临时账号。
-    await page.getByRole("button", { name: "登录失败" }).click();
+    await page.getByLabel("动作筛选").selectOption("auth.login_failed");
     await expect(page.getByRole("cell", { name: tempUser }).first()).toBeVisible();
 
     await context.close();
@@ -123,7 +123,7 @@ test.describe("刷新令牌复用的审计（真实后端）", () => {
     await page.goto("/admin/audit-logs");
     await expect(page.getByRole("heading", { name: "审计", exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: "刷新令牌异常使用" }).click();
+    await page.getByLabel("动作筛选").selectOption("auth.refresh_reuse");
     await expect(page.getByRole("cell", { name: adminUsername }).first()).toBeVisible();
 
     await context.close();
