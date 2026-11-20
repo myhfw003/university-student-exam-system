@@ -219,6 +219,7 @@ export {
   resolveMistake,
   toMistakeEntry,
   type LearningClient,
+  type MistakeFilter,
 } from "./learningApi";
 export {
   assignReviewTask,

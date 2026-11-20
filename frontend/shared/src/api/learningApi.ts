@@ -79,15 +79,43 @@ export function toMistakeEntry(dto: Dto): MistakeEntry {
 }
 
 /**
+ * 错题本筛选条件。
+ *
+ * 与服务端 `GET /mistakes` 的查询参数一一对应：
+ * 标签只传一个（服务端会把它的子标签也算进来）、题型、时间范围、是否含已掌握。
+ */
+export interface MistakeFilter {
+  /** 标签 ID。 */
+  tagId?: string;
+  /** 题型（single / multi / judge / short / comprehensive）。 */
+  questionType?: string;
+  /** 时间范围起点（含），ISO 日期时间。 */
+  from?: string;
+  /** 时间范围终点（含），ISO 日期时间。 */
+  to?: string;
+  /** 是否包含已掌握的题；默认不含。 */
+  includeResolved?: boolean;
+}
+
+/**
  * 读取错题本。
  *
  * 默认不含已掌握的题（`includeResolved=false`）。
  */
 export async function loadMistakes(
+  filter: MistakeFilter = {},
   client: LearningClient = httpClient,
 ): Promise<MistakeEntry[]> {
   const res = await client.get<{ items?: Dto[] } | Dto[]>(ENDPOINTS.learning.mistakes, {
-    query: { page: 1, size: 200, includeResolved: false },
+    query: {
+      page: 1,
+      size: 200,
+      includeResolved: filter.includeResolved ?? false,
+      ...(filter.tagId ? { tagId: filter.tagId } : {}),
+      ...(filter.questionType ? { questionType: filter.questionType } : {}),
+      ...(filter.from ? { from: filter.from } : {}),
+      ...(filter.to ? { to: filter.to } : {}),
+    },
   });
   const items = Array.isArray(res) ? res : (res.items ?? []);
   return items.map(toMistakeEntry);

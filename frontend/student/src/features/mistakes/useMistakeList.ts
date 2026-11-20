@@ -13,8 +13,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { isBackendEnabled, loadMistakes, redoMistake } from "@exam/shared/api";
+import type { MistakeFilter } from "@exam/shared/api";
 import type { QuestionType } from "@exam/shared/domain/types";
-import { useCatalog } from "@exam/shared/mock/catalog";
+import { matchTagFilter, useCatalog } from "@exam/shared/mock/catalog";
 import { useStudentMistakes } from "@/features/shared/studentData";
 
 /** 错题本的一行。 */
@@ -35,8 +36,41 @@ export interface MistakeListRow {
   lastWrongAt: string;
 }
 
+/**
+ * mock 侧的筛选：与服务端 `GET /mistakes` 同一套口径。
+ *
+ * - 标签：服务端把选中标签的子标签也算进来，这里用 `matchTagFilter` 对齐；
+ * - 题型：直接比题目的题型；
+ * - 时间范围：比最近一次做错的时间。
+ */
+function matchesMistakeFilter(
+  question: { type: QuestionType; tags: string[] },
+  mistake: { lastWrongAt: string },
+  filter: MistakeFilter,
+): boolean {
+  if (
+    filter.tagId &&
+    !matchTagFilter(question, [filter.tagId], { includeDescendants: true, matchMode: "any" })
+  ) {
+    return false;
+  }
+
+  if (filter.questionType && question.type !== filter.questionType) {
+    return false;
+  }
+
+  const wrongAt = new Date(mistake.lastWrongAt).getTime();
+  if (filter.from && wrongAt < new Date(filter.from).getTime()) return false;
+  if (filter.to && wrongAt > new Date(filter.to).getTime()) return false;
+
+  return true;
+}
+
 /** mock 模式的错题本。 */
-export function useLocalMistakeList(enabled: boolean): MistakeListRow[] {
+export function useLocalMistakeList(
+  enabled: boolean,
+  filter: MistakeFilter,
+): MistakeListRow[] {
   const mistakes = useStudentMistakes();
   const questions = useCatalog((state) => state.questions);
 
@@ -46,6 +80,7 @@ export function useLocalMistakeList(enabled: boolean): MistakeListRow[] {
     for (const mistake of mistakes) {
       const question = questions.find((q) => q.id === mistake.qid);
       if (!question) continue;
+      if (!matchesMistakeFilter(question, mistake, filter)) continue;
       rows.push({
         questionId: question.id,
         type: question.type,
@@ -58,11 +93,14 @@ export function useLocalMistakeList(enabled: boolean): MistakeListRow[] {
       });
     }
     return rows;
-  }, [mistakes, questions, enabled]);
+  }, [mistakes, questions, enabled, filter]);
 }
 
 /** HTTP 模式的错题本。 */
-export function useRemoteMistakeList(enabled: boolean): {
+export function useRemoteMistakeList(
+  enabled: boolean,
+  filter: MistakeFilter,
+): {
   rows: MistakeListRow[];
   loading: boolean;
 } {
@@ -78,7 +116,7 @@ export function useRemoteMistakeList(enabled: boolean): {
     void (async () => {
       setLoading(true);
       try {
-        const mistakes = await loadMistakes();
+        const mistakes = await loadMistakes(filter);
         if (cancelled) return;
         setRows(
           mistakes.map((mistake) => ({
@@ -104,7 +142,7 @@ export function useRemoteMistakeList(enabled: boolean): {
     return () => {
       cancelled = true;
     };
-  }, [enabled, tags]);
+  }, [enabled, tags, filter]);
 
   return { rows, loading };
 }
@@ -136,9 +174,12 @@ export function useRedoMistake(): (questionId: string) => void {
 }
 
 /** 错题本（按数据源分派）。 */
-export function useMistakeList(): { rows: MistakeListRow[]; loading: boolean } {
+export function useMistakeList(filter: MistakeFilter): {
+  rows: MistakeListRow[];
+  loading: boolean;
+} {
   const remote = isBackendEnabled();
-  const local = useLocalMistakeList(!remote);
-  const remoteList = useRemoteMistakeList(remote);
+  const local = useLocalMistakeList(!remote, filter);
+  const remoteList = useRemoteMistakeList(remote, filter);
   return remote ? remoteList : { rows: local, loading: false };
 }

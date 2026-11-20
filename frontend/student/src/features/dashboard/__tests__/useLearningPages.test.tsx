@@ -98,7 +98,7 @@ describe("错题本与工作台 · HTTP 模式", () => {
   });
 
   it("错题本读服务端的题面、错因与错次", async () => {
-    const { result } = renderHook(() => useRemoteMistakeList(true), {
+    const { result } = renderHook(() => useRemoteMistakeList(true, {}), {
       wrapper: ({ children }) => <MemoryRouter>{children}</MemoryRouter>,
     });
 
