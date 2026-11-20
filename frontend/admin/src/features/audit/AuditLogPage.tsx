@@ -4,7 +4,7 @@
    按设计文档 §2.8 新建（原型无此模块）。追加式写入，仅管理员可查，
    支持按操作者 / 动作 / 时间范围 / 对象过滤。
 
-   数据通路见 `useAuditLogs.ts`：动作与对象类型交给服务端过滤，
+   数据通路见 `useAuditLogs.ts`：动作、对象类型与时间范围交给服务端过滤，
    操作者与关键词在前端这一页里筛（后端的操作者过滤是按 ID 的）。
    ========================================================================== */
 
@@ -20,12 +20,16 @@ export function AuditLogPage() {
   const [action, setAction] = useState<"all" | AuditAction>("all");
   const [target, setTarget] = useState("");
   const [keyword, setKeyword] = useState("");
+  const [fromDay, setFromDay] = useState("");
+  const [toDay, setToDay] = useState("");
 
   const { rows, total } = useAuditLogs({
     action,
     targetType: target,
     operator,
     keyword,
+    fromDay,
+    toDay,
   });
 
   // 操作者下拉来自当前这一页里出现过的操作者。
@@ -92,6 +96,26 @@ export function AuditLogPage() {
               value={target}
               onChange={(event) => setTarget(event.target.value.trim())}
             />
+          </div>
+          {/* 时间范围：FR-IAM-07 要的四种筛选之一。日期按本地日历日选，
+              翻成时间点交给服务端（见 timeRange.ts）。 */}
+          <div className="row" style={{ marginTop: "var(--sp-3)" }}>
+            <Field label="起始日期" htmlFor="audit-from">
+              <TextInput
+                id="audit-from"
+                type="date"
+                value={fromDay}
+                onChange={(event) => setFromDay(event.target.value)}
+              />
+            </Field>
+            <Field label="结束日期" htmlFor="audit-to">
+              <TextInput
+                id="audit-to"
+                type="date"
+                value={toDay}
+                onChange={(event) => setToDay(event.target.value)}
+              />
+            </Field>
           </div>
         </div>
         <div className="card-body is-flush">

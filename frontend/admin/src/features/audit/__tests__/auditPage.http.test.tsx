@@ -130,6 +130,46 @@ describe("管理端审计页 · HTTP 模式", () => {
     });
   });
 
+  it("时间范围筛选交给服务端（FR-IAM-07 的四种筛选之一）", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => {
+      expect(api.loadAuditLogs).toHaveBeenCalled();
+    });
+
+    await user.type(screen.getByLabelText("起始日期"), "2026-11-18");
+    await user.type(screen.getByLabelText("结束日期"), "2026-11-19");
+
+    await waitFor(() => {
+      const last = api.loadAuditLogs.mock.calls.at(-1)![0];
+      // 日历日翻成时间点交给服务端：起始是那天 00:00，结束是当天最后一毫秒。
+      expect(new Date(last.from).getDate()).toBe(18);
+      expect(new Date(last.from).getHours()).toBe(0);
+      expect(new Date(last.to).getDate()).toBe(19);
+      expect(new Date(last.to).getHours()).toBe(23);
+      expect(new Date(last.to).getMilliseconds()).toBe(999);
+    });
+  });
+
+  it("不选日期时不给时间范围参数（表示不限）", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => {
+      expect(api.loadAuditLogs).toHaveBeenCalled();
+    });
+
+    await user.click(screen.getByLabelText("动作筛选"));
+    await user.selectOptions(screen.getByLabelText("动作筛选"), "user.assign-roles");
+
+    await waitFor(() => {
+      const last = api.loadAuditLogs.mock.calls.at(-1)![0];
+      expect(last.from).toBeUndefined();
+      expect(last.to).toBeUndefined();
+    });
+  });
+
   it("操作者筛选在前端这一页里筛", async () => {
     const user = userEvent.setup();
     renderPage();

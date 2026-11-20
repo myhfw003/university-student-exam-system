@@ -5,13 +5,14 @@
 
    过滤口径有一处不对齐：后端支持按动作、对象类型、对象 ID、操作者 ID 与
    时间范围过滤，但**操作者是按 ID 筛的**，而页面上选的是操作者**名字**。
-   所以：动作与对象类型交给服务端，操作者与关键词在前端这一页里筛。
+   所以：动作、对象类型与时间范围交给服务端，操作者与关键词在前端这一页里筛。
    ========================================================================== */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { isBackendEnabled, loadAuditLogs } from "@exam/shared/api";
 import { useAdminOps } from "@exam/shared/mock/adminOps";
 import { auditActionLabel } from "@exam/shared/domain/audit";
+import { calendarDayOf, dayEndIso, dayStartIso } from "./timeRange";
 
 /** 审计日志的一行（mock 与 HTTP 同一形状）。 */
 export interface AuditLogRow {
@@ -39,13 +40,17 @@ export interface AuditLogRow {
 /**
  * 审计日志列表。
  *
- * @param filter 动作、对象类型（服务端过滤）与操作者、关键词（前端过滤）。
+ * @param filter 动作、对象类型、时间范围（服务端过滤）与操作者、关键词（前端过滤）。
  */
 export function useAuditLogs(filter: {
   action: string;
   targetType: string;
   operator: string;
   keyword: string;
+  /** 起始日期（YYYY-MM-DD）；空表示不限。 */
+  fromDay: string;
+  /** 结束日期（YYYY-MM-DD）；空表示不限。 */
+  toDay: string;
 }): { rows: AuditLogRow[]; total: number; loading: boolean; refresh: () => void } {
   const remote = isBackendEnabled();
   const mockLogs = useAdminOps((state) => state.auditLogs);
@@ -64,6 +69,8 @@ export function useAuditLogs(filter: {
         const page = await loadAuditLogs({
           action: filter.action,
           targetType: filter.targetType.trim() || undefined,
+          from: dayStartIso(filter.fromDay),
+          to: dayEndIso(filter.toDay),
         });
         if (cancelled) return;
         setRows(page.items.map((item) => ({ ...item, actionLabel: auditActionLabel(item.action) })));
@@ -80,7 +87,7 @@ export function useAuditLogs(filter: {
     return () => {
       cancelled = true;
     };
-  }, [remote, filter.action, filter.targetType, token]);
+  }, [remote, filter.action, filter.targetType, filter.fromDay, filter.toDay, token]);
 
   const mockRows = useMemo<AuditLogRow[]>(() => {
     if (remote) return [];
@@ -88,6 +95,12 @@ export function useAuditLogs(filter: {
       .filter((log) => {
         if (filter.action !== "all" && log.action !== filter.action) return false;
         if (filter.targetType && log.targetType !== filter.targetType) return false;
+        // 时间范围：mock 模式下没有服务端，按日历日比。
+        if (filter.fromDay || filter.toDay) {
+          const day = calendarDayOf(log.at);
+          if (filter.fromDay && day < filter.fromDay) return false;
+          if (filter.toDay && day > filter.toDay) return false;
+        }
         return true;
       })
       .map((log) => ({
@@ -102,7 +115,7 @@ export function useAuditLogs(filter: {
         ip: log.ip,
         userAgent: log.userAgent,
       }));
-  }, [remote, mockLogs, filter.action, filter.targetType]);
+  }, [remote, mockLogs, filter.action, filter.targetType, filter.fromDay, filter.toDay]);
 
   // 操作者与关键词在前端这一页里筛：后端的操作者过滤是按 ID 的，
   // 而页面上选的是操作者名字，对不上。

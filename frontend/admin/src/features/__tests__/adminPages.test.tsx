@@ -439,4 +439,30 @@ describe("管理端审计页", () => {
     const logs = useAdminOps.getState().auditLogs;
     expect(screen.getByText(logs[0]!.summary)).toBeInTheDocument();
   });
+
+  it("按时间范围筛选：只留下范围内的行（FR-IAM-07 的四种筛选之一）", async () => {
+    const user = userEvent.setup();
+    renderPage(<AuditLogPage />);
+
+    const logs = useAdminOps.getState().auditLogs;
+    // 种子数据跨 11 月 4 日到 11 月 12 日。
+    const before = logs.length;
+    expect(before).toBeGreaterThan(1);
+
+    // 选一天：只剩那天的那几行。
+    await user.type(screen.getByLabelText("起始日期"), "2026-11-12");
+    await user.type(screen.getByLabelText("结束日期"), "2026-11-12");
+
+    const expected = logs.filter((log) => log.at.startsWith("2026-11-12")).length;
+    expect(expected).toBeGreaterThan(0);
+    expect(expected).toBeLessThan(before);
+    expect(screen.getByText(`${expected} / ${expected} 条`)).toBeInTheDocument();
+
+    // 选一个没有数据的日期：列表空掉。
+    await user.clear(screen.getByLabelText("起始日期"));
+    await user.clear(screen.getByLabelText("结束日期"));
+    await user.type(screen.getByLabelText("起始日期"), "2020-01-01");
+    await user.type(screen.getByLabelText("结束日期"), "2020-01-02");
+    expect(screen.getByText("没有符合条件的日志")).toBeInTheDocument();
+  });
 });
