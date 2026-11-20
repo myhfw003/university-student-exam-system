@@ -9,6 +9,7 @@
    ========================================================================== */
 
 import { create } from "zustand";
+import { ROLE_PERMISSIONS } from "../auth/permissions";
 import type { PracticeAssignmentStatus } from "../domain/practice";
 import type {
   AntiCheatPolicy,
@@ -506,6 +507,8 @@ export interface AdminOpsState {
   orgTags: OrgTag[];
   /** 练习开放单。 */
   practiceAssignments: MockPracticeAssignment[];
+  /** 角色的权限集合：角色码 → 权限码数组。 */
+  rolePermissions: Record<string, string[]>;
 }
 
 const initialState = (): AdminOpsState => ({
@@ -516,6 +519,10 @@ const initialState = (): AdminOpsState => ({
   proctorCandidates: {},
   orgTags: ORG_TAGS.map((tag) => ({ ...tag })),
   practiceAssignments: buildPracticeAssignments(),
+  // mock 的角色权限初值取自前端的角色矩阵（与后端种子的默认权限集合一致）。
+  rolePermissions: Object.fromEntries(
+    Object.entries(ROLE_PERMISSIONS).map(([code, permissions]) => [code, [...permissions]]),
+  ),
 });
 
 /** 管理端运维数据 store。 */
@@ -728,6 +735,30 @@ export function advanceSession(id: string): { ok: boolean; message?: string; sta
 
   updateSession(id, { status: target });
   return { ok: true, status: target };
+}
+
+/* ==========================================================================
+   角色权限
+   ========================================================================== */
+
+/**
+ * 改角色的权限集合（mock）。
+ *
+ * 真实后端里角色权限存在库里（`role_permission` 表），
+ * mock 没有那张表，就放在运维 store 里。
+ */
+export function setRolePermissions(
+  roleCode: string,
+  permissionCodes: string[],
+): { ok: boolean; message?: string } {
+  const state = useAdminOps.getState();
+  useAdminOps.setState({
+    rolePermissions: {
+      ...state.rolePermissions,
+      [roleCode]: [...permissionCodes],
+    },
+  });
+  return { ok: true };
 }
 
 /* ==========================================================================

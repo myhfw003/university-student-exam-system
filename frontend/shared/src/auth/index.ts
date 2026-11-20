@@ -3,8 +3,11 @@
    ========================================================================== */
 
 export {
+  PERMISSION_DISPLAY_NAMES,
   ROLE_PERMISSIONS,
   hasPermission,
+  permissionDisplayName,
+  permissionModule,
   permissionsFor,
   type PermissionPoint,
 } from "./permissions";

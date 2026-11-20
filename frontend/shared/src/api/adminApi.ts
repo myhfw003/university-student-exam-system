@@ -18,6 +18,7 @@ import { httpClient } from "./httpClient";
 import { ENDPOINTS } from "./endpoints";
 import type {
   AdminAuditLog,
+  AdminPermission,
   AdminRole,
   AdminUser,
   AdminUserImportResult,
@@ -327,6 +328,46 @@ export async function loadRoles(client: AdminClient = httpClient): Promise<Admin
     isSystem: bool(dto.isSystem),
     permissions: strList(dto.permissions),
   }));
+}
+
+/** 读取权限点目录（管理端角色权限矩阵用）。 */
+export async function loadPermissions(
+  client: AdminClient = httpClient,
+): Promise<AdminPermission[]> {
+  const res = await client.get<Dto[]>(ENDPOINTS.admin.permissions);
+  return (Array.isArray(res) ? res : []).map((dto) => ({
+    code: str(dto.code),
+    name: str(dto.name),
+    module: str(dto.module),
+    description:
+      dto.description === null || dto.description === undefined ? null : str(dto.description),
+  }));
+}
+
+/**
+ * 修改角色的名称、说明与权限集合。
+ *
+ * 权限集合是**整体覆盖**（不是增量）：传什么就是什么，
+ * 少传一个权限点，那个权限点就没了。
+ */
+export async function updateRole(
+  id: string,
+  input: { name: string; description: string; permissionCodes: string[] },
+  client: AdminClient = httpClient,
+): Promise<AdminRole> {
+  const res = await client.put<Dto>(`${ENDPOINTS.admin.roles}/${id}`, {
+    name: input.name,
+    description: input.description,
+    permissionCodes: input.permissionCodes,
+  });
+  return {
+    id: str(res.id),
+    code: str(res.code),
+    name: str(res.name),
+    description: str(res.description),
+    isSystem: bool(res.isSystem),
+    permissions: strList(res.permissions),
+  };
 }
 
 /* -------------------------------------------------------------- 审计日志 */

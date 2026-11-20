@@ -142,6 +142,17 @@ export interface AdminRole {
   permissions: string[];
 }
 
+/** 权限点目录里的一条（`GET /permissions`）。 */
+export interface AdminPermission {
+  /** 权限码，如 `paper:write`。 */
+  code: string;
+  /** 中文名，如「编辑试卷」。 */
+  name: string;
+  /** 所属模块（权限码的前缀）。 */
+  module: string;
+  description: string | null;
+}
+
 /** 用户的组织归属（`GET /users/{id}/tags`）。 */
 export interface AdminUserOrganization {
   userId: string;

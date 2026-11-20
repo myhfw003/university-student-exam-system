@@ -21,11 +21,14 @@ import {
   importUserRoster,
   isBackendEnabled,
   loadOrgTags,
+  loadPermissions,
   loadRoles,
   loadUserPage,
   updateAdminUser,
+  updateRole,
 } from "@exam/shared/api";
 import type {
+  AdminPermission,
   AdminRole,
   AdminUserStatus,
   OrgTag,
@@ -33,11 +36,17 @@ import type {
 import type { AuditAction, UserRole } from "@exam/shared/domain/types";
 import {
   USER_ROLE_LABEL,
+  setRolePermissions,
   setUserRoles,
   updateUser,
   useAdminOps,
   writeAudit,
 } from "@exam/shared/mock/adminOps";
+import {
+  PERMISSION_DISPLAY_NAMES,
+  permissionModule,
+  type PermissionPoint,
+} from "@exam/shared/auth/permissions";
 import {
   importRoster,
   type RosterImportResult,
@@ -87,10 +96,13 @@ export function useAdminRoles(): {
   roles: AdminRole[];
   byCode: Record<string, AdminRole>;
   loading: boolean;
+  /** 重新拉角色目录（改了角色权限后要重拉）。 */
+  refresh: () => void;
 } {
   const remote = isBackendEnabled();
   const [roles, setRoles] = useState<AdminRole[]>([]);
   const [loading, setLoading] = useState(false);
+  const [token, setToken] = useState(0);
 
   useEffect(() => {
     if (!remote) return;
@@ -109,7 +121,9 @@ export function useAdminRoles(): {
     return () => {
       cancelled = true;
     };
-  }, [remote]);
+  }, [remote, token]);
+
+  const mockRolePermissions = useAdminOps((state) => state.rolePermissions);
 
   const effective = useMemo<AdminRole[]>(() => {
     if (remote) return roles;
@@ -119,9 +133,9 @@ export function useAdminRoles(): {
       name: USER_ROLE_LABEL[code],
       description: "",
       isSystem: true,
-      permissions: [],
+      permissions: mockRolePermissions[code] ?? [],
     }));
-  }, [remote, roles]);
+  }, [remote, roles, mockRolePermissions]);
 
   const byCode = useMemo(() => {
     const map: Record<string, AdminRole> = {};
@@ -129,7 +143,74 @@ export function useAdminRoles(): {
     return map;
   }, [effective]);
 
-  return { roles: effective, byCode, loading };
+  const refresh = useCallback(() => setToken((value) => value + 1), []);
+
+  return { roles: effective, byCode, loading, refresh };
+}
+
+/* ------------------------------------------------------------ 权限点 */
+
+/** mock 模式用的权限点目录：中文名取自前端词表，模块取权限码前缀。 */
+const MOCK_PERMISSION_CATALOG: AdminPermission[] = (
+  Object.keys(PERMISSION_DISPLAY_NAMES) as PermissionPoint[]
+).map((code) => ({
+  code,
+  name: PERMISSION_DISPLAY_NAMES[code],
+  module: permissionModule(code),
+  description: null,
+}));
+
+/**
+ * 权限点目录（管理端角色权限矩阵用）。
+ *
+ * HTTP 模式读 `GET /permissions`：中文名与模块都是服务端给的；
+ * mock 模式用前端的权限词表（`PERMISSION_DISPLAY_NAMES`）。
+ */
+export function usePermissionCatalog(): AdminPermission[] {
+  const remote = isBackendEnabled();
+  const [permissions, setPermissions] = useState<AdminPermission[]>([]);
+
+  useEffect(() => {
+    if (!remote) return;
+    let cancelled = false;
+    void (async () => {
+      const list = await loadPermissions().catch(() => []);
+      if (!cancelled) setPermissions(list);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [remote]);
+
+  return useMemo(
+    () => (remote ? permissions : MOCK_PERMISSION_CATALOG),
+    [remote, permissions],
+  );
+}
+
+/**
+ * 改角色的名称、说明与权限集合。
+ *
+ * 权限集合是**整体覆盖**：少传一个权限点，那个权限点就没了。
+ */
+export async function saveRoleSettings(
+  role: AdminRole,
+  input: { name: string; description: string; permissionCodes: string[] },
+): Promise<{ ok: boolean; message?: string }> {
+  if (!isBackendEnabled()) {
+    const result = setRolePermissions(role.code, input.permissionCodes);
+    return result.ok ? { ok: true } : { ok: false, message: result.message ?? "保存失败" };
+  }
+
+  try {
+    await updateRole(role.id, input);
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error && error.message ? error.message : "保存失败",
+    };
+  }
 }
 
 /* ------------------------------------------------------------ 组织标签 */

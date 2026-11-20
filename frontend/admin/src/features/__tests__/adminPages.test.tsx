@@ -27,6 +27,7 @@ import { ProctoringPage } from "../monitoring/ProctoringPage";
 import { UsersPage } from "../users/UsersPage";
 import { AuditLogPage } from "../audit/AuditLogPage";
 import { PracticeAssignmentListPage } from "../practices/PracticeAssignmentListPage";
+import { RoleListPage } from "../roles/RoleListPage";
 import { QuestionEditor } from "../shared/QuestionEditor";
 
 /** 渲染带路由的页面。 */
@@ -428,6 +429,32 @@ describe("管理端实时监考", () => {
     const dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: "确认" }));
     expect(useAdminOps.getState().proctorActions.length).toBe(0);
+  });
+});
+
+describe("管理端角色页", () => {
+  it("渲染角色清单，mock 模式按本地权限词表渲染权限矩阵", async () => {
+    const user = userEvent.setup();
+    renderPage(<RoleListPage />);
+
+    expect(screen.getByRole("heading", { name: "角色" })).toBeInTheDocument();
+    expect(screen.getByText("角色清单")).toBeInTheDocument();
+    expect(screen.getByText("系统管理员")).toBeInTheDocument();
+
+    // 打开学生角色的权限矩阵：mock 没有服务端，用前端词表里的中文名。
+    const row = screen.getByText("student").closest("tr")!;
+    await user.click(within(row).getByRole("button", { name: "编辑权限" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("查看试卷")).toBeInTheDocument();
+    expect(within(dialog).getByText("编辑试卷")).toBeInTheDocument();
+
+    // 给学生加一个「编辑试卷」再保存。
+    await user.click(within(dialog).getByRole("button", { name: "编辑试卷" }));
+    await user.click(within(dialog).getByRole("button", { name: "保存" }));
+
+    expect(lastToast()).toBe("角色权限已更新，变更即时生效");
+    expect(useAdminOps.getState().rolePermissions.student).toContain("paper:write");
   });
 });
 

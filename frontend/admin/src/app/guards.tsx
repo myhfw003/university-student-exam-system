@@ -22,6 +22,7 @@ const ROUTE_PERMISSIONS: ReadonlyArray<{ prefix: string; permission: PermissionP
   { prefix: "/monitoring", permission: "proctor:monitor" },
   { prefix: "/exam-sessions", permission: "exam:read" },
   { prefix: "/practices", permission: "practice:read" },
+  { prefix: "/roles", permission: "role:read" },
   { prefix: "/audit-logs", permission: "audit:read" },
   { prefix: "/users", permission: "user:read" },
   { prefix: "/tags", permission: "tag:read" },

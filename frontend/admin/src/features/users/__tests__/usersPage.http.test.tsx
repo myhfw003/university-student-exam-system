@@ -184,4 +184,5 @@ describe("管理端用户页 · HTTP 模式", () => {
     });
     expect(screen.getByText("vtDjhbWjsrXNMmF5aA1")).toBeInTheDocument();
   });
+
 });

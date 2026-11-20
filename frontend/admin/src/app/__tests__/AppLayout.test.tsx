@@ -63,11 +63,11 @@ describe("管理端侧栏", () => {
     );
   });
 
-  it("侧栏共 11 个入口，分内容 / 测评 / 系统三组", () => {
+  it("侧栏共 12 个入口，分内容 / 测评 / 系统三组", () => {
     renderShell();
     const nav = screen.getByRole("navigation", { name: "主导航" });
 
-    expect(within(nav).getAllByRole("link")).toHaveLength(11);
+    expect(within(nav).getAllByRole("link")).toHaveLength(12);
     expect(within(nav).getAllByText(/^(内容|测评|系统)$/)).toHaveLength(3);
   });
 });

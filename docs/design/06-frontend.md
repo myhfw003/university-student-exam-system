@@ -413,7 +413,9 @@ GET /api/v1/system/time  →  { serverTime, monotonicTime }
 
 ### 8.2 管理端路由
 
-`/overview`、`/tags`、`/banks`、`/banks/:bankId`、`/papers`、`/papers/:paperId`、`/practices`、`/exam-sessions`、`/exam-sessions/:id`、`/monitoring/:sessionId`、`/review`、`/analytics`、`/users`、`/audit-logs`。
+`/overview`、`/tags`、`/banks`、`/banks/:bankId`、`/papers`、`/papers/:paperId`、`/practices`、`/roles`、`/exam-sessions`、`/exam-sessions/:id`、`/monitoring/:sessionId`、`/review`、`/analytics`、`/users`、`/audit-logs`。
+
+`/roles` 是**角色与权限**（需求文档 §1「角色与权限矩阵」）：角色决定用户能做什么，用户可拥有多个角色，权限点按并集计算；系统内置角色不可删除，只能调整其权限集合。守卫权限点为 `role:read`。
 
 `/practices` 是**练习开放单**（后端 `PracticeAssignment` 的管理端）：开放单决定练习开放给谁、开放多久，练习规则（次数上限、反馈时机、错题回流）仍挂在练习卷上。它与 `/papers` 分开，因为开放单是独立于练习卷的聚合，有自己的 ID、状态（草稿 → 已上架 → 已下架）与开放期；守卫权限点为 `practice:read`。
 
@@ -543,7 +545,7 @@ frontend/shared/src/
 | §5 服务端时钟权威 | `student/src/lib/useServerTime.ts`、`serverTimeSource.ts` | 采样取中位数；后端 `/api/v1/system/time` 已可用 |
 | §6 防作弊交互 | `student/src/features/exam-taking/FocusGuard.ts`、`Watermark.tsx` | 500ms 窗口去重；练习不启用 |
 | §7 实时监考大屏 | `admin/src/features/monitoring/ProctoringPage.tsx`、`useProctorFeed.ts` | SignalR 未就绪，暂用 2 秒批量轮询，轮询逻辑单独成 hook |
-| §8 路由与守卫 | 两个 SPA 的 `router.tsx` | 全部 `React.lazy` 懒加载；刷新停留当前页。学生端 9 个路由、管理端 14 个路由 |
+| §8 路由与守卫 | 两个 SPA 的 `router.tsx` | 全部 `React.lazy` 懒加载；刷新停留当前页。学生端 9 个路由、管理端 15 个路由 |
 | §3 组卷向导 | `admin/src/features/papers/PaperWizardPage.tsx` | 四步 + **一键出卷**（配额矩阵确定性抽题，池量不足报错并列出缺口） |
 | §9 可访问性 | `shared/src/ui/Field.tsx` | `Field` 的 `htmlFor` 与控件 `id` 程序化关联；51 处表单已补齐 |
 | §2 设计令牌落地 | `shared/src/design/theme.css` + `primitives.css` | 与原型逐值一致，深浅主题均已验证 |

@@ -48,6 +48,62 @@ export type PermissionPoint =
   | "audit:read"
   | "system:configure";
 
+/**
+ * 权限点中文名。
+ *
+ * 与后端 `PermissionCatalog.DisplayNames` 一一对应：
+ * 服务端 `GET /permissions` 给的就是这份名字（HTTP 模式用服务端的），
+ * mock 模式没有服务端，就用这份。两边对不上时 CI 会报错
+ * （`scripts/check-permission-codes.py`）。
+ */
+export const PERMISSION_DISPLAY_NAMES: Record<PermissionPoint, string> = {
+  "question:read": "查看题目",
+  "question:write": "编辑题目",
+  "question:publish": "发布题目",
+  "tag:read": "查看标签",
+  "tag:write": "编辑标签",
+  "bank:read": "查看题库",
+  "bank:write": "编辑题库",
+  "import:run": "导入试题",
+  "import:adopt": "采纳试题",
+  "paper:read": "查看试卷",
+  "paper:write": "编辑试卷",
+  "paper:publish": "发布试卷",
+  "blueprint:generate": "生成组卷方案",
+  "practice:read": "查看练习",
+  "practice:write": "管理练习",
+  "exam:read": "查看考试",
+  "exam:write": "编辑考试",
+  "exam:publish": "发布考试",
+  "attempt:take": "参加考试",
+  "attempt:read-own": "查看自己的作答",
+  "attempt:read-all": "查看全部作答",
+  "review:grade": "人工阅卷",
+  "review:batch-adopt": "批量采纳初判",
+  "grade:publish": "发布成绩",
+  "proctor:monitor": "实时监考",
+  "proctor:act": "监考处置",
+  "user:read": "查看用户",
+  "user:write": "编辑用户",
+  "user:import": "导入用户",
+  "user-tag:assign": "分配用户标签",
+  "role:read": "查看角色",
+  "role:write": "编辑角色",
+  "analytics:read": "查看统计分析",
+  "audit:read": "查看审计日志",
+  "system:configure": "系统配置",
+};
+
+/** 权限点中文名；认不出来的码原样返回，不吞掉。 */
+export function permissionDisplayName(code: string): string {
+  return PERMISSION_DISPLAY_NAMES[code as PermissionPoint] ?? code;
+}
+
+/** 权限点所属模块（权限码的前缀，如 `question:read` → `question`）。 */
+export function permissionModule(code: string): string {
+  return code.split(":")[0] ?? code;
+}
+
 /** 只读权限（阅卷教师 / 学生对内容域只有读）。 */
 const READ_ONLY_QUESTION: readonly PermissionPoint[] = ["question:read"];
 const READ_ONLY_TAG: readonly PermissionPoint[] = ["tag:read"];
@@ -124,7 +180,9 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly PermissionPoint[]> = {
     "user:read",
     "user:write",
     "user:import",
-    "role:read",
+    // 内容管理员**没有** role:read：需求文档 §1 的矩阵里 role:read / role:write
+    // 只给系统管理员。后端也这么判（GET /roles 要 role:read），
+    // 前端原先多给了这一条——与自己的来源对不上。
     "analytics:read",
   ],
   author_teacher: [

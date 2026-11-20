@@ -26,6 +26,7 @@ export {
 /* 管理域：场次、名单、成绩与组织标签。 */
 export {
   type AdminAuditLog,
+  type AdminPermission,
   type AdminRole,
   type AdminSessionDetail,
   type AdminSessionRules,

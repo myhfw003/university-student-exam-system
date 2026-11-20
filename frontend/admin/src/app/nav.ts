@@ -47,6 +47,7 @@ export const ADMIN_NAV: NavGroup[] = [
     group: "系统",
     items: [
       { path: "/users", label: "用户", icon: "users" },
+      { path: "/roles", label: "角色", icon: "award" },
       { path: "/audit-logs", label: "审计", icon: "document" },
     ],
   },
