@@ -42,6 +42,10 @@ const PaperListPage = lazy(async () => ({
 const PaperWizardPage = lazy(async () => ({
   default: (await import("./features/papers/PaperWizardPage")).PaperWizardPage,
 }));
+const PracticeAssignmentListPage = lazy(async () => ({
+  default: (await import("./features/practices/PracticeAssignmentListPage"))
+    .PracticeAssignmentListPage,
+}));
 const ExamSessionListPage = lazy(async () => ({
   default: (await import("./features/sessions/ExamSessionListPage")).ExamSessionListPage,
 }));
@@ -105,6 +109,7 @@ const routes = [
           { path: "/banks/:bankId", element: lazyPage(BankWorkbenchPage) },
           { path: "/papers", element: lazyPage(PaperListPage) },
           { path: "/papers/:paperId", element: lazyPage(PaperWizardPage) },
+          { path: "/practices", element: lazyPage(PracticeAssignmentListPage) },
           { path: "/exam-sessions", element: lazyPage(ExamSessionListPage) },
           { path: "/exam-sessions/:id", element: lazyPage(ExamSessionDetailPage) },
           // 场次 ID 可选：不带场次进「实时监考」时先让管理员挑一个场次

@@ -1832,7 +1832,13 @@ export function PaperWizardPage() {
                 {remote ? (
                   <Callout icon={<Icon name="info" />} title="开放范围在练习开放单里配置">
                     真实后端的练习卷不带开放范围：开放给谁由**练习开放单**决定
-                    （可按人开放或全员开放）。
+                    （可按组织维度标签开放，或全员开放）。这份练习卷发布之后，
+                    到「练习开放单」里建一张单子挂上去并上架，学生才看得到。
+                    <div style={{ marginTop: "var(--sp-2)" }}>
+                      <Button size="sm" onClick={() => navigate("/practices")}>
+                        去练习开放单
+                      </Button>
+                    </div>
                   </Callout>
                 ) : (
                   <>

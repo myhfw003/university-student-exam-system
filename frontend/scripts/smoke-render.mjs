@@ -80,6 +80,7 @@ const ADMIN_ROUTES = [
   { path: "/banks/bank-calc-basic", marker: "题目", min: 300 },
   { path: "/papers", marker: "发布校验", min: 300 },
   { path: "/papers/exam-net-mid", marker: "基本信息", min: 300 },
+  { path: "/practices", marker: "开放单清单", min: 300 },
   { path: "/review", marker: "卷宗队列", min: 300 },
   { path: "/analytics", marker: "逐题正确率", min: 300 },
   { path: "/exam-sessions", marker: "场次清单", min: 300 },

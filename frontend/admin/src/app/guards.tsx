@@ -21,6 +21,7 @@ export interface RequirePermissionProps {
 const ROUTE_PERMISSIONS: ReadonlyArray<{ prefix: string; permission: PermissionPoint }> = [
   { prefix: "/monitoring", permission: "proctor:monitor" },
   { prefix: "/exam-sessions", permission: "exam:read" },
+  { prefix: "/practices", permission: "practice:read" },
   { prefix: "/audit-logs", permission: "audit:read" },
   { prefix: "/users", permission: "user:read" },
   { prefix: "/tags", permission: "tag:read" },

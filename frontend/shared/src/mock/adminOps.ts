@@ -9,6 +9,7 @@
    ========================================================================== */
 
 import { create } from "zustand";
+import type { PracticeAssignmentStatus } from "../domain/practice";
 import type {
   AntiCheatPolicy,
   AppUser,
@@ -257,6 +258,75 @@ function buildSessions(): ExamSession[] {
   return sessions;
 }
 
+/**
+ * 练习开放单（mock）。
+ *
+ * 真实后端里开放单是**独立于练习卷**的聚合：有自己的 ID、状态与开放期，
+ * 练习卷只提供题目与练习规则。mock 也照这个形状建，
+ * 否则管理端那一页在 mock 模式下会以为「练习卷 == 开放单」。
+ */
+export interface MockPracticeAssignment {
+  id: string;
+  /** 开放单标题。 */
+  title: string;
+  /** 挂着的练习卷 ID。 */
+  paperId: string;
+  /** 开放范围：组织维度标签 ID；空表示全员开放。 */
+  scope: string[];
+  status: PracticeAssignmentStatus;
+  /** 开放开始时间；null 表示不限。 */
+  openAt: string | null;
+  /** 开放结束时间；null 表示不限。 */
+  closeAt: string | null;
+  /** 上架时间；未上架过为 null。 */
+  publishedAt: string | null;
+  createdAt: string;
+}
+
+/**
+ * 示例练习开放单。
+ *
+ * 注意：**不是每个练习卷都有开放单**——没有开放单的练习卷学生是看不见的，
+ * 这正是真实后端的行为（学生端读的是开放单，不是练习卷）。
+ */
+function buildPracticeAssignments(): MockPracticeAssignment[] {
+  return [
+    {
+      id: "pa-math-limit",
+      title: "期末冲刺 · 高等数学极限与连续",
+      paperId: "prac-math-limit",
+      scope: [],
+      status: "published",
+      openAt: null,
+      closeAt: null,
+      publishedAt: "2026-11-10 09:00",
+      createdAt: "2026-11-09 16:20",
+    },
+    {
+      id: "pa-net-tp",
+      title: "计算机网络 · 传输层强化（面向 23 级）",
+      paperId: "prac-net-tp",
+      scope: ["org-class-cs-2301", "org-class-cs-2302"],
+      status: "published",
+      openAt: "2026-11-15 08:00",
+      closeAt: "2026-12-31 23:59",
+      publishedAt: "2026-11-15 08:05",
+      createdAt: "2026-11-14 10:12",
+    },
+    {
+      id: "pa-ds-draft",
+      title: "数据结构 · 树与查找专题",
+      paperId: "prac-ds-draft",
+      scope: [],
+      status: "draft",
+      openAt: null,
+      closeAt: null,
+      publishedAt: null,
+      createdAt: "2026-11-18 09:30",
+    },
+  ];
+}
+
 /** 示例审计日志。 */
 function buildAuditLogs(): AuditLog[] {
   const rows: Array<Omit<AuditLog, "id">> = [
@@ -434,6 +504,8 @@ export interface AdminOpsState {
   proctorCandidates: Record<string, Record<string, ProctorCandidate>>;
   /** 组织维度标签（院系 → 专业 → 班级，按 parentId 成树）。 */
   orgTags: OrgTag[];
+  /** 练习开放单。 */
+  practiceAssignments: MockPracticeAssignment[];
 }
 
 const initialState = (): AdminOpsState => ({
@@ -443,6 +515,7 @@ const initialState = (): AdminOpsState => ({
   proctorActions: [],
   proctorCandidates: {},
   orgTags: ORG_TAGS.map((tag) => ({ ...tag })),
+  practiceAssignments: buildPracticeAssignments(),
 });
 
 /** 管理端运维数据 store。 */
@@ -655,6 +728,118 @@ export function advanceSession(id: string): { ok: boolean; message?: string; sta
 
   updateSession(id, { status: target });
   return { ok: true, status: target };
+}
+
+/* ==========================================================================
+   练习开放单
+   --------------------------------------------------------------------------
+   校验与状态流转照抄后端 `PracticeAssignment`（`Exam.Domain/Learning`），
+   连报错的措辞都一样：mock 与 HTTP 模式下管理员看到的提示相同。
+   ========================================================================== */
+
+/** 开放单的时间设置。 */
+export interface PracticeAssignmentSettings {
+  title: string;
+  /** 开放范围：组织维度标签 ID；空表示全员开放。 */
+  scope: string[];
+  /** 开放开始时间；null 表示不限。 */
+  openAt: string | null;
+  /** 开放结束时间；null 表示不限。 */
+  closeAt: string | null;
+}
+
+/** 新建练习开放单（草稿）。 */
+export function createPracticeAssignment(input: {
+  title: string;
+  paperId: string;
+  scope: string[];
+  openAt: string | null;
+  closeAt: string | null;
+}): { ok: boolean; message?: string; assignment?: MockPracticeAssignment } {
+  const title = input.title.trim();
+  if (!input.paperId) return { ok: false, message: "练习试卷不合法。" };
+  if (!title) return { ok: false, message: "练习标题不能为空。" };
+  if (input.scope.some((id) => !id)) return { ok: false, message: "开放范围里的标签不合法。" };
+
+  const assignment: MockPracticeAssignment = {
+    id: `pa-u-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    title,
+    paperId: input.paperId,
+    scope: [...input.scope],
+    status: "draft",
+    openAt: input.openAt,
+    closeAt: input.closeAt,
+    publishedAt: null,
+    createdAt: new Date().toISOString().slice(0, 16).replace("T", " "),
+  };
+
+  const state = useAdminOps.getState();
+  useAdminOps.setState({ practiceAssignments: [assignment, ...state.practiceAssignments] });
+  return { ok: true, assignment };
+}
+
+/** 改开放单设置（标题、开放范围、开放期）。 */
+export function updatePracticeAssignment(
+  id: string,
+  patch: Partial<PracticeAssignmentSettings>,
+): { ok: boolean; message?: string } {
+  const state = useAdminOps.getState();
+  const assignment = state.practiceAssignments.find((a) => a.id === id);
+  if (!assignment) return { ok: false, message: "开放单不存在" };
+
+  const title = (patch.title ?? assignment.title).trim();
+  if (!title) return { ok: false, message: "练习标题不能为空。" };
+
+  const scope = patch.scope ?? assignment.scope;
+  if (scope.some((tagId) => !tagId)) return { ok: false, message: "开放范围里的标签不合法。" };
+
+  const openAt = patch.openAt === undefined ? assignment.openAt : patch.openAt;
+  const closeAt = patch.closeAt === undefined ? assignment.closeAt : patch.closeAt;
+  if (openAt && closeAt && closeAt <= openAt) {
+    return { ok: false, message: "关闭时间必须晚于开放时间。" };
+  }
+
+  useAdminOps.setState({
+    practiceAssignments: state.practiceAssignments.map((a) =>
+      a.id === id ? { ...a, title, scope: [...scope], openAt, closeAt } : a,
+    ),
+  });
+  return { ok: true };
+}
+
+/** 上架开放单：草稿与已下架的都能重新上架。 */
+export function publishPracticeAssignment(
+  id: string,
+): { ok: boolean; message?: string; status?: PracticeAssignmentStatus } {
+  const state = useAdminOps.getState();
+  const assignment = state.practiceAssignments.find((a) => a.id === id);
+  if (!assignment) return { ok: false, message: "开放单不存在" };
+  if (assignment.status === "published") return { ok: false, message: "练习已经上架了。" };
+
+  const publishedAt = new Date().toISOString().slice(0, 16).replace("T", " ");
+  useAdminOps.setState({
+    practiceAssignments: state.practiceAssignments.map((a) =>
+      a.id === id ? { ...a, status: "published", publishedAt: a.publishedAt ?? publishedAt } : a,
+    ),
+  });
+  return { ok: true, status: "published" };
+}
+
+/** 下架开放单：只有已上架的才能下架；下架后学生立刻看不见这份练习。 */
+export function archivePracticeAssignment(
+  id: string,
+): { ok: boolean; message?: string; status?: PracticeAssignmentStatus } {
+  const state = useAdminOps.getState();
+  const assignment = state.practiceAssignments.find((a) => a.id === id);
+  if (!assignment) return { ok: false, message: "开放单不存在" };
+  if (assignment.status !== "published") return { ok: false, message: "只有已上架的练习才能下架。" };
+
+  useAdminOps.setState({
+    practiceAssignments: state.practiceAssignments.map((a) =>
+      a.id === id ? { ...a, status: "archived" } : a,
+    ),
+  });
+  return { ok: true, status: "archived" };
 }
 
 /** 按账号找用户（不区分大小写，与后端唯一性口径一致）。 */

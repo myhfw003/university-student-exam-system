@@ -11,10 +11,11 @@ describe("ADMIN_NAV", () => {
     expect(content?.items.map((item) => item.label)).toEqual(["概览", "标签", "题库"]);
   });
 
-  it("测评组包含组卷 / 阅卷中心 / 成绩分析 / 考试场次 / 实时监考", () => {
+  it("测评组包含组卷 / 练习开放单 / 阅卷中心 / 成绩分析 / 考试场次 / 实时监考", () => {
     const assessment = ADMIN_NAV[1];
     expect(assessment?.items.map((item) => item.label)).toEqual([
       "组卷",
+      "练习开放单",
       "阅卷中心",
       "成绩分析",
       "考试场次",
@@ -22,10 +23,11 @@ describe("ADMIN_NAV", () => {
     ]);
   });
 
-  it("React 独有的两条路由也进了侧栏", () => {
-    // 考试场次与实时监考是 React 独有的模块，原型侧栏没有。
-    // 不进侧栏的话这两块功能在界面上没有任何入口，只能手输 URL。
+  it("React 独有的三条路由也进了侧栏", () => {
+    // 练习开放单、考试场次与实时监考是 React 独有的模块，原型侧栏没有。
+    // 不进侧栏的话这几块功能在界面上没有任何入口，只能手输 URL。
     const paths = ADMIN_NAV.flatMap((group) => group.items.map((item) => item.path));
+    expect(paths).toContain("/practices");
     expect(paths).toContain("/exam-sessions");
     expect(paths).toContain("/monitoring");
   });

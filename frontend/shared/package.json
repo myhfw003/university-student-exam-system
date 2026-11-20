@@ -12,6 +12,7 @@
     "./domain": "./src/domain/index.ts",
     "./domain/attempt": "./src/domain/attempt.ts",
     "./domain/audit": "./src/domain/audit.ts",
+    "./domain/practice": "./src/domain/practice.ts",
     "./domain/types": "./src/domain/types.ts",
     "./api": "./src/api/index.ts",
     "./auth": "./src/auth/index.ts",

@@ -249,6 +249,19 @@ export {
   type PracticeClient,
 } from "./practiceApi";
 export {
+  archivePracticeAssignment,
+  createPracticeAssignment,
+  loadPracticeAssignments,
+  publishPracticeAssignment,
+  toPracticeAssignment,
+  updatePracticeAssignment,
+  type PracticeAssignmentClient,
+  type PracticeAssignmentCreateInput,
+  type PracticeAssignmentListParams,
+  type PracticeAssignmentPage,
+  type PracticeAssignmentWriteInput,
+} from "./practiceAssignmentApi";
+export {
   loadAttemptReport,
   loadGradeRevisions,
   loadMyResults,

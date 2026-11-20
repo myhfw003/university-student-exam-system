@@ -12,7 +12,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { useToastStore } from "@exam/shared";
 import { resetCatalog, useCatalog } from "@exam/shared/mock/catalog";
-import { resetAdminOps, useAdminOps } from "@exam/shared/mock/adminOps";
+import { resetAdminOps, useAdminOps, createPracticeAssignment } from "@exam/shared/mock/adminOps";
 import { OverviewPage } from "../overview/OverviewPage";
 import { TagsPage } from "../tags/TagsPage";
 import { BanksPage } from "../banks/BanksPage";
@@ -26,6 +26,7 @@ import { ExamSessionDetailPage } from "../sessions/ExamSessionDetailPage";
 import { ProctoringPage } from "../monitoring/ProctoringPage";
 import { UsersPage } from "../users/UsersPage";
 import { AuditLogPage } from "../audit/AuditLogPage";
+import { PracticeAssignmentListPage } from "../practices/PracticeAssignmentListPage";
 import { QuestionEditor } from "../shared/QuestionEditor";
 
 /** 渲染带路由的页面。 */
@@ -428,6 +429,109 @@ describe("管理端用户页", () => {
     const updated = useAdminOps.getState().users[0];
     expect(updated?.roles).toContain("author_teacher");
     expect(useAdminOps.getState().auditLogs.some((l) => l.action === "user.assign-roles")).toBe(true);
+  });
+});
+
+describe("管理端练习开放单", () => {
+  it("渲染开放单清单与状态筛选", () => {
+    renderPage(<PracticeAssignmentListPage />);
+    expect(screen.getByRole("heading", { name: "练习开放单" })).toBeInTheDocument();
+    expect(screen.getByText("开放单清单")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "新建开放单" })).toBeInTheDocument();
+
+    // 种子里的三张开放单。
+    expect(screen.getByText("期末冲刺 · 高等数学极限与连续")).toBeInTheDocument();
+    expect(screen.getByText("数据结构 · 树与查找专题")).toBeInTheDocument();
+  });
+
+  it("按状态筛选：只看已上架的", async () => {
+    const user = userEvent.setup();
+    renderPage(<PracticeAssignmentListPage />);
+
+    await user.click(screen.getByRole("button", { name: "已上架" }));
+
+    expect(screen.getByText("期末冲刺 · 高等数学极限与连续")).toBeInTheDocument();
+    // 草稿那一张被筛掉了。
+    expect(screen.queryByText("数据结构 · 树与查找专题")).not.toBeInTheDocument();
+  });
+
+  it("新建开放单：落成草稿，上架后学生可见", async () => {
+    const user = userEvent.setup();
+    renderPage(<PracticeAssignmentListPage />);
+
+    await user.click(screen.getByRole("button", { name: "新建开放单" }));
+    const dialog = screen.getByRole("dialog");
+
+    await user.type(within(dialog).getByLabelText(/开放单标题/), "期末冲刺练习");
+    // 只能挂已发布的练习卷。
+    await user.selectOptions(within(dialog).getByLabelText(/练习卷/), "prac-ds-linear");
+    await user.click(within(dialog).getByRole("button", { name: "创建" }));
+
+    expect(lastToast()).toBe("开放单已创建（草稿）");
+
+    const row = screen.getByText("期末冲刺练习").closest("tr")!;
+    expect(within(row).getByText("草稿")).toBeInTheDocument();
+
+    // 上架：草稿 → 已上架。
+    await user.click(within(row).getByRole("button", { name: "上架" }));
+    expect(lastToast()).toBe("开放单已上架，学生可见");
+    expect(within(screen.getByText("期末冲刺练习").closest("tr")!).getByText("已上架")).toBeInTheDocument();
+  });
+
+  it("下架要走确认：下架后学生立刻看不到这份练习", async () => {
+    const user = userEvent.setup();
+    renderPage(<PracticeAssignmentListPage />);
+
+    const row = screen.getByText("期末冲刺 · 高等数学极限与连续").closest("tr")!;
+    await user.click(within(row).getByRole("button", { name: "下架" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("学生立刻看不到这份练习");
+    await user.click(within(dialog).getByRole("button", { name: "确认下架" }));
+
+    expect(lastToast()).toBe("开放单已下架，学生立即看不到这份练习");
+    expect(
+      within(screen.getByText("期末冲刺 · 高等数学极限与连续").closest("tr")!).getByText("已下架"),
+    ).toBeInTheDocument();
+  });
+
+  it("分页：总数是筛选后的条数，页面上只放这一页的行", async () => {
+    const user = userEvent.setup();
+    // 种子 3 条，再造 25 条：超过一页（每页 20 条）。
+    for (let i = 0; i < 25; i += 1) {
+      createPracticeAssignment({
+        title: `压测开放单 ${i}`,
+        paperId: "prac-ds-linear",
+        scope: [],
+        openAt: null,
+        closeAt: null,
+      });
+    }
+
+    renderPage(<PracticeAssignmentListPage />);
+
+    expect(screen.getByText("共 28 条")).toBeInTheDocument();
+    // 每行一个「编辑」按钮：第一页 20 行。
+    expect(screen.getAllByRole("button", { name: "编辑" })).toHaveLength(20);
+
+    await user.click(screen.getByRole("button", { name: "第 2 页" }));
+    expect(screen.getAllByRole("button", { name: "编辑" })).toHaveLength(8);
+  });
+
+  it("编辑开放单：标题与开放范围可改，练习卷不可换", async () => {
+    const user = userEvent.setup();
+    renderPage(<PracticeAssignmentListPage />);
+
+    const row = screen.getByText("数据结构 · 树与查找专题").closest("tr")!;
+    await user.click(within(row).getByRole("button", { name: "编辑" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByLabelText(/开放单标题/)).toHaveValue("数据结构 · 树与查找专题");
+    // 练习卷是禁用的：换卷等于换一条开放单。
+    expect(within(dialog).getByLabelText(/练习卷/)).toBeDisabled();
+
+    await user.click(within(dialog).getByRole("button", { name: "保存" }));
+    expect(lastToast()).toBe("开放单已更新");
   });
 });
 

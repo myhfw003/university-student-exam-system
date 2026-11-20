@@ -15,6 +15,14 @@ export {
   type AuditActionGroup,
 } from "./audit";
 
+/* 练习域：练习开放单的状态词表与管理端行（与后端 PracticeAssignment 对齐）。 */
+export {
+  PRACTICE_ASSIGNMENT_STATUS_LABEL,
+  practiceAssignmentStatusLabel,
+  type AdminPracticeAssignment,
+  type PracticeAssignmentStatus,
+} from "./practice";
+
 /* 管理域：场次、名单、成绩与组织标签。 */
 export {
   type AdminAuditLog,
