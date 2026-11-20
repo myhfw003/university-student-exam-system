@@ -51,20 +51,32 @@ function expectOk(result: { status: number; raw: string }, what: string) {
   expect(result.status, `${what} → HTTP ${result.status}: ${result.raw}`).toBeLessThan(300);
 }
 
-/** 两行的 CSV：一行合法，一行缺题型（要报错但不阻断整批）。 */
-const CSV = [
-  "题号,题干,题型,选项,答案,解析,难度",
-  "Q-E2E-1,端到端导入的行：1 + 1 = ?,单选,A. 2|B. 3,A,端到端用例的解析,基础",
-  "Q-E2E-2,端到端导入的坏行：没有题型,,,,,",
-].join("\n");
+/**
+ * 两行的 CSV：一行合法，一行缺题型（要报错但不阻断整批）。
+ *
+ * 题号**每次跑都要不一样**：题目按题号唯一，跑第二遍时上一遍留下的
+ * 题目还在，采纳会把这一行当重复跳过，采纳数就成了 0。
+ */
+function csvOf(runId: string): string {
+  return [
+    "题号,题干,题型,选项,答案,解析,难度",
+    `Q-E2E-${runId},端到端导入的行：1 + 1 = ?,单选,A. 2|B. 3,A,端到端用例的解析,基础`,
+    `Q-E2E-${runId}-BAD,端到端导入的坏行：没有题型,,,,,`,
+  ].join("\n");
+}
 
 test.describe("导入批次（真实后端）", () => {
   test("上传后重新打开批次，逐行结果还在", async () => {
     const admin = await login(apiRoot, adminUsername, adminPassword);
 
     // 1. 上传：服务端解析，给出逐行结果。
+    const runId = String(Date.now());
     const form = new FormData();
-    form.append("file", new Blob([CSV], { type: "text/csv" }), "e2e-import.csv");
+    form.append(
+      "file",
+      new Blob([csvOf(runId)], { type: "text/csv" }),
+      `e2e-import-${runId}.csv`,
+    );
     const uploadResponse = await fetch(`${apiRoot}/api/v1/imports`, {
       method: "POST",
       headers: { Authorization: `Bearer ${admin.token}` },
