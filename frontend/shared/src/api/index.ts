@@ -259,6 +259,7 @@ export {
 export {
   loadAttemptFeedback,
   loadMyPractices,
+  loadPractice,
   toPracticeSummary,
   type PracticeClient,
 } from "./practiceApi";

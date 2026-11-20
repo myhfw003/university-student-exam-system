@@ -48,6 +48,16 @@ const PRACTICES = {
   size: 200,
 };
 
+/**
+ * 一条练习开放单（详情接口给的）。
+ *
+ * 与列表里的一项是同一个 DTO——这里给的是「单独取这一条」的那份。
+ */
+const PRACTICE = PRACTICES.items[0];
+
+/** 记下请求过的地址：练习会话该只取那一条，不该拉整张列表。 */
+const requested: string[] = [];
+
 /** 考生卷面：题目 21 的选项顺序是 C/A/B。 */
 const ATTEMPT = {
   attemptId: ATTEMPT_ID,
@@ -143,10 +153,13 @@ describe("useRemotePracticeSession · HTTP 模式的练习会话", () => {
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = typeof input === "string" ? input : String(input);
         const method = init?.method ?? "GET";
+        requested.push(url);
 
         if (url.includes("/system/time")) {
           return json({ serverTime: "2026-11-17T10:00:00Z", monotonicTime: 1 });
         }
+        // 单条详情与列表是两回事：详情是对象本身，列表是 { items: [...] }。
+        if (url.includes("/practices/")) return json(PRACTICE);
         if (url.includes("/practices")) return json(PRACTICES);
         if (url.endsWith("/attempts") && method === "POST") return json(ATTEMPT);
         if (url.includes(`/attempts/${ATTEMPT_ID}/answers`)) {
@@ -203,6 +216,26 @@ describe("useRemotePracticeSession · HTTP 模式的练习会话", () => {
     expect(result.current.paper!.mode).toBe("standard");
     // 选项顺序照服务端给的来（练习不置换）。
     expect(result.current.paper!.items[0]!.displayKeys).toEqual(["C", "A", "B"]);
+  });
+
+  it("只取这一条练习，不为了拿一条去拉整张列表", async () => {
+    const { result } = renderSession();
+
+    await waitFor(() => {
+      expect(result.current.paper).not.toBeNull();
+    });
+
+    expect(result.current.practice?.name).toBe("计算机网络专项练习");
+    // 取的是这一条：地址里带着开放单 ID。
+    expect(
+      requested.some((url) => url.includes(`/practices/${ASSIGNMENT_ID}`)),
+      "应当只请求这一条练习",
+    ).toBe(true);
+    // 没有去拉整张列表。
+    expect(
+      requested.some((url) => /\/practices(\?|$)/.test(url)),
+      "不该为了拿一条去拉整张列表",
+    ).toBe(false);
   });
 
   it("选中的显示字母在上行前换成原题键", async () => {

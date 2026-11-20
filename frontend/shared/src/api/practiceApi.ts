@@ -5,6 +5,7 @@
    开放单自己带次数上限、反馈时机与错题回流设置。
 
    - `GET /practices`：学生可见的开放单列表（后端已按可见范围过滤）；
+   - `GET /practices/{id}`：其中一条（与列表里的一项是同一个 DTO）；
    - `POST /attempts/{id}/feedback`：练习即时反馈（正确答案与解析）。
 
    反馈里的正确答案键是**原题键**——换回显示字母要靠卷面的换算表。
@@ -59,6 +60,22 @@ export function toPracticeSummary(dto: Dto): PracticeSummary {
     suggestedMinutes: num(dto.suggestedMinutes),
     canStart: bool(dto.canStart),
   };
+}
+
+/**
+ * 读取一条练习开放单。
+ *
+ * 与列表里的一项**完全一样**（服务端同一个 `PracticeSummaryDto`），
+ * 区别是只取这一条——为了拿一条去拉整张表不值当。
+ *
+ * 看不见的开放单（不在可见范围内）服务端一律 404。
+ */
+export async function loadPractice(
+  id: string,
+  client: PracticeClient = httpClient,
+): Promise<PracticeSummary> {
+  const dto = await client.get<Dto>(`${ENDPOINTS.delivery.practices}/${id}`);
+  return toPracticeSummary(dto);
 }
 
 /**

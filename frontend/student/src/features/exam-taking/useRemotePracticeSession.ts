@@ -31,7 +31,7 @@ import {
   ENDPOINTS,
   getAccessToken,
   loadAttemptFeedback,
-  loadMyPractices,
+  loadPractice,
   startPracticeAttempt,
   submitAttempt,
   type OptionKeyMap,
@@ -93,9 +93,11 @@ export function useRemotePracticeSession(
 
     void (async () => {
       try {
-        const practices = await loadMyPractices().catch(() => []);
+        // 只要这一条练习——别为了拿一条去拉整张表。
+        // 看不见的开放单（不在可见范围内）服务端会 404，这里当没有。
+        const practice = await loadPractice(assignmentId).catch(() => null);
         if (cancelled) return;
-        setSummary(practices.find((p) => p.id === assignmentId) ?? null);
+        setSummary(practice);
 
         // 开始（或续上）一次练习：服务端幂等，次数用尽时才会拒绝。
         const started = await startPracticeAttempt(assignmentId);
