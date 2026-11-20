@@ -59,6 +59,7 @@ export {
 export {
   addPaperItem,
   applyPaperTemplate,
+  archivePaper,
   createPaper,
   createPaperTemplate,
   deletePaper,

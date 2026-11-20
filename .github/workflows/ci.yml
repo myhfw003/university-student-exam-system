@@ -62,6 +62,10 @@ jobs:
         # 开放单状态码是前后端共享的词表：前端把它当查询参数发给后端，
         # 写错一个码后端会判「练习状态取值不合法。」，整页筛选静默失败。
         run: python3 ../scripts/check-practice-status-codes.py
+      - name: 试卷状态码前后端一致
+        # 试卷状态码也是共享词表：前端按它判断「这份试卷现在能不能发、
+        # 是不是已经归档」，写错一个码后端不认，而单元测试全绿。
+        run: python3 ../scripts/check-paper-status-codes.py
 
   monitoring:
     name: 监控配置校验

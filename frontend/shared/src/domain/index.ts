@@ -23,6 +23,12 @@ export {
   type PracticeAssignmentStatus,
 } from "./practice";
 
+/* 试卷域：服务端的试卷状态词表（与后端 PaperStatuses 对齐）。 */
+export {
+  PAPER_STATUS,
+  type PaperStatus,
+} from "./paper";
+
 /* 管理域：场次、名单、成绩与组织标签。 */
 export {
   type AdminAuditLog,

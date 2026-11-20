@@ -1,5 +1,5 @@
 /* ==========================================================================
-   试卷版本快照的接口适配
+   试卷版本快照与归档的接口适配
    --------------------------------------------------------------------------
    快照是**发布时冻结的一份卷面**：发布一次就是一个版本，
    之后改卷不影响已经发出去的版本。
@@ -8,10 +8,15 @@
    1. 版本列表里的摘要（版本号、题量、总分、内容指纹）；
    2. 快照详情里冻结的题目——**含正确答案与解析**
       （所以这个接口要的是 `paper:write`，只有出题的人能看）。
+
+   归档是试卷生命周期的第三个动作：归档后试卷标成 `archived`，
+   不能再撤回发布、不能再删除、不能再用它发布新的考试场次；
+   已经开考的场次照常（场次用的是发布时冻结的快照）。
    ========================================================================== */
 
 import { describe, expect, it, vi } from "vitest";
 import {
+  archivePaper,
   loadLatestPaperSnapshot,
   loadPaperSnapshot,
   loadPaperSnapshots,
@@ -99,5 +104,41 @@ describe("paperApi · 版本快照", () => {
 
     expect(get.mock.calls[0]![0]).toBe("/papers/12/snapshots/latest");
     expect(detail.items[0]!.sortOrder).toBe(1);
+  });
+});
+
+/** 归档之后服务端给的试卷详情。 */
+const ARCHIVED_DETAIL = {
+  paper: {
+    id: 12,
+    kind: "exam",
+    kindLabel: "考试卷",
+    name: "期中考试卷",
+    status: "archived",
+    statusLabel: "已归档",
+    targetTotalScore: 100,
+    totalItemScore: 40,
+    durationMinutes: 60,
+    itemCount: 1,
+  },
+  items: [],
+  sections: [],
+  tagIds: [],
+  orderRule: "by_type",
+  variantRule: "standard",
+  answerPolicy: "after_close",
+};
+
+describe("paperApi · 归档试卷", () => {
+  it("归档走 POST /papers/{id}/archive", async () => {
+    const post = vi.fn(async (_path: string) => ARCHIVED_DETAIL);
+    const client = { post } as unknown as PaperClient;
+
+    const detail = await archivePaper("12", client);
+
+    expect(post.mock.calls[0]![0]).toBe("/papers/12/archive");
+    // 归档后的状态由服务端给：前端不自己编状态。
+    expect(detail.paper.status).toBe("archived");
+    expect(detail.paper.statusLabel).toBe("已归档");
   });
 });

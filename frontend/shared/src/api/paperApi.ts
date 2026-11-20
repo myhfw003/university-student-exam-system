@@ -842,6 +842,26 @@ export async function loadLatestPaperSnapshot(
   return toPaperSnapshotDetail(res);
 }
 
+/**
+ * 归档试卷（下架）。
+ *
+ * 归档把试卷标记成 `archived`，重复归档不会报错（服务端幂等）。
+ * 归档之后：
+ * - 不能再撤回发布（服务端只让「已发布」的试卷撤回）；
+ * - 不能再删除（删除只让草稿状态的试卷删）；
+ * - 不能再用它发布新的考试场次（场次发布要求试卷处于已发布状态）。
+ *
+ * 已经开考的场次照常：场次用的是发布时冻结的快照，不看试卷现在的状态。
+ * 归档也不是终态——这份试卷仍然可以重新发布。
+ */
+export async function archivePaper(
+  id: string,
+  client: PaperClient = httpClient,
+): Promise<AdminPaperDetail> {
+  const res = await client.post<Dto>(`${ENDPOINTS.catalog.papers}/${id}/archive`);
+  return toPaperDetail(res);
+}
+
 /** 取回试卷的组卷方案。 */
 export async function loadBlueprint(
   id: string,

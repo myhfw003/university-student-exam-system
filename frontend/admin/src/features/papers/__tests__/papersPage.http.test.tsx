@@ -21,6 +21,7 @@ const api = {
   validatePaper: vi.fn(),
   publishPaper: vi.fn(),
   unpublishPaper: vi.fn(),
+  archivePaper: vi.fn(),
   previewPaper: vi.fn(),
   loadPaperTemplates: vi.fn(),
   saveBlueprint: vi.fn(),
@@ -146,6 +147,7 @@ describe("管理端组卷 · HTTP 模式", () => {
     });
     api.publishPaper.mockResolvedValue(DETAIL);
     api.unpublishPaper.mockResolvedValue(DETAIL);
+    api.archivePaper.mockResolvedValue({ ...DETAIL, paper: { ...PAPER, status: "archived", statusLabel: "已归档" } });
     api.previewPaper.mockResolvedValue({
       variantKey: "v1",
       rule: "small_plum",
@@ -399,5 +401,42 @@ describe("管理端组卷 · HTTP 模式", () => {
       expect(api.loadLatestPaperSnapshot).toHaveBeenCalledWith("12");
     });
     expect(screen.getByText("当前生效版本里的题目")).toBeInTheDocument();
+  });
+
+  it("归档试卷：先确认后果，再走服务端的归档端点", async () => {
+    const user = userEvent.setup();
+    renderWizard("publish");
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "归档" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "归档" }));
+
+    // 确认框要说清楚后果，再让管理员点头。
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/不能再用于发布新的考试场次/)).toBeInTheDocument();
+    expect(api.archivePaper).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole("button", { name: "确认归档" }));
+
+    await waitFor(() => {
+      expect(api.archivePaper).toHaveBeenCalledWith("12");
+    });
+  });
+
+  it("已归档的试卷：状态照服务端显示，归档按钮不再出现", async () => {
+    api.loadPaper.mockResolvedValue({
+      ...DETAIL,
+      paper: { ...PAPER, status: "archived", statusLabel: "已归档" },
+    });
+    renderWizard("publish");
+
+    await waitFor(() => {
+      expect(screen.getByText("已归档")).toBeInTheDocument();
+    });
+    // 归档过的试卷不能再归档；发布按钮变成「重新发布」。
+    expect(screen.queryByRole("button", { name: "归档" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新发布" })).toBeInTheDocument();
   });
 });

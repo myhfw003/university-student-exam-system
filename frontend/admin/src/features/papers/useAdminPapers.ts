@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  archivePaper,
   createPaper as createRemotePaper,
   deletePaper as deleteRemotePaper,
   isBackendEnabled,
@@ -36,6 +37,7 @@ import {
   type PaperSnapshotDetail,
   type PaperSnapshotSummary,
 } from "@exam/shared/api";
+import { PAPER_STATUS } from "@exam/shared/domain";
 import type {
   ExamPaper,
   OrderRule,
@@ -91,8 +93,12 @@ export interface PaperView {
   tags: string[];
   /** 是否已发布。 */
   published: boolean;
+  /** 是否已归档（服务端三态的第三态；mock 的试卷没有这个状态）。 */
+  archived: boolean;
   /** 服务端状态：draft / published / archived。 */
   status: string;
+  /** 状态中文名。HTTP 模式是服务端给的那一份，mock 用前端自己的说法。 */
+  statusLabel: string;
   /** 名单组（HTTP 模式恒为空：名单在���次上）。 */
   scope: string[];
 }
@@ -183,8 +189,11 @@ export function toPaperView(detail: AdminPaperDetail): PaperView {
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((item) => ({ qid: item.questionId, score: item.score })),
     tags: detail.tagIds,
-    published: detail.paper.status === "published",
+    published: detail.paper.status === PAPER_STATUS.published,
+    archived: detail.paper.status === PAPER_STATUS.archived,
     status: detail.paper.status,
+    // 中文名照抄服务端的：服务端改了文案，管理端不会显示成另一个名字。
+    statusLabel: detail.paper.statusLabel,
     scope: [],
   };
 }
@@ -237,7 +246,7 @@ export function useAdminPapers(kind: "exam" | "practice"): {
             itemCount: paper.itemCount,
             passScore: paper.passScore ?? 0,
             mode: "standard",
-            published: paper.status === "published",
+            published: paper.status === PAPER_STATUS.published,
             tags: [],
           })),
         );
@@ -357,6 +366,8 @@ export function useAdminPaper(id: string): {
   publish: (reason?: string) => Promise<void>;
   /** 撤回发布。 */
   unpublish: () => Promise<void>;
+  /** 归档（下架）。mock 没有「已归档」状态，只有真实后端能做。 */
+  archive: () => Promise<void>;
 } {
   const remote = isBackendEnabled();
   const exams = useCatalog((state) => state.exams);
@@ -411,7 +422,11 @@ export function useAdminPaper(id: string): {
       items: itemsOf(item),
       tags: item.tags,
       published: isExam ? exam.published : item.status === "published",
+      archived: false,
       status: item.status,
+      statusLabel: (isExam ? exam.published : item.status === "published")
+        ? "已发布"
+        : "未发布",
       scope: [...item.scope],
     };
   }, [remote, exams, practices, id]);
@@ -558,7 +573,15 @@ export function useAdminPaper(id: string): {
     [remote, id, refresh],
   );
 
-  return { paper, loading, refresh, saveMeta, setItems, setMode, publish, unpublish };
+  const archive = useCallback(async () => {
+    if (!remote) {
+      throw new Error("归档只在真实后端模式下可用：mock 没有「已归档」这个状态。");
+    }
+    await archivePaper(id);
+    refresh();
+  }, [remote, id, refresh]);
+
+  return { paper, loading, refresh, saveMeta, setItems, setMode, publish, unpublish, archive };
 }
 
 /* -------------------------------------------------------------- 题目池 */

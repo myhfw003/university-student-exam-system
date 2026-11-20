@@ -219,6 +219,7 @@ export function PaperWizardPage() {
     setMode: saveMode,
     publish: publishRemote,
     unpublish: unpublishRemote,
+    archive: archiveRemote,
   } = useAdminPaper(paperId);
 
   // 版本快照：发布一次冻结一版卷面，改卷不影响已经发出去的版本。
@@ -368,6 +369,8 @@ export function PaperWizardPage() {
   /* ------------------------------------------------------- 卷面预览状态 */
 
   const [previewStudent, setPreviewStudent] = useState("");
+  /** 归档确认框：先确认，再发请求（归档会改服务端状态，不能一点就生效）。 */
+  const [pendingArchive, setPendingArchive] = useState(false);
   /** HTTP 模式：服务端给的派生卷面。 */
   const [variant, setVariant] = useState<PaperVariant | null>(null);
   const [variantError, setVariantError] = useState<string | null>(null);
@@ -1045,6 +1048,18 @@ export function PaperWizardPage() {
     }
   };
 
+  /** 归档：服务端把试卷标成「已归档」。mock 没有这一档状态，走不通时直说。 */
+  const archive = async () => {
+    if (!paper) return;
+    setPendingArchive(false);
+    try {
+      await archiveRemote();
+      toast.ok(kind === "exam" ? "试卷已归档" : "练习卷已归档");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "归档失败");
+    }
+  };
+
   /** 取服务端给的派生卷面（HTTP 模式）。 */
   const loadVariant = async () => {
     if (!paper) return;
@@ -1088,6 +1103,7 @@ export function PaperWizardPage() {
   const steps = STEPS[kind];
   const currentIndex = steps.findIndex((s) => s.key === step);
   const published = paper.published;
+  const archived = paper.archived;
   const scopeStudents = useCatalog.getState().students.filter(
     (s) => scope.length === 0 || scope.includes(s.classId),
   );
@@ -1775,7 +1791,7 @@ export function PaperWizardPage() {
         <section className="card">
           <div className="card-head">
             <h2 className="card-title">{kind === "exam" ? "名单与发布" : "开放与上架"}</h2>
-            <span className="text-sm text-3">{published ? "已发布" : "未发布"}</span>
+            <span className="text-sm text-3">{paper.statusLabel}</span>
           </div>
           <div className="card-body">
             {kind === "exam" ? (
@@ -2001,6 +2017,11 @@ export function PaperWizardPage() {
                   mock 模式没有「发布」这一步，也就没有冻结的版本；
                   真实后端每发布一次就冻结一版卷面，改卷不影响已发布的版本。
                 </Callout>
+                <div style={{ marginTop: "var(--sp-2)" }}>
+                  <Callout icon={<Icon name="info" />} title="归档在真实后端上">
+                    mock 的试卷没有「已归档」这一档状态，归档只接真实后端。
+                  </Callout>
+                </div>
               </div>
             )}
           </div>
@@ -2012,12 +2033,36 @@ export function PaperWizardPage() {
               </Button>
             ) : (
               <Button variant="primary" disabled={!check.ok} onClick={() => void publish()}>
-                {kind === "exam" ? "发布考试" : "上架练习"}
+                {archived
+                  ? kind === "exam"
+                    ? "重新发布"
+                    : "重新上架"
+                  : kind === "exam"
+                    ? "发布考试"
+                    : "上架练习"}
               </Button>
-            )}
+            )}{" "}
+            {remote && !archived ? (
+              <Button onClick={() => setPendingArchive(true)}>归档</Button>
+            ) : null}
           </div>
         </section>
       ) : null}
+
+      {/* 归档前确认：归档改的是服务端状态，说清楚后果再动手。 */}
+      <ConfirmDialog
+        open={pendingArchive}
+        title={kind === "exam" ? "归档试卷" : "归档练习卷"}
+        message={
+          kind === "exam"
+            ? `归档后，「${paper.name}」不能再用于发布新的考试场次；已经开考的场次照常（场次用的是发布时冻结的卷面）。归档后这份试卷也不能再删除——要删得在归档前删。之后仍然可以重新发布。`
+            : `归档后，「${paper.name}」标记为「已归档」。学生能不能看到它由开放单决定：开放单还上架着，学生就还看得见。归档后这份练习卷不能再删除，也不能撤回上架；之后仍然可以重新上架。`
+        }
+        confirmText="确认归档"
+        confirmVariant="danger"
+        onCancel={() => setPendingArchive(false)}
+        onConfirm={archive}
+      />
 
       {/* 某一版快照的冻结卷面。 */}
       <Dialog
