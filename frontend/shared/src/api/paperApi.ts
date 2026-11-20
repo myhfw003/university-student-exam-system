@@ -940,6 +940,19 @@ export async function loadPaperTemplates(
   return { items, total: num(res.total, items.length) };
 }
 
+/**
+ * 取回一个卷型模板的详情（含题位清单）。
+ *
+ * 模板的题位只有题目 ID 与分值——题面要另外按题目取。
+ */
+export async function loadPaperTemplate(
+  id: string,
+  client: PaperClient = httpClient,
+): Promise<AdminPaperTemplateDetail> {
+  const res = await client.get<Dto>(`${ENDPOINTS.catalog.paperTemplates}/${id}`);
+  return toPaperTemplateDetail(res);
+}
+
 /** 把当前试卷存成卷型模板。 */
 export async function createPaperTemplate(
   input: { paperId: string; name: string },

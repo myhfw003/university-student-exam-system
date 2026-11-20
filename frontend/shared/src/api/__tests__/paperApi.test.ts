@@ -20,6 +20,7 @@ import {
   loadLatestPaperSnapshot,
   loadPaperSnapshot,
   loadPaperSnapshots,
+  loadPaperTemplate,
   type PaperClient,
 } from "../paperApi";
 
@@ -140,5 +141,42 @@ describe("paperApi · 归档试卷", () => {
     // 归档后的状态由服务端给：前端不自己编状态。
     expect(detail.paper.status).toBe("archived");
     expect(detail.paper.statusLabel).toBe("已归档");
+  });
+});
+
+/** 服务端给的卷型模板详情。 */
+const TEMPLATE_DETAIL = {
+  template: {
+    id: 7,
+    name: "期末复习卷",
+    kind: "exam",
+    kindLabel: "考试卷",
+    variantRule: "standard",
+    variantRuleLabel: "标准卷",
+    durationMinutes: 30,
+    passScore: null,
+    itemCount: 1,
+    totalScore: 10,
+    sourcePaperId: 12,
+    createdAt: "2026-11-20T09:00:00Z",
+  },
+  items: [{ questionId: 5, score: 10, sortOrder: 0 }],
+};
+
+describe("paperApi · 卷型模板详情", () => {
+  it("取模板详情走 GET /paper-templates/{id}", async () => {
+    const get = vi.fn(async (_path: string) => TEMPLATE_DETAIL);
+    const client = { get } as unknown as PaperClient;
+
+    const detail = await loadPaperTemplate("7", client);
+
+    expect(get.mock.calls[0]![0]).toBe("/paper-templates/7");
+    expect(detail.template.name).toBe("期末复习卷");
+    expect(detail.template.itemCount).toBe(1);
+    // 题位清单：题目 ID 与分值（题面要另外按题目取）。
+    expect(detail.items).toHaveLength(1);
+    expect(detail.items[0]!.questionId).toBe("5");
+    expect(detail.items[0]!.score).toBe(10);
+    expect(detail.items[0]!.sortOrder).toBe(0);
   });
 });

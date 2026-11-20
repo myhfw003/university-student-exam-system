@@ -38,11 +38,14 @@ import {
   createPaperTemplate,
   generateBlueprint,
   isBackendEnabled,
+  loadPaperTemplate,
   loadPaperTemplates,
+  loadQuestion,
   previewPaper,
   saveBlueprint,
   validatePaper,
   type AdminPaperTemplate,
+  type AdminPaperTemplateDetail,
   type PaperSnapshotDetail,
   type PaperValidation,
   type PaperVariant,
@@ -187,6 +190,20 @@ function toCheckView(validation: PaperValidation): CheckView {
   const failed = checks.filter((c) => !c.ok && c.level === "error").length;
   const warnings = checks.filter((c) => !c.ok && c.level === "warning").length;
   return { ok: failed === 0, total: checks.length, failed, warnings, checks };
+}
+
+/** 模板题位清单的一行。 */
+interface TemplateItemRow {
+  /** 题位顺序。 */
+  sortOrder: number;
+  /** 题目 ID。 */
+  questionId: string;
+  /** 题号。 */
+  code: string;
+  /** 题干。 */
+  stem: string;
+  /** 分值。 */
+  score: number;
 }
 
 /** 组卷向导。 */
@@ -510,6 +527,87 @@ export function PaperWizardPage() {
     }
     return mockTemplates.filter((t) => t.kind === kind);
   }, [remote, remoteTemplates, mockTemplates, kind]);
+
+  /* -------------------------------------------- 模板详情（题位清单） */
+
+  // 模板的题位清单：先看清里面是哪几道题，再决定套不套用。
+  const [templateDetailOpen, setTemplateDetailOpen] = useState(false);
+  const [templateDetail, setTemplateDetail] = useState<AdminPaperTemplateDetail | null>(null);
+  const [templateRows, setTemplateRows] = useState<TemplateItemRow[]>([]);
+  const [templateLoading, setTemplateLoading] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+
+  /** 弹窗里的模板清单。 */
+  const templateCatalog = useMemo(() => {
+    if (remote) {
+      return remoteTemplates.map((t) => ({
+        id: t.id,
+        name: t.name,
+        mode: t.variantRuleLabel || t.variantRule,
+        durationMin: t.durationMinutes,
+        itemCount: t.itemCount,
+        totalScore: t.totalScore,
+      }));
+    }
+    return mockTemplates
+      .filter((t) => t.kind === kind)
+      .map((t) => ({
+        id: t.id,
+        name: t.name,
+        mode: t.mode,
+        durationMin: t.durationMin,
+        itemCount: t.items.length,
+        totalScore: t.items.reduce((sum, item) => sum + item.score, 0),
+      }));
+  }, [remote, remoteTemplates, mockTemplates, kind]);
+
+  /** 打开某个模板的题位清单。 */
+  const openTemplateDetail = async (templateId: string) => {
+    setTemplateDetailOpen(true);
+    setTemplateDetail(null);
+    setTemplateRows([]);
+    setTemplateError(null);
+    setTemplateLoading(true);
+    try {
+      if (remote) {
+        const detail = await loadPaperTemplate(templateId);
+        setTemplateDetail(detail);
+        // 题位只给题目 ID，题面要一道一道取；取不到的照实标出来，不假装有。
+        const rows = await Promise.all(
+          detail.items.map(async (item) => {
+            const question = await loadQuestion(item.questionId).catch(() => null);
+            return {
+              sortOrder: item.sortOrder,
+              questionId: item.questionId,
+              code: question?.code ?? `#${item.questionId}`,
+              stem: question?.stem ?? "题目已删除或读不到",
+              score: item.score,
+            };
+          }),
+        );
+        setTemplateRows(rows);
+      } else {
+        // mock：模板的题位就在本地内容仓库里。
+        const tpl = mockTemplates.find((t) => t.id === templateId);
+        setTemplateRows(
+          (tpl?.items ?? []).map((item, index) => {
+            const question = getQuestion(item.qid);
+            return {
+              sortOrder: index,
+              questionId: item.qid,
+              code: question?.code ?? item.qid,
+              stem: question?.stem ?? "题目已删除或读不到",
+              score: item.score,
+            };
+          }),
+        );
+      }
+    } catch (error) {
+      setTemplateError(error instanceof Error ? error.message : "读取模板详情失败");
+    } finally {
+      setTemplateLoading(false);
+    }
+  };
 
   /* ------------------------------------------------------------ 动作 */
 
@@ -1563,6 +1661,9 @@ export function PaperWizardPage() {
                         </option>
                       ))}
                     </SelectInput>
+                    <Button size="sm" onClick={() => setTemplateDetailOpen(true)}>
+                      查看题位清单
+                    </Button>
                   </>
                 ) : (
                   <span className="text-sm text-3">暂无卷型模板，可将当前配分保存为模板。</span>
@@ -2048,6 +2149,87 @@ export function PaperWizardPage() {
           </div>
         </section>
       ) : null}
+
+      {/* 模板的题位清单：套用之前先看清里面是哪几道题。 */}
+      <Dialog
+        open={templateDetailOpen}
+        onClose={() => setTemplateDetailOpen(false)}
+        title="卷型模板"
+        footer={
+          <Button variant="secondary" onClick={() => setTemplateDetailOpen(false)}>
+            关闭
+          </Button>
+        }
+      >
+        {templateCatalog.length > 0 ? (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">模板</th>
+                  <th scope="col">卷型</th>
+                  <th scope="col">时长</th>
+                  <th scope="col">题量</th>
+                  <th scope="col">总分</th>
+                  <th scope="col"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {templateCatalog.map((t) => (
+                  <tr key={t.id}>
+                    <td>{t.name}</td>
+                    <td>{t.mode}</td>
+                    <td className="num">{t.durationMin} 分钟</td>
+                    <td className="num">{t.itemCount}</td>
+                    <td className="num">{t.totalScore}</td>
+                    <td className="col-actions">
+                      <Button size="sm" onClick={() => void openTemplateDetail(t.id)}>
+                        查看题位
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="section-note">还没有卷型模板，可把当前配分保存为模板。</p>
+        )}
+
+        {templateLoading ? <p className="section-note">读取模板题位…</p> : null}
+        {templateError ? <p className="section-note">{templateError}</p> : null}
+        {templateDetail ? (
+          <div style={{ marginTop: "var(--sp-3)" }}>
+            <h3 className="section-title">「{templateDetail.template.name}」的题位清单</h3>
+            {templateRows.length > 0 ? (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th scope="col">#</th>
+                      <th scope="col">题号</th>
+                      <th scope="col">题干</th>
+                      <th scope="col">分值</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {templateRows.map((row) => (
+                      <tr key={`${row.questionId}-${row.sortOrder}`}>
+                        <td className="num">{row.sortOrder + 1}</td>
+                        <td className="mono">{row.code}</td>
+                        <td>{row.stem}</td>
+                        <td className="num">{row.score}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : templateLoading ? null : (
+              <p className="section-note">这个模板还没有题位。</p>
+            )}
+          </div>
+        ) : null}
+      </Dialog>
 
       {/* 归档前确认：归档改的是服务端状态，说清楚后果再动手。 */}
       <ConfirmDialog

@@ -24,6 +24,7 @@ const api = {
   archivePaper: vi.fn(),
   previewPaper: vi.fn(),
   loadPaperTemplates: vi.fn(),
+  loadPaperTemplate: vi.fn(),
   saveBlueprint: vi.fn(),
   generateBlueprint: vi.fn(),
   applyPaperTemplate: vi.fn(),
@@ -100,6 +101,22 @@ const QUESTION = {
   updatedAt: null,
 };
 
+/** 服务端的卷型模板。 */
+const TEMPLATE = {
+  id: "7",
+  name: "期末复习卷",
+  kind: "exam",
+  kindLabel: "考试卷",
+  variantRule: "standard",
+  variantRuleLabel: "标准卷",
+  durationMinutes: 30,
+  passScore: null,
+  itemCount: 1,
+  totalScore: 10,
+  sourcePaperId: "12",
+  createdAt: "2026-11-20T09:00:00Z",
+};
+
 /** 渲染带路由的页面。 */
 function renderList() {
   return render(
@@ -172,6 +189,10 @@ describe("管理端组卷 · HTTP 模式", () => {
       ],
     });
     api.loadPaperTemplates.mockResolvedValue({ items: [], total: 0 });
+    api.loadPaperTemplate.mockResolvedValue({
+      template: TEMPLATE,
+      items: [{ questionId: "5", score: 10, sortOrder: 0 }],
+    });
     api.saveBlueprint.mockResolvedValue({ id: "1", paperId: "12" });
     api.generateBlueprint.mockResolvedValue({
       blueprintId: "1",
@@ -425,8 +446,31 @@ describe("管理端组卷 · HTTP 模式", () => {
     });
   });
 
-  it("已归档的试卷：状态照服务端显示，归档按钮不再出现", async () => {
-    api.loadPaper.mockResolvedValue({
+  it("卷型模板：能看模板的题位清单（题号、题干、分值）", async () => {
+    const user = userEvent.setup();
+    api.loadPaperTemplates.mockResolvedValue({ items: [TEMPLATE], total: 1 });
+    renderWizard("select");
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "查看题位清单" })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: "查看题位清单" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("期末复习卷")).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "查看题位" }));
+
+    await waitFor(() => {
+      expect(api.loadPaperTemplate).toHaveBeenCalledWith("7");
+    });
+    // 题位清单：题号、题干、分值都在（题干是按题目 ID 现取的）。
+    expect(await within(dialog).findByText("「期末复习卷」的题位清单")).toBeInTheDocument();
+    expect(within(dialog).getByText("TCP 属于哪一层协议？")).toBeInTheDocument();
+    expect(within(dialog).getByText("Q-5")).toBeInTheDocument();
+  });
+
+  it("已归档的试卷：状态照服务端显示，归档按钮不再出现", async () => {    api.loadPaper.mockResolvedValue({
       ...DETAIL,
       paper: { ...PAPER, status: "archived", statusLabel: "已归档" },
     });

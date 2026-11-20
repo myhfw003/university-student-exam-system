@@ -71,6 +71,7 @@ export {
   loadPapers,
   loadPaperSnapshot,
   loadPaperSnapshots,
+  loadPaperTemplate,
   loadPaperTemplates,
   previewPaper,
   publishPaper,
