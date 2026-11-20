@@ -11,7 +11,12 @@
       （`revealed` 为 false）。前端不能自己把答案补出来。
    ========================================================================== */
 
-import type { AttemptReport, AttemptSurface, ReportDetail } from "../domain/attempt";
+import type {
+  AttemptReport,
+  AttemptScores,
+  AttemptSurface,
+  ReportDetail,
+} from "../domain/attempt";
 import type { Question } from "../domain/types";
 import { surfaceItem } from "./paper";
 import type { GradeStatus, GradedDetail, GradedWithTeacher } from "./scoring";
@@ -63,8 +68,11 @@ function comprehensiveText(detail: ReportDetail, surface: AttemptSurface): strin
 export function gradedPaperFromReport(
   surface: AttemptSurface,
   report: AttemptReport,
+  scores?: AttemptScores | null,
 ): GradedWithTeacher {
   const items = new Map(surface.questions.map((question) => [question.id, surfaceItem(question)]));
+  // 判分依据（要点命中）按题目取：成绩没发布时服务端不给，这里就是空的。
+  const scoreItems = new Map((scores?.items ?? []).map((item) => [item.questionId, item]));
 
   const details: GradedDetail[] = report.details.map((detail, index) => {
     const item = items.get(detail.questionId);
@@ -96,6 +104,14 @@ export function gradedPaperFromReport(
         ? comprehensiveText(detail, surface)
         : (detail.yourAnswer?.text ?? undefined);
 
+    const scoreItem = scoreItems.get(detail.questionId);
+    // 综合题的命中项是步骤编码，换成卷面上的步骤题干，学生看得懂。
+    const stepPrompts = new Map(
+      (item?.question.steps ?? []).map((step) => [step.id, step.prompt]),
+    );
+    const hitItems = scoreItem?.hitItems.map((text) => stepPrompts.get(text) ?? text);
+    const missedItems = scoreItem?.missedItems.map((text) => stepPrompts.get(text) ?? text);
+
     return {
       qid: detail.questionId,
       slot: index + 1,
@@ -117,6 +133,14 @@ export function gradedPaperFromReport(
       pickedOriginal,
       pickedDisplay: pickedOriginal.map((key) => fromOriginal[key] ?? key),
       ...(answerText === undefined ? {} : { answerText }),
+      // 判分依据：命中了哪些要点、漏了哪些（没有就是没有，不编）。
+      ...(scoreItem
+        ? {
+            hitItems: hitItems ?? [],
+            missedItems: missedItems ?? [],
+            methodLabel: scoreItem.methodLabel,
+          }
+        : {}),
     };
   });
 

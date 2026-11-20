@@ -14,10 +14,10 @@ export interface KeypointItem {
   text: string;
   /** 是否命中。 */
   hit: boolean;
-  /** 得分。 */
-  score: number;
-  /** 满分。 */
-  max: number;
+  /** 得分；不填就不显示分值那一列（判分依据只给命中与否）。 */
+  score?: number;
+  /** 满分；不填就不显示分值那一列。 */
+  max?: number;
 }
 
 /** 要点列表属性。 */
@@ -36,9 +36,11 @@ export function KeypointList({ items, style }: KeypointListProps) {
           {/* 原型 .kp-mark 不隐藏：命中与否是评分要点的一部分，AT 要能读到。 */}
           <span className="kp-mark">{item.hit ? "✓" : "○"}</span>
           <span>{item.text}</span>
-          <span className="num text-3">
-            {formatScore(item.score)}/{formatScore(item.max)}
-          </span>
+          {item.max === undefined ? null : (
+            <span className="num text-3">
+              {formatScore(item.score ?? 0)}/{formatScore(item.max)}
+            </span>
+          )}
         </div>
       ))}
     </div>

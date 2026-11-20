@@ -154,6 +154,32 @@ const REVISIONS = {
   total: 1,
 };
 
+/** 逐题成绩与判分依据：服务端给的命中要点。 */
+const SCORES = {
+  objectiveScore: 10,
+  objectiveMax: 10,
+  subjectivePending: false,
+  totalScore: 10,
+  totalMax: 10,
+  gradeVisibility: "published",
+  items: [
+    {
+      questionId: 11,
+      score: 10,
+      maxScore: 10,
+      method: "auto_scored",
+      methodLabel: "自动判分",
+      status: "final",
+      statusLabel: "已定分",
+      scoredBy: null,
+      scoredAt: "2026-11-17T10:30:00Z",
+      hitItems: ["分层模型"],
+      missedItems: [],
+      notes: [],
+    },
+  ],
+};
+
 /** 造一个最小可用的 JSON 响应。 */
 function json(body: unknown) {
   return {
@@ -176,6 +202,7 @@ describe("useExamReport · HTTP 模式的成绩报告", () => {
         if (url.includes(`/exam-sessions/${SESSION_ID}`)) return json(SESSION);
         if (url.includes("/my/results")) return json(RESULTS);
         if (url.includes(`/attempts/${ATTEMPT_ID}/report`)) return json(REPORT);
+        if (url.includes(`/attempts/${ATTEMPT_ID}/scores`)) return json(SCORES);
         if (url.includes(`/attempts/${ATTEMPT_ID}/grade-revisions`)) return json(REVISIONS);
         if (url.includes(`/attempts/${ATTEMPT_ID}`)) return json(ATTEMPT);
         throw new Error(`未预期的请求：${url}`);
@@ -214,6 +241,19 @@ describe("useExamReport · HTTP 模式的成绩报告", () => {
     expect(detail.status).toBe("correct");
   });
 
+  it("带出判分依据：命中了哪些要点、漏了哪些", async () => {
+    const { result } = renderReport();
+
+    await waitFor(() => {
+      expect(result.current.data).not.toBeNull();
+    });
+
+    const detail = result.current.data!.graded.details[0]!;
+    expect(detail.hitItems).toEqual(["分层模型"]);
+    expect(detail.missedItems).toEqual([]);
+    expect(detail.methodLabel).toBe("自动判分");
+  });
+
   it("带出改分流水：改过几分、谁改的、什么时候改的", async () => {
     const { result } = renderReport();
 
@@ -247,6 +287,7 @@ describe("useExamReport · HTTP 模式的成绩报告", () => {
         }
         if (url.includes(`/exam-sessions/${SESSION_ID}`)) return json(SESSION);
         if (url.includes("/my/results")) return json(RESULTS);
+        if (url.includes(`/attempts/${ATTEMPT_ID}/scores`)) return json(SCORES);
         if (url.includes(`/attempts/${ATTEMPT_ID}/grade-revisions`)) return json(REVISIONS);
         if (url.includes(`/attempts/${ATTEMPT_ID}`)) return json(ATTEMPT);
         throw new Error(`未预期的请求：${url}`);

@@ -267,6 +267,17 @@ export interface GradedDetail {
   points?: KeypointGrade[];
   /** 综合题步骤命中情况。 */
   steps?: StepGrade[];
+  /**
+   * 判分依据：命中的要点 / 步骤（服务端给的原文）。
+   *
+   * 成绩报告页用这一组显示「命中了什么、漏了什么」——
+   * 要点的分值分布前端算不出来（阅卷教师可能改过分），所以只给命中与否。
+   */
+  hitItems?: string[];
+  /** 判分依据：漏掉的要点 / 步骤。 */
+  missedItems?: string[];
+  /** 判分方式（自动判分 / 自动初判 / 人工定分）。 */
+  methodLabel?: string;
   /** 考生作答原文。 */
   answerText?: string;
   /** 自动初判得分（主观题）。 */

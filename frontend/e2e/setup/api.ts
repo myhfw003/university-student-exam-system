@@ -99,7 +99,9 @@ export async function ensureStudent(
 
   // 账号已存在就直接用（密码不变）。
   const listResponse = await fetch(`${baseUrl}/api/v1/users?page=1&size=200`, { headers });
-  const list = (await listResponse.json()) as { items?: { id: number; username: string }[] };
+  const list = (await listResponse.json()) as {
+    items?: { id: number; username: string; roles?: string[] }[];
+  };
   const existing = list.items?.find((user) => user.username === studentUsername);
 
   if (!existing) {
@@ -117,6 +119,21 @@ export async function ensureStudent(
     if (!createResponse.ok) {
       throw new Error(
         `创建学生账号失败：HTTP ${createResponse.status} ${await createResponse.text()}`,
+      );
+    }
+  } else if (!(existing.roles ?? []).includes(studentRole.code)) {
+    // 老账号可能一个角色都没有（早于「建用户时必须给角色」的那批种子数据）。
+    // 没有角色就没有任何权限——进考场会被权限守卫挡下来（403 且没有正文）。
+    // 这里补上学生角色，让端到端环境可重复。
+    const assignResponse = await fetch(`${baseUrl}/api/v1/users/${existing.id}/roles`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ roleIds: [studentRole.id] }),
+    });
+
+    if (!assignResponse.ok) {
+      throw new Error(
+        `给端到端学生账号补角色失败：HTTP ${assignResponse.status} ${await assignResponse.text()}`,
       );
     }
   }

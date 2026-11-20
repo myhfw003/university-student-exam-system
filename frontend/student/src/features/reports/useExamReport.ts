@@ -6,7 +6,8 @@
    - `GET /exam-sessions/{id}`：场次（名称、卷型、试卷 ID）；
    - `GET /my/results`：该场次的成绩条目（用来挑哪一次作答——重考按最高分）；
    - `GET /attempts/{id}`：考生卷面（选项顺序、标签、步骤）；
-   - `GET /attempts/{id}/report`：成绩与逐题明细。
+   - `GET /attempts/{id}/report`：成绩与逐题明细；
+   - `GET /attempts/{id}/scores`：判分依据（命中了哪些要点、漏了哪些）。
 
    卷面与报告缺一不可：报告里有得分与答案，但没有选项顺序，
    正确答案与考生作答都要靠卷面的换算表才能还原成显示字母。
@@ -18,6 +19,7 @@ import {
   isBackendEnabled,
   listMyAttempts,
   loadAttemptReport,
+  loadAttemptScores,
   loadGradeRevisions,
   loadExamSession,
   loadMyResults,
@@ -106,11 +108,13 @@ export function useExamReport(
           return;
         }
 
-        const [surface, report, revisions] = await Promise.all([
+        const [surface, report, revisions, scores] = await Promise.all([
           getAttempt(attemptId),
           loadAttemptReport(attemptId),
           // 改分流水读不到不影响成绩：拿不到就当没有改分记录。
           loadGradeRevisions(attemptId).catch(() => []),
+          // 判分依据（要点命中）读不到也不影响成绩：拿不到就不显示这一节。
+          loadAttemptScores(attemptId).catch(() => null),
         ]);
         if (cancelled) return;
 
@@ -118,7 +122,7 @@ export function useExamReport(
           examName: report.examName ?? session.name,
           paperId: session.paperId,
           mode: toPaperMode(session.variantRule),
-          graded: gradedPaperFromReport(surface, report),
+          graded: gradedPaperFromReport(surface, report, scores),
           submittedAt: report.submittedAt,
           attemptNo: report.attemptNo,
           revisions,

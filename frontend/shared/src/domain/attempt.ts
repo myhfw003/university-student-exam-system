@@ -310,6 +310,57 @@ export interface GradeRevision {
   occurredAt: string;
 }
 
+/** 一次作答的逐题成绩明细。 */
+export interface AttemptScoreItem {
+  /** 题目 ID。 */
+  questionId: string;
+  /** 得分；成绩没发布时主观题这一项为空（服务端捂着不给）。 */
+  score: number | null;
+  /** 满分。 */
+  maxScore: number;
+  /** 判分方式：`auto_scored` / `auto_suggested` / `manual_scored`。 */
+  method: string;
+  /** 判分方式的中文名。 */
+  methodLabel: string;
+  /** 判分状态。 */
+  status: string;
+  /** 判分状态的中文名。 */
+  statusLabel: string;
+  /** 定分人（阅卷教师）ID；自动判分时为空。 */
+  scoredBy: string | null;
+  /** 定分时间。 */
+  scoredAt: string | null;
+  /** 命中的要点 / 步骤。 */
+  hitItems: string[];
+  /** 漏掉的要点 / 步骤。 */
+  missedItems: string[];
+  /** 其它说明。 */
+  notes: string[];
+}
+
+/**
+ * 一次作答的成绩汇总（含逐题明细）。
+ *
+ * **发布前服务端会捂着主观题**：分数、要点命中都不给，
+ * 只留客观题那部分（FR-GRD-05）。
+ */
+export interface AttemptScores {
+  /** 客观题得分。 */
+  objectiveScore: number;
+  /** 客观题满分。 */
+  objectiveMax: number;
+  /** 主观题还没定分。 */
+  subjectivePending: boolean;
+  /** 总分；发布前只算客观题那部分。 */
+  totalScore: number;
+  /** 总分满分。 */
+  totalMax: number;
+  /** 成绩可见性：`hidden` / `objective_only` / `pending_review` / `published`。 */
+  gradeVisibility: string;
+  /** 逐题明细。 */
+  items: AttemptScoreItem[];
+}
+
 /* ==========================================================================
    练习
    --------------------------------------------------------------------------

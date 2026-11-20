@@ -14,6 +14,8 @@ import { ENDPOINTS } from "./endpoints";
 import { toDomainPayload, type ServerAnswerPayload } from "./answerPayload";
 import type {
   AttemptReport,
+  AttemptScoreItem,
+  AttemptScores,
   GradeRevision,
   MyResult,
   ReportDetail,
@@ -150,4 +152,52 @@ export async function loadGradeRevisions(
     operatorId: str(dto.operatorId),
     occurredAt: str(dto.occurredAt),
   }));
+}
+
+/** 映射逐题成绩明细。 */
+function toAttemptScoreItem(dto: Dto): AttemptScoreItem {
+  return {
+    questionId: str(dto.questionId),
+    // 成绩没发布时，主观题这一项是空的（服务端捂着不给）。
+    score: numOrNull(dto.score),
+    maxScore: num(dto.maxScore),
+    method: str(dto.method),
+    methodLabel: str(dto.methodLabel),
+    status: str(dto.status),
+    statusLabel: str(dto.statusLabel),
+    scoredBy:
+      dto.scoredBy === null || dto.scoredBy === undefined ? null : str(dto.scoredBy),
+    scoredAt: dto.scoredAt ? str(dto.scoredAt) : null,
+    hitItems: Array.isArray(dto.hitItems) ? dto.hitItems.map((v) => str(v)) : [],
+    missedItems: Array.isArray(dto.missedItems) ? dto.missedItems.map((v) => str(v)) : [],
+    notes: Array.isArray(dto.notes) ? dto.notes.map((v) => str(v)) : [],
+  };
+}
+
+/** 映射一次作答的成绩汇总。 */
+export function toAttemptScores(dto: Dto): AttemptScores {
+  return {
+    objectiveScore: num(dto.objectiveScore),
+    objectiveMax: num(dto.objectiveMax),
+    subjectivePending: bool(dto.subjectivePending),
+    totalScore: num(dto.totalScore),
+    totalMax: num(dto.totalMax),
+    gradeVisibility: str(dto.gradeVisibility),
+    items: Array.isArray(dto.items) ? dto.items.map((d) => toAttemptScoreItem(d as Dto)) : [],
+  };
+}
+
+/**
+ * 读取一次作答的成绩与逐题明细。
+ *
+ * 与成绩报告不同，这份里带**判分依据**：命中了哪些要点、漏了哪些。
+ * 成绩没发布之前，服务端会把主观题那部分（分数与要点命中）捂着不给——
+ * 要点命中等于把答案抖出来（FR-GRD-05）。
+ */
+export async function loadAttemptScores(
+  attemptId: string,
+  client: ReportClient = httpClient,
+): Promise<AttemptScores> {
+  const dto = await client.get<Dto>(ENDPOINTS.learning.attemptsScores(attemptId));
+  return toAttemptScores(dto);
 }

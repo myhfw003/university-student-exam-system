@@ -275,9 +275,11 @@ export {
 } from "./practiceAssignmentApi";
 export {
   loadAttemptReport,
+  loadAttemptScores,
   loadGradeRevisions,
   loadMyResults,
   toAttemptReport,
+  toAttemptScores,
   type ReportClient,
 } from "./reportApi";
 export {

@@ -114,6 +114,24 @@ export function GradedDetailRow({ detail, variant }: GradedDetailRowProps) {
             style={{ marginTop: "var(--sp-2)" }}
           />
         ) : null}
+        {/*
+          判分依据：服务端给的「命中了哪些要点、漏了哪些」。
+          要点的分值分布前端算不出来（阅卷教师可能改过分），所以只给命中与否。
+        */}
+        {detail.hitItems?.length || detail.missedItems?.length ? (
+          <>
+            <div className="text-sm text-3" style={{ marginTop: "var(--sp-2)" }}>
+              判分依据
+            </div>
+            <KeypointList
+              items={[
+                ...(detail.hitItems ?? []).map((text) => ({ text, hit: true })),
+                ...(detail.missedItems ?? []).map((text) => ({ text, hit: false })),
+              ]}
+              style={{ marginTop: "var(--sp-1)" }}
+            />
+          </>
+        ) : null}
         <details>
           <summary className="text-sm">查看解析</summary>
           <Analysis>
