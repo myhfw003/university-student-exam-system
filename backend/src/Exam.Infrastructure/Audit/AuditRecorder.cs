@@ -1,4 +1,6 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Unicode;
 using Exam.Application.Common.Interfaces;
 using Exam.Domain.Audit;
 using Exam.Domain.SharedKernel.Abstractions;
@@ -12,7 +14,12 @@ namespace Exam.Infrastructure.Audit;
 /// </summary>
 public sealed class AuditRecorder : IAuditRecorder
 {
-    private static readonly JsonSerializerOptions SummaryOptions = new() { WriteIndented = false };
+    // 中文按原样写：默认编码器会把中文转成 \uXXXX，审计页上就没法看了。
+    private static readonly JsonSerializerOptions SummaryOptions = new()
+    {
+        WriteIndented = false,
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+    };
 
     private readonly AppDbContext _db;
     private readonly IClock _clock;

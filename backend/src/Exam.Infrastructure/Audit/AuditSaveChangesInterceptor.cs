@@ -1,9 +1,13 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Unicode;
 using Exam.Application.Common.Interfaces;
+using Exam.Application.Common.Security;
 using Exam.Domain.Audit;
 using Exam.Domain.SharedKernel.Abstractions;
 using Exam.Domain.SharedKernel.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Exam.Infrastructure.Audit;
@@ -21,7 +25,15 @@ namespace Exam.Infrastructure.Audit;
 /// </summary>
 public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
 {
-    private static readonly JsonSerializerOptions SummaryOptions = new() { WriteIndented = false };
+    // 中文按原样写：默认编码器会把中文转成 \uXXXX，审计页上就没法看了。
+    private static readonly JsonSerializerOptions SummaryOptions = new()
+    {
+        WriteIndented = false,
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+    };
+
+    /// <summary>审计摘要里单个字段值的最大长度；超出的截断。</summary>
+    private const int MaxValueLength = 200;
 
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
@@ -67,14 +79,8 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
 
         foreach (var entry in entries)
         {
-            var changed = entry.State == EntityState.Deleted
-                ? ["*"]
-                : entry.Properties
-                    .Where(p => p.IsModified && !p.Metadata.IsPrimaryKey() && p.Metadata.Name != "Version")
-                    .Select(p => p.Metadata.Name)
-                    .ToArray();
-
-            if (changed.Length == 0)
+            var changes = DescribeChanges(entry);
+            if (changes.Count == 0)
             {
                 continue;
             }
@@ -97,11 +103,58 @@ public sealed class AuditSaveChangesInterceptor : SaveChangesInterceptor
                 new Dictionary<string, object?>
                 {
                     ["entity"] = entityType,
-                    ["changes"] = changed,
+                    ["changes"] = changes,
                 },
                 SummaryOptions));
 
             db.Set<AuditLog>().Add(log);
         }
+    }
+
+    /// <summary>
+    /// 描述改动的字段：改了哪些字段、改之前的值、改之后的值（FR-IAM-07 的「变更前后摘要」）。
+    /// <para>
+    /// 值按 §8.4 脱敏（密码与令牌全掩码、手机号前 3 后 4、邮箱保留首字符与域名），
+    /// 太长的文本截断——审计是给人看的，不是数据仓库。
+    /// </para>
+    /// </summary>
+    private static List<Dictionary<string, object?>> DescribeChanges(EntityEntry entry)
+    {
+        if (entry.State == EntityState.Deleted)
+        {
+            return [new Dictionary<string, object?> { ["field"] = "*" }];
+        }
+
+        var changes = new List<Dictionary<string, object?>>();
+        foreach (var property in entry.Properties)
+        {
+            if (!property.IsModified) continue;
+            if (property.Metadata.IsPrimaryKey()) continue;
+            if (property.Metadata.Name == "Version") continue;
+
+            changes.Add(new Dictionary<string, object?>
+            {
+                ["field"] = property.Metadata.Name,
+                ["before"] = MaskValue(property.Metadata.Name, property.OriginalValue),
+                ["after"] = MaskValue(property.Metadata.Name, property.CurrentValue),
+            });
+        }
+
+        return changes;
+    }
+
+    private static object? MaskValue(string fieldName, object? value)
+    {
+        var masked = SensitiveDataMasker.MaskFieldValue(fieldName, value);
+
+        // 枚举写名字而不是序号：审计是给人看的。
+        if (masked is Enum enumValue)
+        {
+            return enumValue.ToString();
+        }
+
+        return masked is string text && text.Length > MaxValueLength
+            ? text[..MaxValueLength] + "…"
+            : masked;
     }
 }

@@ -34,6 +34,43 @@ public static class SensitiveDataMasker
         return $"{phone[..3]}****{phone[^4..]}";
     }
 
+    /// <summary>
+    /// 按字段名脱敏：密码与令牌全掩码，手机号前 3 后 4，邮箱保留首字符与域名。
+    /// <para>
+    /// 判定按字段名**包含**这些词（不区分大小写）——
+    /// 审计与日志里出现的是字段名（PasswordHash、TokenHash、Phone、Email）。
+    /// </para>
+    /// </summary>
+    public static object? MaskFieldValue(string? fieldName, object? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        var name = fieldName ?? string.Empty;
+        var text = value as string ?? value.ToString();
+
+        if (name.Contains("Password", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Token", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Secret", StringComparison.OrdinalIgnoreCase))
+        {
+            return MaskSecret(text);
+        }
+
+        if (name.Contains("Phone", StringComparison.OrdinalIgnoreCase))
+        {
+            return MaskPhone(text);
+        }
+
+        if (name.Contains("Email", StringComparison.OrdinalIgnoreCase))
+        {
+            return MaskEmail(text);
+        }
+
+        return value;
+    }
+
     /// <summary>邮箱：保留首字符与域名。</summary>
     public static string? MaskEmail(string? email)
     {
