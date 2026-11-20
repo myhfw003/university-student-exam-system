@@ -8,8 +8,11 @@ cd "$(dirname "$0")/.."
 PATTERNS='(password|passwd|pwd|secret|private_key|apikey|api_key|access_token|connectionstring)[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"'$\{][^"'"'"']{5,}'
 
 # 测试目录中的字面量是测试夹具（假密码、假令牌），不是密钥，故排除。
+# 前端的测试目录叫 __tests__、端到端用例在 e2e/——两个都要排除，
+# 否则测试夹具里的假密码会让 CI 一直红着。
 EXCLUDES=(--exclude-dir=.git --exclude-dir=node_modules --exclude-dir=bin --exclude-dir=obj
-          --exclude-dir=dist --exclude-dir=Migrations --exclude-dir=tests --exclude-dir=secrets --exclude='*.example'
+          --exclude-dir=dist --exclude-dir=Migrations --exclude-dir=tests --exclude-dir=__tests__
+          --exclude-dir=e2e --exclude-dir=secrets --exclude='*.example'
           --exclude='*.md' --exclude='scan-secrets.sh')
 
 MATCHES=$(grep -rInE "${PATTERNS}" "${EXCLUDES[@]}" . 2>/dev/null | grep -v '^\./\.env$' || true)
