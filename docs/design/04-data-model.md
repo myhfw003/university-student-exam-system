@@ -937,22 +937,21 @@ CREATE INDEX ix_outbox_pending ON outbox.outbox_message(dispatched_at) WHERE dis
 
 ## 10. 分区与归档
 
-### 10.1 分区表
+**原定的「按月分区 + 到期 DETACH 导出归档库」不再实施**（ADR-019，2026-11-21 定）：
+数据不设默认保留期，没有到期自动清理，也就没有分区到期归档这一档机制。
 
-| 表 | 分区键 | 周期 | 保留 |
-|---|---|---|---|
-| `app.answer_revision` | `server_received_at` | 月 | 在线 12 个月，冷分区转只读 |
-| `app.focus_event` | `server_received_at` | 月 | 在线 12 个月 |
-| `audit.audit_log` | `occurred_at` | 月 | 在线 24 个月 |
-| `delivery.answer` | `saved_at` | 月 | 在线 24 个月 |
+### 10.1 现在的做法
 
-分区由 `Exam.Worker` 的 `PartitionMaintenanceJob` 提前 1 个月预建；过期分区 `DETACH` 后导出归档。
+- **不分区**：所有表都是普通表，不按月分区；
+- **不自动清理**：Worker 里没有保留期任务，`app.*` / `audit` 的数据一直留着；
+- **删除靠明确动作**：追加式数据应用账号没有 DELETE 权限（§11），
+  要清由所有者账号显式执行；内容域（题目 / 标签 / 题库 / 试卷）走软删除，
+  `deleted_at` + 全局查询过滤器排除，后端不留硬删实体的口子。
 
-### 10.2 归档
+### 10.2 库容量
 
-- 12 个月前的 `app.*` 分区 `DETACH` 并转为只读表，导出到归档库。
-- 24 个月前的作答主表与成绩数据归档，保留可查询视图。
-- 归档数据加密存储。
+数据只增不减，长期跑靠备份与容量规划兜底（见 `deploy/backup`），
+而不是靠「到期删」。
 
 ---
 
