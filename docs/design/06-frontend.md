@@ -110,7 +110,8 @@ admin/src/
 │   ├── review/ReviewCenterPage.tsx
 │   ├── analytics/AnalyticsPage.tsx
 │   ├── users/UsersPage.tsx ImportUsersDialog.tsx
-│   └── audit/AuditLogPage.tsx
+│   ├── audit/AuditLogPage.tsx
+│   └── settings/SettingsPage.tsx useSystemSettings.ts
 ├── stores/ （主题、UI、监考实时状态）
 └── styles/app.css
 ```
@@ -414,9 +415,11 @@ GET /api/v1/system/time  →  { serverTime, monotonicTime }
 
 ### 8.2 管理端路由
 
-`/overview`、`/tags`、`/banks`、`/banks/:bankId`、`/papers`、`/papers/:paperId`、`/practices`、`/roles`、`/exam-sessions`、`/exam-sessions/:id`、`/monitoring/:sessionId`、`/review`、`/analytics`、`/users`、`/audit-logs`。
+`/overview`、`/tags`、`/banks`、`/banks/:bankId`、`/papers`、`/papers/:paperId`、`/practices`、`/roles`、`/exam-sessions`、`/exam-sessions/:id`、`/monitoring/:sessionId`、`/review`、`/analytics`、`/users`、`/audit-logs`、`/settings`。
 
 `/roles` 是**角色与权限**（需求文档 §1「角色与权限矩阵」）：角色决定用户能做什么，用户可拥有多个角色，权限点按并集计算；系统内置角色不可删除，只能调整其权限集合。守卫权限点为 `role:read`。
+
+`/settings` 是**系统级设置**：全局生效的开关，管理员改一次所有人一起变，学生端没有单独入口。目前落在这里的是错题本的「重做正确后怎么处理」（需求 FR-LRN-01 的可配置半句）。守卫权限点为 `system:configure`。
 
 `/practices` 是**练习开放单**（后端 `PracticeAssignment` 的管理端）：开放单决定练习开放给谁、开放多久，练习规则（次数上限、反馈时机、错题回流）仍挂在练习卷上。它与 `/papers` 分开，因为开放单是独立于练习卷的聚合，有自己的 ID、状态（草稿 → 已上架 → 已下架）与开放期；守卫权限点为 `practice:read`。
 
