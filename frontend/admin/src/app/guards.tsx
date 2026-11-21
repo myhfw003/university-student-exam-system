@@ -30,6 +30,7 @@ const ROUTE_PERMISSIONS: ReadonlyArray<{ prefix: string; permission: PermissionP
   { prefix: "/papers", permission: "paper:read" },
   { prefix: "/review", permission: "review:grade" },
   { prefix: "/analytics", permission: "analytics:read" },
+  { prefix: "/settings", permission: "system:configure" },
 ];
 
 /** 按当前路径推导所需权限点；概览等页面只需登录。 */

@@ -8,6 +8,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  Badge,
   Button,
   Card,
   Empty,
@@ -158,8 +159,13 @@ export function MistakesPage() {
               >
                 <div className="list-main">
                   <div className="list-title">{mistake.stem}</div>
-                  <div className="list-sub">
-                    {TYPE_LABEL[mistake.type] ?? mistake.typeLabel}
+                  <div className="row-tight">
+                    <span className="list-sub">
+                      {TYPE_LABEL[mistake.type] ?? mistake.typeLabel}
+                    </span>
+                    {/* 「保留但标记已掌握」口径下，重做正确的题留在错题本里，
+                        要标出来，否则学生以为它还没掌握。 */}
+                    {mistake.resolvedAt ? <Badge tone="ok">已掌握</Badge> : null}
                   </div>
                   <div className="row-tight">
                     <TagChips tags={mistake.tags} />

@@ -91,6 +91,7 @@ const ADMIN_ROUTES = [
   { path: "/monitoring/sess-net-mid", marker: "考生状态", min: 300 },
   { path: "/users", marker: "账号清单", min: 300 },
   { path: "/audit-logs", marker: "审计日志", min: 300 },
+  { path: "/settings", marker: "系统设置", min: 300 },
 ];
 
 /* --------------------------------------------------------- 浏览器查找 */

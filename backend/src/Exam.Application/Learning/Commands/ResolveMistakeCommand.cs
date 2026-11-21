@@ -4,6 +4,7 @@ using Exam.Application.Common.Markers;
 using Exam.Application.Learning.Contracts;
 using Exam.Application.Learning.Services;
 using Exam.Domain.Identity;
+using Exam.Domain.Settings;
 using Exam.Domain.SharedKernel.Abstractions;
 using MediatR;
 
@@ -21,23 +22,23 @@ public sealed class ResolveMistakeHandler : IRequestHandler<ResolveMistakeComman
     private readonly IMistakeRepository _mistakes;
     private readonly IQuestionRepository _questions;
     private readonly ITagRepository _tags;
+    private readonly MistakeResolutionService _mistakeResolution;
     private readonly IAuditRecorder _audit;
-    private readonly IClock _clock;
     private readonly ICurrentUser _currentUser;
 
     public ResolveMistakeHandler(
         IMistakeRepository mistakes,
         IQuestionRepository questions,
         ITagRepository tags,
+        MistakeResolutionService mistakeResolution,
         IAuditRecorder audit,
-        IClock clock,
         ICurrentUser currentUser)
     {
         _mistakes = mistakes;
         _questions = questions;
         _tags = tags;
+        _mistakeResolution = mistakeResolution;
         _audit = audit;
-        _clock = clock;
         _currentUser = currentUser;
     }
 
@@ -51,9 +52,8 @@ public sealed class ResolveMistakeHandler : IRequestHandler<ResolveMistakeComman
         var mistake = await _mistakes.GetAsync(userId, request.QuestionId, cancellationToken)
             ?? throw new NotFoundException("错题本里没有这道题。");
 
-        var now = _clock.UtcNow;
-        mistake.Resolve(now);
-        _mistakes.Update(mistake);
+        // 「标记已掌握」也按系统级设置走：移出，还是保留但标记已掌握。
+        var policy = await _mistakeResolution.ResolveAsync(mistake, cancellationToken);
 
         await _audit.RecordAsync(
             "mistake.resolve",
@@ -63,6 +63,7 @@ public sealed class ResolveMistakeHandler : IRequestHandler<ResolveMistakeComman
             {
                 ["userId"] = userId,
                 ["questionId"] = mistake.QuestionId,
+                ["policy"] = policy.ToStorage(),
             },
             cancellationToken);
 

@@ -25,6 +25,7 @@ public sealed class MistakeWriteBackHandler : IDomainEventHandler<ScoreFinalized
     private readonly IQuestionRepository _questions;
     private readonly IAnswerRepository _answers;
     private readonly PracticeRulesResolver _practiceRules;
+    private readonly MistakeResolutionService _mistakeResolution;
     private readonly IClock _clock;
 
     public MistakeWriteBackHandler(
@@ -33,6 +34,7 @@ public sealed class MistakeWriteBackHandler : IDomainEventHandler<ScoreFinalized
         IQuestionRepository questions,
         IAnswerRepository answers,
         PracticeRulesResolver practiceRules,
+        MistakeResolutionService mistakeResolution,
         IClock clock)
     {
         _mistakes = mistakes;
@@ -40,6 +42,7 @@ public sealed class MistakeWriteBackHandler : IDomainEventHandler<ScoreFinalized
         _questions = questions;
         _answers = answers;
         _practiceRules = practiceRules;
+        _mistakeResolution = mistakeResolution;
         _clock = clock;
     }
 
@@ -64,10 +67,14 @@ public sealed class MistakeWriteBackHandler : IDomainEventHandler<ScoreFinalized
         var now = _clock.UtcNow;
         var existing = await _mistakes.GetAsync(attempt.UserId, domainEvent.QuestionId, cancellationToken);
 
-        // 这次答对了：错题不再错——移出错题本。
+        // 这次答对了：错题不再错——按系统级设置处理
+        // （移出错题本，还是保留但标记已掌握）。
         if (domainEvent.Score >= domainEvent.MaxScore)
         {
-            existing?.Resolve(now);
+            if (existing is not null)
+            {
+                await _mistakeResolution.ResolveAsync(existing, cancellationToken);
+            }
             return;
         }
 
@@ -78,6 +85,21 @@ public sealed class MistakeWriteBackHandler : IDomainEventHandler<ScoreFinalized
 
         if (existing is null)
         {
+            // 之前移出过错题本（软删除），这次又做错了：把记录拉回来，
+            // 错误次数接着累计——移出过一次不该把「错了几次」清零。
+            var removed = await _mistakes.GetRemovedAsync(
+                attempt.UserId,
+                domainEvent.QuestionId,
+                cancellationToken);
+
+            if (removed is not null)
+            {
+                removed.RestoreToNotebook(now);
+                removed.RecordWrong(reason, sourceType, attempt.Id, now);
+                _mistakes.Update(removed);
+                return;
+            }
+
             await _mistakes.AddAsync(
                 Mistake.Record(
                     attempt.UserId,

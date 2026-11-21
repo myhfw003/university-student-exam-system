@@ -21,6 +21,28 @@ public sealed class MistakeRepository : IMistakeRepository
                 m => m.UserId == userId && m.QuestionId == questionId,
                 cancellationToken);
 
+    /// <summary>
+    /// 取回已移出错题本的记录。
+    /// <para>
+    /// 要绕过全局软删除过滤器：这些行对错题本视图不可见，
+    /// 但「又做错了要拉回来」时必须找得到——否则错误次数会从头数。
+    /// </para>
+    /// </summary>
+    public async Task<Mistake?> GetRemovedAsync(
+        long userId,
+        long questionId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _db.Set<Mistake>()
+            .IgnoreQueryFilters()
+            .Where(m =>
+                m.UserId == userId
+                && m.QuestionId == questionId
+                && m.DeletedAt != null)
+            .OrderByDescending(m => m.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Mistake>> SearchAsync(
         MistakeSearchCriteria criteria,
         int skip,

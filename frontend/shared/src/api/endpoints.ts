@@ -90,6 +90,8 @@ export const ENDPOINTS = {
     userTags: (id: string | number) => `/users/${id}/tags`,
     roles: "/roles",
     permissions: "/permissions",
+    /** 系统级设置（读与写都要 system:configure）。 */
+    settings: "/settings",
     auditLogs: "/audit-logs",
     reviewTasks: "/review-tasks",
     /** 阅卷任务计数（待领取 / 阅卷中 / 已阅完 / 我的）。 */

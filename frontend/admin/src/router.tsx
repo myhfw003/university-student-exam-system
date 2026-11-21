@@ -70,6 +70,9 @@ const UsersPage = lazy(async () => ({
 const AuditLogPage = lazy(async () => ({
   default: (await import("./features/audit/AuditLogPage")).AuditLogPage,
 }));
+const SettingsPage = lazy(async () => ({
+  default: (await import("./features/settings/SettingsPage")).SettingsPage,
+}));
 
 function Fallback() {
   return (
@@ -123,6 +126,7 @@ const routes = [
           { path: "/analytics", element: lazyPage(AnalyticsPage) },
           { path: "/users", element: lazyPage(UsersPage) },
           { path: "/audit-logs", element: lazyPage(AuditLogPage) },
+          { path: "/settings", element: lazyPage(SettingsPage) },
           { path: "/403", element: lazyPage(ForbiddenPage) },
           { path: "*", element: lazyPage(NotFoundPage) },
         ],

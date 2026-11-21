@@ -7,6 +7,7 @@ using Exam.Domain.Catalog;
 using Exam.Domain.Learning;
 using Exam.Domain.Analytics;
 using Exam.Domain.Identity;
+using Exam.Domain.Settings;
 using Exam.Domain.SharedKernel.Abstractions;
 using Exam.Domain.SharedKernel.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -41,6 +42,9 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
 
     /// <summary>统计读模型所在 Schema。</summary>
     public const string AnalyticsSchema = "analytics";
+
+    /// <summary>系统级设置所在 Schema。</summary>
+    public const string SettingsSchema = "settings";
 
     /// <summary>领域事件出站箱所在 Schema。</summary>
     public const string OutboxSchema = "outbox";
@@ -135,6 +139,8 @@ public sealed class AppDbContext : DbContext, IUnitOfWork
     public DbSet<TypeStatistic> TypeStatistics => Set<TypeStatistic>();
 
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+
+    public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
 
     /// <summary>工作单元提交。EF Core 的单次 SaveChanges 本身即一个事务。</summary>
     /// <para>

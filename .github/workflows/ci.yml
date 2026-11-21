@@ -71,6 +71,11 @@ jobs:
         # 后端算出这个分档随 masteryLabel 发给前端，前端按它上色。
         # 两边对不上时，徽标会静默退回中性色——「薄弱」和「掌握」看起来一样。
         run: python3 ../scripts/check-ability-mastery-labels.py
+      - name: 系统级设置取值词表前后端一致
+        # 设置项的取值是共享词表：后端落库用它、前端显示与回传都用它。
+        # 两边对不上时，前端把后端写的取值认不出来，退回缺省档——
+        # 管理员明明改了设置，页面却显示成另一档，而且单元测试全绿。
+        run: python3 ../scripts/check-system-setting-values.py
 
   monitoring:
     name: 监控配置校验

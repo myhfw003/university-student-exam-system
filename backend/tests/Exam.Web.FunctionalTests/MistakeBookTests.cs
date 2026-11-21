@@ -24,6 +24,8 @@ public sealed class MistakeBookTests : IAsyncLifetime
     private const string StudentUsername = "bookstudent1";
     private const string OtherStudentUsername = "bookstudent2";
     private const string StudentPassword = "Passw0rd!";
+    private const string AdminUsername = "bookadmin1";
+    private const string AdminPassword = "Passw0rd!";
 
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:17-alpine")
         .WithDatabase("exam")
@@ -71,6 +73,9 @@ public sealed class MistakeBookTests : IAsyncLifetime
         var studentRoleId = await SeedRoleAsync(db, "book_student", PermissionCatalog.AttemptTake, PermissionCatalog.AttemptReadOwn);
         await SeedUserAsync(db, StudentUsername, StudentPassword, studentRoleId);
         await SeedUserAsync(db, OtherStudentUsername, StudentPassword, studentRoleId);
+
+        var adminRoleId = await SeedRoleAsync(db, "book_admin", PermissionCatalog.SystemConfigure);
+        await SeedUserAsync(db, AdminUsername, AdminPassword, adminRoleId);
 
         _parentTagId = await SeedTagAsync(db, "book_parent", "父标签", parentId: null);
         _childTagId = await SeedTagAsync(db, "book_child", "子标签", parentId: _parentTagId);
@@ -197,10 +202,40 @@ public sealed class MistakeBookTests : IAsyncLifetime
         var listBody = await list.Content.ReadFromJsonAsync<JsonElement>();
         listBody.GetProperty("total").GetInt32().ShouldBe(0);
 
-        // 要看已掌握的，得显式要。
+        // 默认口径是「移出错题本」：连「含已掌握」也看不到它。
+        var withResolved = await _client.GetAsync("/api/v1/mistakes?includeResolved=true");
+        var withResolvedBody = await withResolved.Content.ReadFromJsonAsync<JsonElement>();
+        withResolvedBody.GetProperty("total").GetInt32().ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task 改成保留口径后已掌握的题留在错题本里()
+    {
+        await MakeMistakeAsync();
+
+        // 管理员把系统级设置改成「保留但标记已掌握」。
+        await LoginAsync(AdminUsername, AdminPassword);
+        var update = await _client.PutAsJsonAsync(
+            "/api/v1/settings",
+            new { mistakeResolutionPolicy = "keep_mastered" });
+        update.StatusCode.ShouldBe(HttpStatusCode.OK, await update.Content.ReadAsStringAsync());
+
+        await LoginAsync(StudentUsername, StudentPassword);
+
+        var resolve = await _client.PostAsync($"/api/v1/mistakes/{_singleQuestionId}/resolve", null);
+        resolve.StatusCode.ShouldBe(HttpStatusCode.OK, await resolve.Content.ReadAsStringAsync());
+
+        var list = await _client.GetAsync("/api/v1/mistakes");
+        var listBody = await list.Content.ReadFromJsonAsync<JsonElement>();
+        listBody.GetProperty("total").GetInt32().ShouldBe(0);
+
+        // 保留口径：它留在错题本里，「含已掌握」能看到。
         var withResolved = await _client.GetAsync("/api/v1/mistakes?includeResolved=true");
         var withResolvedBody = await withResolved.Content.ReadFromJsonAsync<JsonElement>();
         withResolvedBody.GetProperty("total").GetInt32().ShouldBe(1);
+
+        var item = withResolvedBody.GetProperty("items")[0];
+        item.GetProperty("resolvedAt").ValueKind.ShouldNotBe(JsonValueKind.Null);
     }
 
     [Fact]

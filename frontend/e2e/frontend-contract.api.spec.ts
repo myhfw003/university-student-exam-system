@@ -92,6 +92,7 @@ test.describe("前端适配层联调", () => {
       ENDPOINTS.admin.resetPassword("{id}"),
       ENDPOINTS.admin.roles,
       ENDPOINTS.admin.permissions,
+      ENDPOINTS.admin.settings,
       ENDPOINTS.admin.auditLogs,
       ENDPOINTS.admin.reviewTasks,
       ENDPOINTS.admin.statisticsBySession("{id}"),

@@ -71,6 +71,17 @@ export {
   type MasteryLabel,
 } from "./ability";
 
+/* 系统设置域：全局生效的开关与前后端共用的取值词表。 */
+export {
+  DEFAULT_MISTAKE_RESOLUTION_POLICY,
+  MISTAKE_RESOLUTION_POLICY,
+  MISTAKE_RESOLUTION_POLICY_HINT,
+  MISTAKE_RESOLUTION_POLICY_LABEL,
+  toMistakeResolutionPolicy,
+  type MistakeResolutionPolicy,
+  type SystemSettings,
+} from "./settings";
+
 /* 学习域：错题本与学生工作台（design 03 §6）。 */
 export {
   type DashboardSummary,

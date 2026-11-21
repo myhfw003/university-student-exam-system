@@ -241,6 +241,12 @@ export {
   type AbilityClient,
 } from "./abilityApi";
 export {
+  loadSystemSettings,
+  toSystemSettings,
+  updateSystemSettings,
+  type SettingsClient,
+} from "./settingsApi";
+export {
   assignReviewTask,
   batchAdoptReviewTasks,
   claimReviewTask,

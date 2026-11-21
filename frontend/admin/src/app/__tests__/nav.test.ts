@@ -32,8 +32,13 @@ describe("ADMIN_NAV", () => {
     expect(paths).toContain("/monitoring");
   });
 
-  it("系统组包含用户 / 角色 / 审计", () => {
+  it("系统组包含用户 / 角色 / 审计 / 系统设置", () => {
     const system = ADMIN_NAV[2];
-    expect(system?.items.map((item) => item.label)).toEqual(["用户", "角色", "审计"]);
+    expect(system?.items.map((item) => item.label)).toEqual([
+      "用户",
+      "角色",
+      "审计",
+      "系统设置",
+    ]);
   });
 });

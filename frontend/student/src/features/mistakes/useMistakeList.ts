@@ -34,6 +34,13 @@ export interface MistakeListRow {
   wrongCount: number;
   /** 最近一次做错的时间。 */
   lastWrongAt: string;
+  /**
+   * 掌握时间（重做正确后置位）。
+   *
+   * 有值就是「已掌握」：系统级设置成「保留但标记已掌握」时，
+   * 它留在错题本里并标出来。空就是还没掌握。
+   */
+  resolvedAt: string | null;
 }
 
 /**
@@ -90,6 +97,8 @@ export function useLocalMistakeList(
         reason: mistake.reason,
         wrongCount: mistake.wrongCount,
         lastWrongAt: mistake.lastWrongAt,
+        // mock 的错题样例里没有已掌握的题，这里恒为空。
+        resolvedAt: null,
       });
     }
     return rows;
@@ -130,6 +139,7 @@ export function useRemoteMistakeList(
             reason: mistake.reasonLabel || mistake.reason,
             wrongCount: mistake.wrongCount,
             lastWrongAt: mistake.lastWrongAt,
+            resolvedAt: mistake.resolvedAt,
           })),
         );
       } catch {

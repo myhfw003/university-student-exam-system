@@ -87,6 +87,11 @@ public static class DependencyInjection
         services.AddScoped<IPracticeAssignmentRepository, PracticeAssignmentRepository>();
         services.AddScoped<IAbilityProfileRepository, AbilityProfileRepository>();
         services.AddScoped<IExamStatisticRepository, ExamStatisticRepository>();
+        services.AddScoped<ISystemSettingRepository, SystemSettingRepository>();
+        // 系统级设置：取值与回退收在一处，业务代码不直接查设置表。
+        services.AddScoped<Exam.Application.Settings.Services.SystemSettingsResolver>();
+        // 「已掌握」按系统级设置处理：移出，还是保留但标记已掌握。
+        services.AddScoped<Exam.Application.Learning.Services.MistakeResolutionService>();
         services.AddScoped<IExamStatisticSource, ExamStatisticSource>();
         services.AddScoped<Exam.Application.Analytics.Services.ExamStatisticsService>();
         services.AddScoped<Exam.Application.Learning.Services.PracticeVisibilityResolver>();

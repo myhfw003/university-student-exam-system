@@ -138,10 +138,39 @@ public sealed class Mistake : AuditableEntity, IAuditedEntity
         Touch(now, UserId);
     }
 
-    /// <summary>重做正确，移出错题本。</summary>
+    /// <summary>
+    /// 重做正确，标成已掌握。
+    /// <para>记录留着，只是不再出现在默认视图里。</para>
+    /// </summary>
     public void Resolve(DateTimeOffset now)
     {
         ResolvedAt = now;
+        Touch(now, UserId);
+    }
+
+    /// <summary>
+    /// 移出错题本。
+    /// <para>
+    /// 软删除（ADR-019）：记录不硬删，数据一直留着，只是不再出现在错题本里。
+    /// 掌握时间照样记下——这条记录确实做对过。
+    /// </para>
+    /// </summary>
+    public void RemoveFromNotebook(DateTimeOffset now)
+    {
+        ResolvedAt = now;
+        SoftDelete(now, UserId);
+    }
+
+    /// <summary>
+    /// 回到错题本：移出去之后又做错了。
+    /// <para>
+    /// 撤销软删除（ADR-019：删除可撤销），错误次数接着累计——
+    /// 不因为管理员改了个开关就把「错了几次」清零。
+    /// </para>
+    /// </summary>
+    public void RestoreToNotebook(DateTimeOffset now)
+    {
+        DeletedAt = null;
         Touch(now, UserId);
     }
 

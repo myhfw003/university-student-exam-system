@@ -34,6 +34,18 @@ public interface IMistakeRepository
         long questionId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// 取回**已移出错题本**的那条记录。没有则返回空。
+    /// <para>
+    /// 「移出」是软删除（ADR-019），记录还在库里，只是不在错题本视图里。
+    /// 又做错一次时要靠它把记录拉回来，错误次数接着累计。
+    /// </para>
+    /// </summary>
+    Task<Mistake?> GetRemovedAsync(
+        long userId,
+        long questionId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>分页查询错题本。</summary>
     Task<IReadOnlyList<Mistake>> SearchAsync(
         MistakeSearchCriteria criteria,

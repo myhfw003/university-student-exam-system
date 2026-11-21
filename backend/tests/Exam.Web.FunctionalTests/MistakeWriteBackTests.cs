@@ -255,9 +255,45 @@ public sealed class MistakeWriteBackTests : IAsyncLifetime
 
         await DispatchAsync();
 
+        // 系统级设置的默认口径是「移出错题本」：错题本里看不到它了。
+        (await MistakeRowsAsync()).ShouldBeEmpty();
+
+        // 数据没硬删（ADR-019）：记录还在，只是被标记成移出了。
+        var raw = await RawMistakeRowsAsync();
+        raw.Count.ShouldBe(1);
+        raw[0].ResolvedAt.ShouldNotBeNull();
+        raw[0].DeletedAt.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task 移出错题本之后又做错次数接着累计()
+    {
+        var firstAttempt = await StartAttemptAsync();
+        await SaveAnswerAsync(firstAttempt, _singleQuestionId, new { selectedOptionKeys = new[] { "B" } });
+        await SubmitAsync(firstAttempt);
+
+        await DispatchAsync();
+        (await MistakeRowsAsync())[0].WrongCount.ShouldBe(1);
+
+        // 答对了：移出错题本。
+        var secondAttempt = await StartAttemptAsync();
+        await SaveAnswerAsync(secondAttempt, _singleQuestionId, new { selectedOptionKeys = new[] { "A" } });
+        await SubmitAsync(secondAttempt);
+
+        await DispatchAsync();
+        (await MistakeRowsAsync()).ShouldBeEmpty();
+
+        // 又做错了：记录回到错题本，次数接着数，不从头来。
+        var thirdAttempt = await StartAttemptAsync();
+        await SaveAnswerAsync(thirdAttempt, _singleQuestionId, new { selectedOptionKeys = new[] { "B" } });
+        await SubmitAsync(thirdAttempt);
+
+        await DispatchAsync();
+
         var mistakes = await MistakeRowsAsync();
         mistakes.Count.ShouldBe(1);
-        mistakes[0].ResolvedAt.ShouldNotBeNull();
+        mistakes[0].WrongCount.ShouldBe(2);
+        mistakes[0].SourceAttemptId.ShouldBe(thirdAttempt);
     }
 
     private async Task<int> PendingMessageCountAsync()
@@ -283,6 +319,28 @@ public sealed class MistakeWriteBackTests : IAsyncLifetime
                 m.SourceType,
                 m.SourceAttemptId,
                 m.ResolvedAt))
+            .ToListAsync();
+    }
+
+    /// <summary>绕过软删除过滤器查错题行——「移出错题本」之后记录还在。</summary>
+    private async Task<List<MistakeRow>> RawMistakeRowsAsync()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        return await db.Mistakes
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(m => m.UserId == _studentId)
+            .OrderBy(m => m.Id)
+            .Select(m => new MistakeRow(
+                m.QuestionId,
+                m.WrongCount,
+                m.Reason,
+                m.SourceType,
+                m.SourceAttemptId,
+                m.ResolvedAt,
+                m.DeletedAt))
             .ToListAsync();
     }
 
@@ -486,5 +544,6 @@ public sealed class MistakeWriteBackTests : IAsyncLifetime
         MistakeReason Reason,
         MistakeSourceType SourceType,
         long? SourceAttemptId,
-        DateTimeOffset? ResolvedAt);
+        DateTimeOffset? ResolvedAt,
+        DateTimeOffset? DeletedAt = null);
 }

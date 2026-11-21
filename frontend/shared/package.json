@@ -15,6 +15,7 @@
     "./domain/audit": "./src/domain/audit.ts",
     "./domain/paper": "./src/domain/paper.ts",
     "./domain/practice": "./src/domain/practice.ts",
+    "./domain/settings": "./src/domain/settings.ts",
     "./domain/types": "./src/domain/types.ts",
     "./api": "./src/api/index.ts",
     "./auth": "./src/auth/index.ts",
@@ -26,6 +27,7 @@
     "./mock/catalog": "./src/mock/catalog.ts",
     "./mock/roster": "./src/mock/roster.ts",
     "./mock/seed": "./src/mock/seed.ts",
+    "./mock/settings": "./src/mock/settings.ts",
     "./ui": "./src/ui/index.ts",
     "./utils": "./src/utils/index.ts"
   },
