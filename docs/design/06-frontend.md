@@ -79,7 +79,7 @@ student/src/
 │   │   └── OfflineBadge.tsx           # 离线与待同步提示
 │   ├── reports/ReportListPage.tsx ReportDetailPage.tsx
 │   ├── mistakes/MistakesPage.tsx
-│   └── profile/ProfilePage.tsx
+│   └── profile/ProfilePage.tsx AbilityProfilePage.tsx useAbilityProfile.ts
 ├── stores/
 │   ├── attemptStore.ts         # 当前作答会话状态（Zustand）
 │   ├── draftQueue.ts           # IndexedDB 离线队列（Dexie）
@@ -410,6 +410,7 @@ GET /api/v1/system/time  →  { serverTime, monotonicTime }
 | `/reports` | 成绩列表 | 登录 |
 | `/mistakes` | 错题本 | 登录 |
 | `/profile` | 个人中心 | 登录 |
+| `/profile/abilities` | 能力画像 | 登录 |
 
 ### 8.2 管理端路由
 
@@ -545,7 +546,7 @@ frontend/shared/src/
 | §5 服务端时钟权威 | `student/src/lib/useServerTime.ts`、`serverTimeSource.ts` | 采样取中位数；后端 `/api/v1/system/time` 已可用 |
 | §6 防作弊交互 | `student/src/features/exam-taking/FocusGuard.ts`、`Watermark.tsx` | 500ms 窗口去重；练习不启用 |
 | §7 实时监考大屏 | `admin/src/features/monitoring/ProctoringPage.tsx`、`useProctorFeed.ts` | SignalR 未就绪，暂用 2 秒批量轮询，轮询逻辑单独成 hook |
-| §8 路由与守卫 | 两个 SPA 的 `router.tsx` | 全部 `React.lazy` 懒加载；刷新停留当前页。学生端 9 个路由、管理端 15 个路由 |
+| §8 路由与守卫 | 两个 SPA 的 `router.tsx` | 全部 `React.lazy` 懒加载；刷新停留当前页。学生端 10 个路由、管理端 15 个路由 |
 | §3 组卷向导 | `admin/src/features/papers/PaperWizardPage.tsx` | 四步 + **一键出卷**（配额矩阵确定性抽题，池量不足报错并列出缺口） |
 | §9 可访问性 | `shared/src/ui/Field.tsx` | `Field` 的 `htmlFor` 与控件 `id` 程序化关联；51 处表单已补齐 |
 | §2 设计令牌落地 | `shared/src/design/theme.css` + `primitives.css` | 与原型逐值一致，深浅主题均已验证 |
