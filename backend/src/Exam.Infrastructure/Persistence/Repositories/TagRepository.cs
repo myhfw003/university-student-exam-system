@@ -24,8 +24,6 @@ public sealed class TagRepository : ITagRepository
 
     public void Update(Tag tag) => _db.Tags.Update(tag);
 
-    public void Remove(Tag tag) => _db.Tags.Remove(tag);
-
     public async Task<IReadOnlyList<Tag>> ListAsync(
         TagGroup? group,
         CancellationToken cancellationToken = default)

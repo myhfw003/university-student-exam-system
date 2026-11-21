@@ -117,6 +117,4 @@ public sealed class ExamSessionRepository : IExamSessionRepository
         await _db.Set<ExamSession>().AddAsync(session, cancellationToken);
 
     public void Update(ExamSession session) => _db.Set<ExamSession>().Update(session);
-
-    public void Remove(ExamSession session) => _db.Set<ExamSession>().Remove(session);
 }

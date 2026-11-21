@@ -48,8 +48,6 @@ public interface IQuestionRepository
 
     void Update(Question question);
 
-    void Remove(Question question);
-
     /// <summary>分页查询题目。所有过滤都在服务端完成。</summary>
     Task<IReadOnlyList<Question>> SearchAsync(
         QuestionSearchCriteria criteria,
@@ -74,6 +72,4 @@ public interface IQuestionBankRepository
     Task AddAsync(QuestionBank bank, CancellationToken cancellationToken = default);
 
     void Update(QuestionBank bank);
-
-    void Remove(QuestionBank bank);
 }

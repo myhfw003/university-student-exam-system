@@ -46,8 +46,6 @@ public sealed class QuestionRepository : IQuestionRepository
 
     public void Update(Question question) => _db.Questions.Update(question);
 
-    public void Remove(Question question) => _db.Questions.Remove(question);
-
     public async Task<IReadOnlyList<Question>> SearchAsync(
         QuestionSearchCriteria criteria,
         CancellationToken cancellationToken = default)

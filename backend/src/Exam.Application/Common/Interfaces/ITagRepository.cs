@@ -13,8 +13,6 @@ public interface ITagRepository : IReadRepository<Tag>
 
     void Update(Tag tag);
 
-    void Remove(Tag tag);
-
     /// <summary>列出全部标签，可按维度过滤。排序：维度 → 排序号 → 主键。</summary>
     Task<IReadOnlyList<Tag>> ListAsync(TagGroup? group, CancellationToken cancellationToken = default);
 

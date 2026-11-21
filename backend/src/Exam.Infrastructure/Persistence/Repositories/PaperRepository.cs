@@ -76,8 +76,6 @@ public sealed class PaperRepository : IPaperRepository
 
     public void Update(Paper paper) => _db.Papers.Update(paper);
 
-    public void Remove(Paper paper) => _db.Papers.Remove(paper);
-
     private IQueryable<Paper> Filtered(PaperKind? kind, PaperStatus? status, string? keyword)
     {
         var query = _db.Papers.AsNoTracking();

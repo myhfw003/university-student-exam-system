@@ -39,6 +39,4 @@ public interface IExamSessionRepository
     Task AddAsync(ExamSession session, CancellationToken cancellationToken = default);
 
     void Update(ExamSession session);
-
-    void Remove(ExamSession session);
 }

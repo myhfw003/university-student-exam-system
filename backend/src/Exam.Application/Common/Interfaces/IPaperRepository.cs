@@ -33,6 +33,4 @@ public interface IPaperRepository
     Task AddAsync(Paper paper, CancellationToken cancellationToken = default);
 
     void Update(Paper paper);
-
-    void Remove(Paper paper);
 }
