@@ -66,6 +66,11 @@ jobs:
         # 试卷状态码也是共享词表：前端按它判断「这份试卷现在能不能发、
         # 是不是已经归档」，写错一个码后端不认，而单元测试全绿。
         run: python3 ../scripts/check-paper-status-codes.py
+      - name: 能力画像分档词表前后端一致
+        # 能力画像的分档（掌握 / 熟悉 / 薄弱 / 样本不足）是共享词表：
+        # 后端算出这个分档随 masteryLabel 发给前端，前端按它上色。
+        # 两边对不上时，徽标会静默退回中性色——「薄弱」和「掌握」看起来一样。
+        run: python3 ../scripts/check-ability-mastery-labels.py
 
   monitoring:
     name: 监控配置校验
@@ -224,6 +229,23 @@ jobs:
             sleep 2
           done
           if [ "$ready" != "1" ]; then echo "API 未就绪"; tail -60 /tmp/api.log; exit 1; fi
+          # Worker：派发 Outbox 里的领域事件。
+          # **没有它，「定分驱动」的那部分功能在端到端里根本验不出来**：
+          # 成绩定分只写一条领域事件，能力画像 / 错题回流 / 工作台汇总
+          # 都要等 Worker 把它派发出去之后才会更新——只起 API 的话，
+          # 画像永远是空的，端到端用例只能验到「空画像」。
+          # 生产的拓扑里 API 与 Worker 是两个进程，这里照着来。
+          ConnectionStrings__Database="Host=127.0.0.1;Port=5432;Database=exam;Username=exam_app;Password=exam_app_password;Maximum Pool Size=5;Timeout=15;Command Timeout=30" \
+          ConnectionStrings__Redis="127.0.0.1:6379,abortConnect=false" \
+          Jwt__Issuer=exam Jwt__Audience=exam-web Jwt__RefreshTokenPepper=e2e-pepper \
+          dotnet run --project src/Exam.Worker -c Release --no-build > /tmp/worker.log 2>&1 &
+          worker_ready=0
+          for i in $(seq 1 60); do
+            # 派发进程起来就算就绪：它每 5 秒轮询一次 Outbox。
+            if grep -q "领域事件派发进程已启动" /tmp/worker.log 2>/dev/null; then worker_ready=1; break; fi
+            sleep 2
+          done
+          if [ "$worker_ready" != "1" ]; then echo "Worker 未就绪"; tail -60 /tmp/worker.log; exit 1; fi
           cd ../frontend
           E2E_API_BASE_URL=http://127.0.0.1:5000 \
           E2E_ADMIN_USERNAME=admin E2E_ADMIN_PASSWORD=admin-e2e-password \

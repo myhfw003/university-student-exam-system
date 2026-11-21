@@ -91,6 +91,19 @@ export default tseslint.config(
     },
   },
 
+  // 端到端用例（Playwright）：整个 e2e/ 目录都是用例代码，
+  // setup/ 下是这些用例共用的夹具，与 *.spec.ts 同类。
+  // 接口返回的 JSON 结构随接口而变，这里宽松标注，取值处再收窄。
+  {
+    files: ["e2e/**/*.{ts,tsx}"],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+    },
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
+
   // Prettier 放最后，关闭与其冲突的规则
   prettier,
 );

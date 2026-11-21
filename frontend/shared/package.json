@@ -10,6 +10,7 @@
     "./design/primitives.css": "./src/design/primitives.css",
     "./package.json": "./package.json",
     "./domain": "./src/domain/index.ts",
+    "./domain/ability": "./src/domain/ability.ts",
     "./domain/attempt": "./src/domain/attempt.ts",
     "./domain/audit": "./src/domain/audit.ts",
     "./domain/paper": "./src/domain/paper.ts",

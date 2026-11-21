@@ -62,6 +62,15 @@ export {
   type ReviewTaskStatus,
 } from "./review";
 
+/* 能力画像域：按能力维度聚合的掌握情况（design 03 §7.2）。 */
+export {
+  MASTERY_LABEL,
+  type AbilityProfile,
+  type AbilityProfileItem,
+  type AbilityProfileSeed,
+  type MasteryLabel,
+} from "./ability";
+
 /* 学习域：错题本与学生工作台（design 03 §6）。 */
 export {
   type DashboardSummary,

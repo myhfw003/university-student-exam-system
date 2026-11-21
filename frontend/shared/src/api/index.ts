@@ -236,6 +236,11 @@ export {
   type MistakeFilter,
 } from "./learningApi";
 export {
+  loadAbilityProfile,
+  toAbilityProfileItem,
+  type AbilityClient,
+} from "./abilityApi";
+export {
   assignReviewTask,
   batchAdoptReviewTasks,
   claimReviewTask,

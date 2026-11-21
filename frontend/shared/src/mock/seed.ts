@@ -29,6 +29,7 @@
       （见 T-P10-23）。
    ========================================================================== */
 
+import { MASTERY_LABEL, type AbilityProfileSeed } from "../domain/ability";
 import type {
   Bank,
   ClassGroup,
@@ -1375,6 +1376,33 @@ export function buildReviewQueue(): ReviewItem[] {
    统一出口
    ========================================================================== */
 
+/* ==========================================================================
+   能力画像
+   --------------------------------------------------------------------------
+   画像是**服务端算出来的**（GET /abilities/profile），mock 模式没有服务端，
+   这里给一份与后端同一口径的示例数据。
+
+   口径照抄后端（AbilityQueries.Label / MasteryCalculator.MinSampleSize）：
+     - 样本量 < 5 → 标「样本不足」，不参与排序；
+     - 样本足够时按掌握度分档：>= 0.8 掌握、>= 0.6 熟悉、其余薄弱；
+     - 排序与后端一致：样本足够的在前（掌握度降序），样本不足的排在后面。
+
+   判定文案（掌握 / 熟悉 / 薄弱 / 样本不足）是前后端共用的词表，
+   由 scripts/check-ability-mastery-labels.py 守着两边一致。
+   ========================================================================== */
+
+export const abilityProfiles: AbilityProfileSeed[] =   [
+      // 林知远（默认答题者）：样本足够的三项 + 样本不足的两项。
+      { studentId: "2023120101", abilityTagId: "t-ab-calc", masteryRate: 0.86, sampleSize: 12, correctCount: 9, sampleSufficient: true, masteryLabel: MASTERY_LABEL.mastered },
+      { studentId: "2023120101", abilityTagId: "t-ab-understand", masteryRate: 0.68, sampleSize: 8, correctCount: 5, sampleSufficient: true, masteryLabel: MASTERY_LABEL.familiar },
+      { studentId: "2023120101", abilityTagId: "t-ab-apply", masteryRate: 0.42, sampleSize: 6, correctCount: 2, sampleSufficient: true, masteryLabel: MASTERY_LABEL.weak },
+      { studentId: "2023120101", abilityTagId: "t-ab-express", masteryRate: 0.28, sampleSize: 3, correctCount: 1, sampleSufficient: false, masteryLabel: MASTERY_LABEL.insufficient },
+      { studentId: "2023120101", abilityTagId: "t-ab-analyze", masteryRate: 0.15, sampleSize: 2, correctCount: 0, sampleSufficient: false, masteryLabel: MASTERY_LABEL.insufficient },
+      // 沈书桐：只有两项，其中一项样本不足。
+      { studentId: "2023120102", abilityTagId: "t-ab-calc", masteryRate: 0.74, sampleSize: 7, correctCount: 5, sampleSufficient: true, masteryLabel: MASTERY_LABEL.familiar },
+      { studentId: "2023120102", abilityTagId: "t-ab-understand", masteryRate: 0.31, sampleSize: 4, correctCount: 1, sampleSufficient: false, masteryLabel: MASTERY_LABEL.insufficient }
+    ];
+
 /** 全部示例数据。 */
 export const SEED = {
   TAG_GROUPS,
@@ -1390,6 +1418,7 @@ export const SEED = {
   practices,
   records,
   mistakes,
+  abilityProfiles,
   imports,
   generations,
   paperTemplates,

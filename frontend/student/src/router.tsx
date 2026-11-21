@@ -51,6 +51,9 @@ const MistakesPage = lazy(async () => ({
 const ProfilePage = lazy(async () => ({
   default: (await import("./features/profile/ProfilePage")).ProfilePage,
 }));
+const AbilityProfilePage = lazy(async () => ({
+  default: (await import("./features/profile/AbilityProfilePage")).AbilityProfilePage,
+}));
 
 function Fallback() {
   return (
@@ -96,6 +99,7 @@ const router = createBrowserRouter([
           { path: "reports", element: lazyPage(ReportListPage) },
           { path: "mistakes", element: lazyPage(MistakesPage) },
           { path: "profile", element: lazyPage(ProfilePage) },
+          { path: "profile/abilities", element: lazyPage(AbilityProfilePage) },
           { path: "403", element: lazyPage(ForbiddenPage) },
           { path: "*", element: lazyPage(NotFoundPage) },
         ],

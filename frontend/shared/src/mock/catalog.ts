@@ -12,6 +12,7 @@
    ========================================================================== */
 
 import { create } from "zustand";
+import type { AbilityProfileSeed } from "../domain/ability";
 import type {
   Bank,
   ClassGroup,
@@ -119,6 +120,8 @@ export interface CatalogState {
   classes: ClassGroup[];
   records: ScoreRecord[];
   mistakes: Mistake[];
+  /** 能力画像（服务端算好的结果；mock 模式给示例数据）。 */
+  abilityProfiles: AbilityProfileSeed[];
   /** 考生作答记录（学生端写入，管理端读取用于监考与阅卷）。 */
   attempts: Record<string, ExamAttempt>;
   /** 练习成绩：practiceId:studentId → 成绩摘要。 */
@@ -235,6 +238,7 @@ const initialState = (): CatalogState => ({
   classes: SEED.classes.map((c) => ({ ...c })),
   records: SEED.records.map((r) => ({ ...r })),
   mistakes: SEED.mistakes.map((m) => ({ ...m })),
+  abilityProfiles: SEED.abilityProfiles.map((p) => ({ ...p })),
   attempts: {},
   practiceResults: {},
   plumCfg: {},

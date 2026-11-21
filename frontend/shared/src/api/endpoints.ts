@@ -80,6 +80,8 @@ export const ENDPOINTS = {
     attemptsScores: (attemptId: string | number) => `/attempts/${attemptId}/scores`,
     mistakes: "/mistakes",
     dashboard: "/dashboard/summary",
+    /** 我的能力画像（样本不足的不参与排序）。 */
+    abilityProfile: "/abilities/profile",
   },
   admin: {
     users: "/users",

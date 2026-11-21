@@ -9,6 +9,7 @@
    ========================================================================== */
 
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Button,
   Card,
@@ -31,6 +32,7 @@ import { useStudentStore } from "@/stores/studentStore";
 
 /** 个人中心。 */
 export function ProfilePage() {
+  const navigate = useNavigate();
   const studentId = useStudentStore((state) => state.studentId);
   const setStudentId = useStudentStore((state) => state.setStudentId);
   const students = useCatalog((state) => state.students);
@@ -76,7 +78,7 @@ export function ProfilePage() {
       <div className="page-head">
         <div>
           <h1 className="page-title">个人中心</h1>
-          <p className="page-sub">账号信息、界面偏好与本地数据管理。</p>
+          <p className="page-sub">账号信息、能力画像、界面偏好与本地数据管理。</p>
         </div>
       </div>
 
@@ -93,6 +95,13 @@ export function ProfilePage() {
               <dt>加入年份</dt>
               <dd className="num">{current?.enrollYear ?? "—"}</dd>
             </dl>
+          </Card>
+
+          <Card title="能力画像">
+            <p className="section-note" style={{ marginBottom: "var(--sp-3)" }}>
+              按能力标签聚合的掌握情况：掌握度、样本量与分档。样本量不足的能力不参与排序。
+            </p>
+            <Button onClick={() => navigate("/profile/abilities")}>查看能力画像</Button>
           </Card>
 
           <Card title="修改密码">

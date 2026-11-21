@@ -71,6 +71,7 @@ const STUDENT_ROUTES = [
   { path: "/reports", marker: "成绩", min: 100 },
   { path: "/mistakes", marker: "错题", min: 200 },
   { path: "/profile", marker: "个人中心", min: 200 },
+  { path: "/profile/abilities", marker: "能力画像", min: 200 },
 ];
 
 const ADMIN_ROUTES = [

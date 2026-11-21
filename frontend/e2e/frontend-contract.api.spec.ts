@@ -87,6 +87,7 @@ test.describe("前端适配层联调", () => {
       ENDPOINTS.learning.attemptsReport("{id}"),
       ENDPOINTS.learning.mistakes,
       ENDPOINTS.learning.dashboard,
+      ENDPOINTS.learning.abilityProfile,
       ENDPOINTS.admin.users,
       ENDPOINTS.admin.resetPassword("{id}"),
       ENDPOINTS.admin.roles,
