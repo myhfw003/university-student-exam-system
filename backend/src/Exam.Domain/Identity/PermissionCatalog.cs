@@ -110,7 +110,10 @@ public static class PermissionCatalog
                 PaperRead, PaperWrite, PaperPublish,
                 BlueprintGenerate,
                 PracticeRead, PracticeWrite,
-                ExamRead, ExamWrite,
+                // 出题教师能发布考试（需求文档 §1 的权限矩阵：
+                // exam:read / exam:write / exam:publish 三个都给出题教师）。
+                // 少了这一条，出题教师组好卷、建好场次却卡在「发布」上。
+                ExamRead, ExamWrite, ExamPublish,
                 AttemptTake, AttemptReadOwn,
                 AnalyticsRead,
                 UserTagAssign,

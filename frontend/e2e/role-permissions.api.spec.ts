@@ -86,6 +86,20 @@ test.describe("角色权限（真实后端）", () => {
     ).toBe(true);
   });
 
+  test("出题教师能发布考试（需求文档 §1 的矩阵）", async () => {
+    const admin = await login(apiRoot, adminUsername, adminPassword);
+
+    const roles = await api(admin, "GET", "/api/v1/roles");
+    expectOk(roles, "角色目录");
+
+    const authorTeacher = (roles.json ?? []).find(
+      (role: any) => role.code === "author_teacher",
+    );
+    expect(authorTeacher, "角色目录里应当有出题教师").toBeTruthy();
+    // 这条曾经漏在后端种子里：出题教师组好卷、建好场次，却卡在「发布」上。
+    expect(authorTeacher.permissions, "出题教师应当能发布考试").toContain("exam:publish");
+  });
+
   test("能看权限点目录，也能改角色的权限集合", async () => {
     const admin = await login(apiRoot, adminUsername, adminPassword);
 

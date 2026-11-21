@@ -54,4 +54,17 @@ public sealed class PermissionCatalogTests
             .OrderBy(x => x)
             .ShouldBe(PermissionCatalog.All.OrderBy(x => x).ToArray());
     }
+
+    [Fact]
+    public void DefaultRolePermissions_出题教师能发布考试()
+    {
+        // 需求文档 §1 的权限矩阵：exam:read / exam:write / exam:publish 三个
+        // 都给出题教师。少了 exam:publish，出题教师组好卷、建好场次，
+        // 却卡在「发布」上——这条曾经真的漏过。
+        var permissions = PermissionCatalog.DefaultRolePermissions[Role.Codes.AuthorTeacher];
+
+        permissions.ShouldContain(PermissionCatalog.ExamPublish);
+        permissions.ShouldContain(PermissionCatalog.ExamWrite);
+        permissions.ShouldContain(PermissionCatalog.ExamRead);
+    }
 }

@@ -42,3 +42,7 @@ appsettings.*.Local.json
 
 # 签名密钥（绝不入库）
 deploy/secrets/
+
+# Python（scripts/ 下的 CI 校验脚本）
+__pycache__/
+*.pyc
