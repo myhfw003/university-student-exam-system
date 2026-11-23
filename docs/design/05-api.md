@@ -123,10 +123,10 @@ RFC 7807 ProblemDetails。
 
 ## 3. IAM
 
-| 方法 | 路径 | 权限 |
-|---|---|---|
+| 方法 | 路径 | 权限 | 说明 |
+|---|---|---|---|
 | GET | `/users` | `user:read` |
-| POST | `/users` | `user:write` |
+| POST | `/users` | `user:write` | 不指定密码时置为**系统设定的原始密码**（见 §3.1） |
 | GET | `/users/{id}` | `user:read` 或本人 |
 | PUT | `/users/{id}` | `user:write` |
 | POST | `/users/{id}/reset-password` | `user:write` | 置为**系统设定的原始密码**（见 §3.1）；响应里不带密码 |
@@ -144,7 +144,10 @@ RFC 7807 ProblemDetails。
 
 **`POST /users/import`**（multipart）
 
-CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名）、`faculty`、`major`、`class`（**可空**，为空即社会人士）、`email`（可空）、`role`（可空，缺省按是否有班级推断）、`password`（可空，缺省生成随机初始密码并要求首次登录修改）。
+CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名）、`faculty`、`major`、`class`（**可空**，为空即社会人士）、`email`（可空）、`role`（可空，缺省按是否有班级推断）、`password`（可空，缺省用**系统设定的原始密码**，见 §3.1，并要求首次登录修改）。
+
+导入结果里**没有任何密码**：CSV 那一行给了密码就用它（管理员明确指定的），
+没给才用系统设定的原始密码。
 
 ```json
 {
@@ -180,16 +183,23 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 
 `updatedAt` / `updatedBy` 是**错题处理口径**的最后修改时间与人。
 
-**原始密码**是管理员重置用户密码时的目标值：管理员在「系统设置」里配一次，
-之后重置任意用户密码都置成它。
+**原始密码**是**初始密码的唯一来源**：管理员在「系统设置」里配一次，之后
+
+- 重置任意用户密码（`POST /users/{id}/reset-password`）、
+- 新建用户（`POST /users`）且没给密码、
+- 名单导入建号（`POST /users/import`）且 CSV 那一行没给密码，
+
+都置成它。
 
 - **只写不回显**：`PUT /settings/original-password` 的请求体给明文，
   响应里没有任何密码——只有 `originalPasswordConfigured` 这一位。
   库里存的是 PBKDF2 哈希，不是明文。
 - 强度要求与用户密码一致：长度 ≥ 8，且至少包含字母与数字。
-- **没配就不能重置**：`POST /users/{id}/reset-password` 在未配置原始密码时
-  返回 `422` + `errorCode=29005`，而不是凭空生成一个谁都不知道的密码。
-- 清除原始密码后，重置密码同样被拒绝，直到重新配置。
+- **没配就不能建号 / 重置**：`POST /users/{id}/reset-password` 与
+  `POST /users`（没给密码时）在未配置原始密码时返回 `422` + `errorCode=29005`；
+  名单导入里需要建号的那些行按**行失败**并写明原因（已有账号走更新，不受影响），
+  而不是凭空生成一个谁都不知道的密码。
+- 清除原始密码后，重置密码、建号同样被拒绝，直到重新配置。
 
 ---
 
