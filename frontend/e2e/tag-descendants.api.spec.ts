@@ -120,4 +120,43 @@ test.describe("标签子树（真实后端）", () => {
     expect(withoutSelfIds, "子与孙照旧在").toContain(Number(childId));
     expect((withoutSelf.json?.tags ?? []).length, "不含自己时只剩两个").toBe(2);
   });
+
+  test("知识点能挂在领域标签下，展开子树时认得", async () => {
+    // 需求 FR-CAT-02 的验收例子「选『高等数学』命中其下所有知识点」：
+    // 「高等数学」是领域标签，它下面挂的是知识点标签——**跨维度**成树。
+    const admin = await login(apiRoot, adminUsername, adminPassword);
+    const stamp = Date.now();
+
+    const parent = await api(admin, "POST", "/api/v1/tags", {
+      code: `e2e-cross-parent-${stamp}`,
+      name: `端到端领域标签-${stamp}`,
+      group: "domain",
+      description: "",
+      sortOrder: 0,
+    });
+    expectOk(parent, "建领域标签");
+    const parentId = parent.json.id ?? parent.json.tag?.id;
+
+    const child = await api(admin, "POST", "/api/v1/tags", {
+      code: `e2e-cross-child-${stamp}`,
+      name: `端到端知识点标签-${stamp}`,
+      group: "knowledge_point",
+      parentId,
+      description: "",
+      sortOrder: 0,
+    });
+    expectOk(child, "建知识点标签（跨维度挂父）");
+    const childId = child.json.id ?? child.json.tag?.id;
+
+    const subtree = await api(admin, "GET", `/api/v1/tags/${parentId}/descendants`);
+    expectOk(subtree, "展开标签子树");
+
+    const ids: number[] = (subtree.json?.ids ?? []).map((value: any) => Number(value));
+    expect(ids, "子树里有那个知识点标签").toContain(Number(childId));
+
+    const tags: any[] = subtree.json?.tags ?? [];
+    const childTag = tags.find((tag) => Number(tag.id) === Number(childId));
+    expect(childTag, "知识点标签在子树里").toBeTruthy();
+    expect(childTag.group, "它仍是知识点维度的标签").toBe("knowledge_point");
+  });
 });

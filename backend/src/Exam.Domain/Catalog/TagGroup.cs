@@ -1,3 +1,5 @@
+using Exam.Domain.SharedKernel.Exceptions;
+
 namespace Exam.Domain.Catalog;
 
 /// <summary>
@@ -59,6 +61,68 @@ public static class TagGroups
 
     /// <summary>是否允许父子层级。难度维度是平铺的。</summary>
     public static bool AllowsHierarchy(this TagGroup group) => group != TagGroup.Difficulty;
+
+    /// <summary>
+    /// 内容维度：领域 / 知识点 / 能力。
+    /// <para>
+    /// 这三个维度是题目的分类轴，彼此之间**可以成树（跨维度）**——
+    /// 需求 FR-CAT-02 的验收例子「选『高等数学』命中其下所有知识点」
+    /// 要求领域标签下面能挂知识点标签。
+    /// </para>
+    /// </summary>
+    public static bool IsContentDimension(this TagGroup group) =>
+        group is TagGroup.Domain or TagGroup.KnowledgePoint or TagGroup.Ability;
+
+    /// <summary>
+    /// 这两个维度之间能不能成父子关系。
+    /// <para>
+    /// - 难度维度平铺，不能有父；
+    /// - 组织维度自成一体：只挂组织维度的父，也不能当内容标签的父
+    ///   （组织维度只作用于用户，见 FR-CAT-01 的维度隔离）；
+    /// - 内容维度（领域 / 知识点 / 能力）之间可以跨维度成树。
+    /// </para>
+    /// </summary>
+    public static bool CanNest(this TagGroup parentGroup, TagGroup childGroup)
+    {
+        if (childGroup == TagGroup.Difficulty)
+        {
+            return false;
+        }
+
+        if (childGroup == TagGroup.Organization)
+        {
+            return parentGroup == TagGroup.Organization;
+        }
+
+        return parentGroup != TagGroup.Organization;
+    }
+
+    /// <summary>
+    /// 校验父子维度关系；不合法就抛出带原因的业务异常。
+    /// <para>
+    /// 三处校验（建标签、改标签、领域层的 SetParent）都走这里，
+    /// 免得各写一套、说法还不一样。
+    /// </para>
+    /// </summary>
+    public static void EnsureCanNest(this TagGroup parentGroup, TagGroup childGroup)
+    {
+        if (CanNest(parentGroup, childGroup))
+        {
+            return;
+        }
+
+        if (childGroup == TagGroup.Difficulty)
+        {
+            throw new BusinessRuleException("难度维度的标签没有层级关系。");
+        }
+
+        if (childGroup == TagGroup.Organization)
+        {
+            throw new BusinessRuleException("组织维度的标签只能挂在组织维度的父标签下。");
+        }
+
+        throw new BusinessRuleException("组织维度的标签只作用于用户，不能作为其它维度标签的父标签。");
+    }
 
     /// <summary>该维度是否可挂到题目上。组织维度只挂用户。</summary>
     public static bool AppliesToQuestions(this TagGroup group) => group != TagGroup.Organization;

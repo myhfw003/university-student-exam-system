@@ -52,7 +52,7 @@ public sealed class TagTests
     }
 
     [Fact]
-    public void 父标签必须与当前标签同维度()
+    public void 组织维度的标签不能当别的维度的父标签()
     {
         var tag = DomainTag();
         var parent = Tag.Create("org.faculty", "计算机学院", TagGroup.Organization, null, null, 0, Now);
@@ -60,7 +60,32 @@ public sealed class TagTests
         var act = () => tag.SetParent(parent, Now);
 
         var ex = act.ShouldThrow<BusinessRuleException>();
-        ex.Message.ShouldContain("同一维度");
+        ex.Message.ShouldContain("组织维度");
+    }
+
+    [Fact]
+    public void 内容维度之间可以跨维度成树()
+    {
+        // 需求 FR-CAT-02：「选『高等数学』命中其下所有知识点」——
+        // 领域标签下面要能挂知识点标签。
+        var tag = Tag.Create("kp.limit", "极限", TagGroup.KnowledgePoint, null, null, 0, Now);
+        var parent = Tag.Create("math", "高等数学", TagGroup.Domain, null, null, 0, Now);
+
+        tag.SetParent(parent, Now);
+
+        tag.ParentId.ShouldBe(parent.Id);
+    }
+
+    [Fact]
+    public void 组织维度的标签只能挂在组织维度的父标签下()
+    {
+        var tag = Tag.Create("org.class", "计科 2301 班", TagGroup.Organization, null, null, 0, Now);
+        var parent = Tag.Create("math", "高等数学", TagGroup.Domain, null, null, 0, Now);
+
+        var act = () => tag.SetParent(parent, Now);
+
+        var ex = act.ShouldThrow<BusinessRuleException>();
+        ex.Message.ShouldContain("组织维度");
     }
 
     [Fact]

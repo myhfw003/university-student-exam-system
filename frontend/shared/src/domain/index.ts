@@ -82,6 +82,9 @@ export {
   type SystemSettings,
 } from "./settings";
 
+/* 标签域：维度与内容维度（内容维度之间可以跨维度成树，FR-CAT-02）。 */
+export { CONTENT_TAG_GROUPS, type TagGroup } from "./types";
+
 /* 学习域：错题本与学生工作台（design 03 §6）。 */
 export {
   type DashboardSummary,

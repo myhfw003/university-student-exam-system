@@ -117,8 +117,13 @@ public sealed class Tag : AuditableEntity, IAuditedEntity
     }
 
     /// <summary>
-    /// 挂到同维度的父标签下。<paramref name="parent"/> 为 null 表示置为顶级标签。
-    /// 难度维度不允许有父；父必须是同维度且不能是自己。
+    /// 挂到父标签下。<paramref name="parent"/> 为 null 表示置为顶级标签。
+    /// <para>
+    /// 难度维度不允许有父；组织维度只挂组织维度的父；
+    /// 内容维度（领域 / 知识点 / 能力）之间可以跨维度成树——
+    /// 需求 FR-CAT-02 的验收例子「选『高等数学』命中其下所有知识点」要求如此。
+    /// 父也不能是自己。
+    /// </para>
     /// </summary>
     public void SetParent(Tag? parent, DateTimeOffset now, long? actorId = null)
     {
@@ -134,10 +139,7 @@ public sealed class Tag : AuditableEntity, IAuditedEntity
                 throw new BusinessRuleException("标签不能以自身为父标签。");
             }
 
-            if (parent.Group != Group)
-            {
-                throw new BusinessRuleException($"父标签必须与当前标签属于同一维度（{Group.Label()}）。");
-            }
+            parent.Group.EnsureCanNest(Group);
         }
 
         ParentId = parent?.Id;

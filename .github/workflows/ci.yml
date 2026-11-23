@@ -76,6 +76,11 @@ jobs:
         # 两边对不上时，前端把后端写的取值认不出来，退回缺省档——
         # 管理员明明改了设置，页面却显示成另一档，而且单元测试全绿。
         run: python3 ../scripts/check-system-setting-values.py
+      - name: 标签维度词表前后端一致
+        # 标签维度是共享词表：后端决定哪些维度之间能成树（内容维度可跨维度），
+        # 前端决定父标签下拉里给哪些维度。两边对不上时，用户在界面上
+        # 建不出后端允许的那棵标签树——而接口是通的，看着一切正常。
+        run: python3 ../scripts/check-tag-dimensions.py
 
   monitoring:
     name: 监控配置校验

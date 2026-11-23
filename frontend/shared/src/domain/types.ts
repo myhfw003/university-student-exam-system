@@ -23,6 +23,21 @@ export type QuestionSource = "manual" | "import" | "ai";
 /** 标签分组。组织维度只挂用户，题目只挂前四维。 */
 export type TagGroup = "domain" | "knowledge_point" | "ability" | "difficulty";
 
+/**
+ * 内容维度：领域 / 知识点 / 能力。
+ *
+ * 这三个维度之间**可以成树（跨维度）**——需求 FR-CAT-02 的验收例子
+ * 「选『高等数学』命中其下所有知识点」要求领域标签下面能挂知识点标签。
+ *
+ * 难度维度是平铺的（不能有父）；组织维度只作用于用户、自成一体，
+ * 前端不显示它（见后端 `TagGroups.CanNest`）。
+ */
+export const CONTENT_TAG_GROUPS: readonly TagGroup[] = [
+  "domain",
+  "knowledge_point",
+  "ability",
+];
+
 /** 难度等级。 */
 export type DifficultyLevel = 1 | 2 | 3;
 

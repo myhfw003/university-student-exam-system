@@ -23,7 +23,7 @@ import {
 } from "@exam/shared";
 import { isBackendEnabled } from "@exam/shared/api";
 import { TAG_GROUP_LABEL, TAG_GROUP_ORDER, MAX_TAGS } from "@exam/shared/mock/catalog";
-import type { TagGroup } from "@exam/shared/domain/types";
+import { CONTENT_TAG_GROUPS, type TagGroup } from "@exam/shared/domain";
 import { Icon } from "@/app/Icon";
 import { deriveTagCode, useAdminTags, type TagRow } from "./useAdminTags";
 
@@ -72,10 +72,20 @@ export function TagsPage() {
     }
   };
 
-  // 上级标签只能取同一维度里的标签（维度隔离）。
+  /**
+   * 上级标签取**任一内容维度**里的标签（领域 / 知识点 / 能力）。
+   *
+   * 内容维度之间可以跨维度成树——需求 FR-CAT-02 的验收例子
+   * 「选『高等数学』命中其下所有知识点」要求领域标签下能挂知识点标签。
+   * 难度维度是平铺的（不能有父），组织维度只作用于用户、不在这儿显示，
+   * 两者都不能当父标签。
+   */
   const parentOptions = useMemo(
-    () => tags.filter((tag) => tag.group === group && tag.id !== editing?.id),
-    [tags, group, editing?.id],
+    () =>
+      tags.filter(
+        (tag) => CONTENT_TAG_GROUPS.includes(tag.group) && tag.id !== editing?.id,
+      ),
+    [tags, editing?.id],
   );
 
   const openCreate = () => {
@@ -312,7 +322,7 @@ export function TagsPage() {
             <Field
               htmlFor="tg-parent"
               label="上级标签"
-              hint="同一维度内可设父标签形成树；留空表示顶级标签。"
+              hint="领域 / 知识点 / 能力三个维度之间可成树（如「高等数学」下挂知识点）；难度平铺。留空表示顶级标签。"
             >
               <SelectInput
                 id="tg-parent"

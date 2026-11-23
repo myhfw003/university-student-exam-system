@@ -104,10 +104,9 @@ public sealed class UpdateTagHandler : IRequestHandler<UpdateTagCommand, TagDto>
         var parent = await _tags.GetByIdAsync(parentId.Value, cancellationToken)
             ?? throw new BusinessRuleException("父标签不存在。");
 
-        if (parent.Group != tag.Group)
-        {
-            throw new BusinessRuleException($"父标签必须与当前标签属于同一维度（{tag.Group.Label()}）。");
-        }
+        // 维度能不能成父子：内容维度之间可以跨维度（FR-CAT-02），
+        // 难度平铺、组织自成一体。
+        parent.Group.EnsureCanNest(tag.Group);
 
         // 父标签若在自己的后代中，改挂会形成环。
         var descendants = await _tags.GetDescendantIdsAsync(tag.Id, includeSelf: true, cancellationToken);

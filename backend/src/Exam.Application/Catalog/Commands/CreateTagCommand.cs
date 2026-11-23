@@ -91,10 +91,9 @@ public sealed class CreateTagHandler : IRequestHandler<CreateTagCommand, TagDto>
             parent = await _tags.GetByIdAsync(request.ParentId.Value, cancellationToken)
                 ?? throw new BusinessRuleException("父标签不存在。");
 
-            if (parent.Group != group)
-            {
-                throw new BusinessRuleException($"父标签必须与当前标签属于同一维度（{group.Label()}）。");
-            }
+            // 维度能不能成父子：内容维度之间可以跨维度（FR-CAT-02），
+            // 难度平铺、组织自成一体。
+            parent.Group.EnsureCanNest(group);
         }
 
         var tag = Tag.Create(

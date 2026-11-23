@@ -502,9 +502,11 @@ export function validateTags(ids: readonly string[]): TagValidation {
 }
 
 /**
- * 校验父标签：必须存在，且与当前标签同维度。
+ * 校验父标签：必须存在，且父子维度能成树。
  *
- * 与后端同一条规则（父标签必须与当前标签属于同一维度）。
+ * 与后端同一条规则（`TagGroups.CanNest`）：难度维度平铺，不能有父；
+ * 领域 / 知识点 / 能力三个内容维度之间可以跨维度成树——
+ * 需求 FR-CAT-02 的验收例子「选『高等数学』命中其下所有知识点」要求如此。
  */
 function checkParent(
   tags: readonly Tag[],
@@ -516,11 +518,11 @@ function checkParent(
   if (parentId === selfId) return { ok: false, message: "标签不能以自身为父标签。" };
   const parent = tags.find((t) => t.id === parentId);
   if (!parent) return { ok: false, message: "父标签不存在。" };
-  if (parent.group !== group) {
-    return {
-      ok: false,
-      message: `父标签必须与当前标签属于同一维度（${TAG_GROUP_LABEL[group]}）。`,
-    };
+  if (group === "difficulty") {
+    return { ok: false, message: "难度维度的标签没有层级关系。" };
+  }
+  if (parent.group === "difficulty") {
+    return { ok: false, message: "难度维度是平铺的，不能作为父标签。" };
   }
   return { ok: true };
 }

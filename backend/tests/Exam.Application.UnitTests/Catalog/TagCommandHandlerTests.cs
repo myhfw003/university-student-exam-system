@@ -51,7 +51,7 @@ public sealed class TagCommandHandlerTests
     }
 
     [Fact]
-    public async Task 新建标签_父标签维度不一致时报错()
+    public async Task 新建标签_组织维度的父标签时报错()
     {
         _tags.GetByCodeAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((Tag?)null);
         _tags.GetByIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
@@ -62,7 +62,22 @@ public sealed class TagCommandHandlerTests
             CancellationToken.None);
 
         var ex = await act.ShouldThrowAsync<BusinessRuleException>();
-        ex.Message.ShouldContain("同一维度");
+        ex.Message.ShouldContain("组织维度");
+    }
+
+    [Fact]
+    public async Task 新建标签_知识点挂在领域标签下可以()
+    {
+        // 需求 FR-CAT-02：「选『高等数学』命中其下所有知识点」。
+        _tags.GetByCodeAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((Tag?)null);
+        var parent = Tag.Create("math", "高等数学", TagGroup.Domain, null, null, 0, Now);
+        _tags.GetByIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(parent);
+
+        var result = await CreateHandler().Handle(
+            new CreateTagCommand("math.limit", "极限", "knowledge_point", parent.Id, null, null, 0),
+            CancellationToken.None);
+
+        result.Name.ShouldBe("极限");
     }
 
     [Fact]

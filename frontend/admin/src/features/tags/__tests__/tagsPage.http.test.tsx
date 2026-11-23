@@ -70,6 +70,21 @@ const TAGS = [
     isSystem: false,
     usageCount: 4,
   },
+  // 知识点维度的标签：内容维度之间可以跨维度成树（ADR-020），
+  // 所以它也能当父标签。
+  {
+    id: "4",
+    code: "knowledge_point.求导",
+    name: "求导",
+    group: "knowledge_point",
+    groupLabel: "知识点",
+    parentId: null,
+    level: null,
+    description: "",
+    sortOrder: 0,
+    isSystem: false,
+    usageCount: 7,
+  },
 ];
 
 describe("管理端标签页 · HTTP 模式", () => {
@@ -140,6 +155,23 @@ describe("管理端标签页 · HTTP 模式", () => {
     const payload = api.createAdminTag.mock.calls[0]![0];
     expect(payload.group).toBe("difficulty");
     expect(payload.level).toBe(3);
+  });
+
+  it("父标签下拉给的是内容维度里的标签（难度不给）", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: /新建标签/ }));
+
+    const parentSelect = screen.getByLabelText(/上级标签/) as HTMLSelectElement;
+    const options = Array.from(parentSelect.options).map((option) => option.textContent);
+
+    // 内容维度（领域 / 知识点 / 能力）都能当父标签——需求 FR-CAT-02 的验收例子
+    // 「选『高等数学』命中其下所有知识点」要求领域标签下能挂知识点标签。
+    expect(options).toContain("极限与连续");
+    expect(options).toContain("求导");
+    // 难度是平铺的，不能当父标签。
+    expect(options).not.toContain("基础");
   });
 
   it("能看一个标签下面挂着哪些子标签（含子孙）", async () => {
