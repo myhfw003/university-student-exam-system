@@ -180,7 +180,7 @@ public abstract record ValueObject
 | `Code` | `string` | 唯一稳定编码（如 `math.calculus.limit`），用于导入与 API 引用 |
 | `Name` | `string` | 显示名，1..50 |
 | `Group` | `TagGroup` | 枚举：`Domain` / `KnowledgePoint` / `Ability` / `Difficulty` / `Organization` |
-| `ParentId` | `TagId?` | 同维度内的父标签；难度维度禁止有父 |
+| `ParentId` | `TagId?` | 父标签；难度维度禁止有父；组织维度只挂组织维度的父；内容维度（领域 / 知识点 / 能力）之间可跨维度（ADR-020） |
 | `Level` | `int?` | **仅难度维度**有值，范围 1..5；其他维度为 null |
 | `Description` | `string?` | |
 | `SortOrder` | `int` | |
@@ -191,7 +191,7 @@ public abstract record ValueObject
 
 | 方法 | 规则 |
 |---|---|
-| `Create(...)` | 校验 Group 合法；难度维度必须给 `Level` 且 1..5；其他维度必须 `Level == null`；难度维度禁止有父；组织维度标签的父必须是组织维度标签 |
+| `Create(...)` | 校验 Group 合法；难度维度必须给 `Level` 且 1..5；其他维度必须 `Level == null`；难度维度禁止有父；组织维度标签的父必须是组织维度标签；内容维度之间可跨维度成树（`TagGroups.CanNest`，ADR-020） |
 | `Rename(name)` | |
 | `ReassignParent(parentId)` | 父节点必须同维度；禁止自引用；禁止形成环（由应用层校验可达性） |
 | `SetLevel(level)` | 仅难度维度可调用 |

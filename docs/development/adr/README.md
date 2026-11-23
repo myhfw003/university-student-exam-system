@@ -25,6 +25,7 @@
 | [ADR-017](0017-npgsql10-prepared-statements.md) | Npgsql 10 下 PgBouncer 事务池的兼容性结论 | 已接受 |
 | [ADR-018](0018-tags-replace-organization-tree.md) | 用标签维度替代独立组织树 | 已接受 |
 | [ADR-019](0019-data-kept-until-explicitly-cleaned.md) | 数据不设默认保留期，删除一律软删除 | 已接受 |
+| [ADR-020](0020-tag-tree-cross-dimension.md) | 标签树允许内容维度之间跨维度挂接 | 已接受 |
 
 ## 格式约定
 
