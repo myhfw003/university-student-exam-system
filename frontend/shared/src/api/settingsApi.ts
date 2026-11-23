@@ -19,7 +19,7 @@ import {
 } from "../domain/settings";
 
 /** 系统级设置接口所需的最小客户端接口。 */
-export type SettingsClient = Pick<typeof httpClient, "get" | "put">;
+export type SettingsClient = Pick<typeof httpClient, "get" | "put" | "delete">;
 
 /** 后端 DTO（宽松声明；字段以 OpenAPI 契约为准）。 */
 type Dto = Record<string, unknown>;
@@ -38,6 +38,7 @@ function strOrNull(value: unknown): string | null {
 export function toSystemSettings(dto: Dto): SystemSettings {
   return {
     mistakeResolutionPolicy: toMistakeResolutionPolicy(str(dto.mistakeResolutionPolicy)),
+    originalPasswordConfigured: dto.originalPasswordConfigured === true,
     updatedAt: strOrNull(dto.updatedAt),
     updatedBy: strOrNull(dto.updatedBy),
   };
@@ -65,5 +66,31 @@ export async function updateSystemSettings(
   client: SettingsClient = httpClient,
 ): Promise<SystemSettings> {
   const dto = await client.put<Dto>(ENDPOINTS.admin.settings, { mistakeResolutionPolicy });
+  return toSystemSettings(dto);
+}
+
+/**
+ * 设置系统的原始密码（管理员重置密码时置成它）。
+ *
+ * **只写不回显**：请求里给的是明文，响应里只有「有没有配」——
+ * 原始密码由管理员自己另行告知用户。
+ */
+export async function setOriginalPassword(
+  password: string,
+  client: SettingsClient = httpClient,
+): Promise<SystemSettings> {
+  const dto = await client.put<Dto>(ENDPOINTS.admin.settingsOriginalPassword, { password });
+  return toSystemSettings(dto);
+}
+
+/**
+ * 清除系统的原始密码。
+ *
+ * 清除后重置密码会被拒绝（没有可置成的目标），直到重新配置。
+ */
+export async function clearOriginalPassword(
+  client: SettingsClient = httpClient,
+): Promise<SystemSettings> {
+  const dto = await client.delete<Dto>(ENDPOINTS.admin.settingsOriginalPassword);
   return toSystemSettings(dto);
 }

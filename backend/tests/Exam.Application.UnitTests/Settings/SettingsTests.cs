@@ -36,6 +36,22 @@ public sealed class SystemSettingsResolverTests
     }
 
     [Fact]
+    public async Task 没配原始密码就取不到哈希()
+    {
+        GivenOriginalPasswordHash(null);
+
+        (await Resolver().GetOriginalPasswordHashAsync()).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task 配了原始密码就取得到哈希()
+    {
+        GivenOriginalPasswordHash("hash-of-original");
+
+        (await Resolver().GetOriginalPasswordHashAsync()).ShouldBe("hash-of-original");
+    }
+
+    [Fact]
     public async Task 认不出来的取值回退到默认口径()
     {
         Given("乱写");
@@ -45,6 +61,17 @@ public sealed class SystemSettingsResolverTests
     }
 
     private SystemSettingsResolver Resolver() => new(_settings);
+
+    private void GivenOriginalPasswordHash(string? hash)
+    {
+        var setting = hash is null
+            ? null
+            : SystemSetting.Create(SystemSettingKeys.OriginalPasswordHash, hash, Now, null);
+
+        _settings
+            .GetAsync(SystemSettingKeys.OriginalPasswordHash, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<SystemSetting?>(setting));
+    }
 
     private void Given(string? value)
     {

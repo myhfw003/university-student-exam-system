@@ -40,4 +40,5 @@ public static class ErrorCodes
     public const int AccountLocked = 29002;
     public const int AccountDisabled = 29003;
     public const int RefreshTokenReuseDetected = 29004;
+    public const int OriginalPasswordNotConfigured = 29005;
 }

@@ -5,6 +5,7 @@ using Exam.Application;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Security;
 using Exam.Application.Identity.Commands;
+using Exam.Application.Settings.Commands;
 using Exam.Infrastructure;
 using Exam.Infrastructure.Identity;
 using Exam.Infrastructure.Observability;
@@ -77,8 +78,9 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
             CurrentPassword = SensitiveDataMasker.MaskSecret(cmd.CurrentPassword),
             NewPassword = SensitiveDataMasker.MaskSecret(cmd.NewPassword),
         })
-    .Destructure.ByTransforming<ResetUserPasswordCommand>(cmd =>
-        new { cmd.Id, NewPassword = SensitiveDataMasker.MaskSecret(cmd.NewPassword) })
+    .Destructure.ByTransforming<ResetUserPasswordCommand>(cmd => new { cmd.Id })
+    .Destructure.ByTransforming<SetOriginalPasswordCommand>(cmd =>
+        new { Password = SensitiveDataMasker.MaskSecret(cmd.Password) })
     .Destructure.ByTransforming<CreateUserCommand>(cmd =>
         new
         {

@@ -77,17 +77,20 @@ public sealed class UsersController : ControllerBase
                 request.DisableReason),
             cancellationToken);
 
-    /// <summary>重置用户密码。未指定新密码时返回随机初始密码。</summary>
+    /// <summary>重置用户密码。</summary>
+    /// <para>
+    /// 置为**系统设定的原始密码**（在「系统设置」里配好的那个）。
+    /// 响应里不带密码——原始密码是管理员自己配的，由管理员另行告知用户。
+    /// </para>
+    /// <para>重置后用户下次登录必须修改密码，旧令牌立即失效。</para>
     [HttpPost("{id:long}/reset-password")]
     [Authorize(Policy = PermissionCatalog.UserWrite)]
     [ProducesResponseType(typeof(ResetPasswordResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<ResetPasswordResult> ResetPassword(
         long id,
-        [FromBody] ResetPasswordRequest? request,
         CancellationToken cancellationToken) =>
-        await _mediator.Send(
-            new ResetUserPasswordCommand(id, request?.NewPassword),
-            cancellationToken);
+        await _mediator.Send(new ResetUserPasswordCommand(id), cancellationToken);
 
     /// <summary>覆盖式设置用户的角色集合。</summary>
     [HttpPut("{id:long}/roles")]
@@ -156,5 +159,3 @@ public sealed class UsersController : ControllerBase
         return NoContent();
     }
 }
-
-public sealed record ResetPasswordRequest(string? NewPassword);

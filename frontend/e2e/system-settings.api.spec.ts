@@ -92,6 +92,43 @@ test.describe("系统级设置（真实后端）", () => {
     expect(restored.json?.mistakeResolutionPolicy, "还原后回到缺省档").toBe(DEFAULT_POLICY);
   });
 
+  test("原始密码：能配能清，响应里不带密码", async () => {
+    const admin = await login(apiRoot, adminUsername, adminPassword);
+
+    const set = await api(admin, "PUT", "/api/v1/settings/original-password", {
+      password: "OrigPass123",
+    });
+    expectOk(set, "设置原始密码");
+    expect(set.json?.originalPasswordConfigured, "配完要显示成已配置").toBe(true);
+    // 只写不回显：响应里既没有密码字段，也不含明文。
+    expect(set.raw, "响应里不能带密码").not.toContain("OrigPass123");
+
+    const get = await api(admin, "GET", "/api/v1/settings");
+    expectOk(get, "读系统级设置");
+    expect(get.json?.originalPasswordConfigured, "读回来是已配置").toBe(true);
+
+    // 还原：别把全局设置留在改过的状态。
+    const clear = await api(admin, "DELETE", "/api/v1/settings/original-password");
+    expectOk(clear, "清除原始密码");
+    expect(clear.json?.originalPasswordConfigured, "清完要显示成没配").toBe(false);
+  });
+
+  test("原始密码太弱被挡下，没权限的人配不了", async () => {
+    const admin = await login(apiRoot, adminUsername, adminPassword);
+
+    const weak = await api(admin, "PUT", "/api/v1/settings/original-password", {
+      password: "short",
+    });
+    expect(weak.status, "太弱的原始密码应当是 400").toBe(400);
+
+    const student = await ensureStudent(apiRoot, admin);
+    const session = await login(apiRoot, student.username, student.password);
+    const write = await api(session, "PUT", "/api/v1/settings/original-password", {
+      password: "OrigPass123",
+    });
+    expect(write.status, "学生没有 system:configure，应当配不了").toBe(403);
+  });
+
   test("没有权限的人读不到也改不了", async () => {
     const admin = await login(apiRoot, adminUsername, adminPassword);
     const student = await ensureStudent(apiRoot, admin);

@@ -21,7 +21,6 @@ import {
   Segmented,
   SelectInput,
   Stat,
-  TextInput,
   decodeCsvBuffer,
   hasPermission,
   toast,
@@ -72,7 +71,6 @@ export function UsersPage() {
   const [editing, setEditing] = useState<AdminUserRow | null>(null);
   // 重置密码（FR-IAM-03）：管理员重置任意用户密码并强制其下次登录修改。
   const [resetTarget, setResetTarget] = useState<AdminUserRow | null>(null);
-  const [resetPassword, setResetPassword] = useState("");
   const [resetError, setResetError] = useState<string | null>(null);
   // 名单批量导入（FR-IAM-05）。
   const [importOpen, setImportOpen] = useState(false);
@@ -142,14 +140,13 @@ export function UsersPage() {
   const handleResetPassword = async () => {
     if (!resetTarget) return;
     setResetError(null);
-    const result = await doResetPassword(resetTarget.id, resetPassword);
+    const result = await doResetPassword(resetTarget.id);
     if (!result.ok) {
       setResetError(result.message ?? "重置失败，请重试");
       return;
     }
     toast.ok("密码已重置");
     setResetTarget(null);
-    setResetPassword("");
   };
 
   /** 选择名单 CSV → 解析并逐行校验（不阻断整批）。 */
@@ -356,7 +353,6 @@ export function UsersPage() {
                           size="sm"
                           onClick={() => {
                             setResetError(null);
-                            setResetPassword("");
                             setResetTarget(u);
                           }}
                         >
@@ -396,17 +392,12 @@ export function UsersPage() {
               {resetError}
             </Callout>
           ) : null}
-          <Field label="新密码" required htmlFor="reset-password">
-            <TextInput
-              id="reset-password"
-              type="text"
-              value={resetPassword}
-              placeholder="至少 8 位"
-              onChange={(e) => setResetPassword(e.target.value)}
-            />
-          </Field>
           <p className="section-note">
-            管理员重置的密码仅作首次登录凭据：用户登录后必须立即修改密码，
+            重置后这个用户的密码置为系统设定的原始密码（在「系统设置」里配好的那个），
+            请自行把密码告知用户。响应里不会带密码。
+          </p>
+          <p className="section-note">
+            该密码仅作首次登录凭据：用户登录后必须立即修改密码，
             改密之前只能用改密、查看本人档案与登出这三个功能。
           </p>
         </div>

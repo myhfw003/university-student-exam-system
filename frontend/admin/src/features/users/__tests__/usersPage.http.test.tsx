@@ -185,4 +185,18 @@ describe("管理端用户页 · HTTP 模式", () => {
     expect(screen.getByText("vtDjhbWjsrXNMmF5aA1")).toBeInTheDocument();
   });
 
+  it("重置密码对话框不再收密码：密码由系统设定的原始密码决定", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("t1061794989263723")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "重置密码" }));
+
+    // 对话框里没有密码输入框：密码不再由管理员临时指定。
+    expect(screen.queryByLabelText("新密码")).not.toBeInTheDocument();
+    expect(screen.getByText(/系统设定的原始密码/)).toBeInTheDocument();
+  });
 });

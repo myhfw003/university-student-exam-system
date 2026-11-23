@@ -1,7 +1,9 @@
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Identity.Commands;
+using Exam.Application.Settings.Services;
 using Exam.Application.UnitTests.Identity;
 using Exam.Domain.Identity;
+using Exam.Domain.Settings;
 using Exam.Domain.SharedKernel.Abstractions;
 using Exam.Domain.SharedKernel.Exceptions;
 using NSubstitute;
@@ -20,6 +22,7 @@ public sealed class UserManagementHandlerTests
     private readonly IPasswordVerifier _passwordVerifier = new StubPasswordVerifier();
     private readonly IRefreshTokenRepository _refreshTokens = Substitute.For<IRefreshTokenRepository>();
     private readonly ITokenBlacklist _blacklist = Substitute.For<ITokenBlacklist>();
+    private readonly ISystemSettingRepository _settings = Substitute.For<ISystemSettingRepository>();
     private readonly IAuditRecorder _audit = Substitute.For<IAuditRecorder>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IClock _clock = new FixedClock(Now);
@@ -32,7 +35,7 @@ public sealed class UserManagementHandlerTests
         new(_users, _userRoles, _roles, _permissions, _refreshTokens, _blacklist, _audit, _clock, _currentUser);
 
     private ResetUserPasswordHandler ResetPassword() =>
-        new(_users, _passwordVerifier, _refreshTokens, _blacklist, _audit, _clock, _currentUser);
+        new(_users, new SystemSettingsResolver(_settings), _refreshTokens, _blacklist, _audit, _clock, _currentUser);
 
     private AssignUserRolesHandler AssignRoles() =>
         new(_users, _userRoles, _roles, _permissions, _unitOfWork, _audit, _clock, _currentUser);
@@ -110,31 +113,46 @@ public sealed class UserManagementHandlerTests
     }
 
     [Fact]
-    public async Task 重置密码_旧令牌立即失效()
+    public async Task 重置密码_置为系统设定的原始密码且旧令牌立即失效()
     {
         var user = User.Register("zhangsan", "张三", "hash", Now);
         _users.GetByIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(user);
+        GivenOriginalPasswordHash("hash-of-original");
 
         var result = await ResetPassword().Handle(
-            new ResetUserPasswordCommand(1, "NewPassw0rd!"),
+            new ResetUserPasswordCommand(1),
             CancellationToken.None);
 
+        user.PasswordHash.ShouldBe("hash-of-original");
         user.MustChangePassword.ShouldBeTrue();
-        result.InitialPassword.ShouldBeNull("管理员指定了密码就不返回明文。");
+        result.UserId.ShouldBe(user.Id);
         await _blacklist.Received(1).RevokeUserAsync(1, Now, Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task 重置密码_未指定密码时返回初始密码()
+    public async Task 重置密码_没配原始密码时报错()
     {
         var user = User.Register("zhangsan", "张三", "hash", Now);
         _users.GetByIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(user);
+        GivenOriginalPasswordHash(null);
 
-        var result = await ResetPassword().Handle(
-            new ResetUserPasswordCommand(1, null),
+        var act = async () => await ResetPassword().Handle(
+            new ResetUserPasswordCommand(1),
             CancellationToken.None);
 
-        result.InitialPassword.ShouldNotBeNullOrWhiteSpace();
+        var ex = await act.ShouldThrowAsync<OriginalPasswordNotConfiguredException>();
+        ex.ErrorCode.ShouldBe(ErrorCodes.OriginalPasswordNotConfigured);
+    }
+
+    private void GivenOriginalPasswordHash(string? hash)
+    {
+        var setting = hash is null
+            ? null
+            : SystemSetting.Create(SystemSettingKeys.OriginalPasswordHash, hash, Now, null);
+
+        _settings
+            .GetAsync(SystemSettingKeys.OriginalPasswordHash, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<SystemSetting?>(setting));
     }
 
     [Fact]

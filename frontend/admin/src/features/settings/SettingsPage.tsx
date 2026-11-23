@@ -8,14 +8,19 @@
    ========================================================================== */
 
 import { useEffect, useState } from "react";
-import { Button, Card, PageHead, Segmented, toast } from "@exam/shared";
+import { Button, Card, Field, PageHead, Segmented, TextInput, toast } from "@exam/shared";
 import {
   MISTAKE_RESOLUTION_POLICY,
   MISTAKE_RESOLUTION_POLICY_HINT,
   MISTAKE_RESOLUTION_POLICY_LABEL,
   type MistakeResolutionPolicy,
 } from "@exam/shared/domain/settings";
-import { saveSystemSettings, useSystemSettings } from "./useSystemSettings";
+import {
+  removeOriginalPassword,
+  saveOriginalPassword,
+  saveSystemSettings,
+  useSystemSettings,
+} from "./useSystemSettings";
 
 /** 口径的取值（两档，顺序即展示顺序）。 */
 const POLICY_OPTIONS: MistakeResolutionPolicy[] = [
@@ -28,6 +33,9 @@ export function SettingsPage() {
   const { settings, loading, refresh } = useSystemSettings();
   const [policy, setPolicy] = useState<MistakeResolutionPolicy>(settings.mistakeResolutionPolicy);
   const [saving, setSaving] = useState(false);
+  const [originalPassword, setOriginalPassword] = useState("");
+  const [savingOriginal, setSavingOriginal] = useState(false);
+  const [clearingOriginal, setClearingOriginal] = useState(false);
 
   // 后端的值回来后跟本地选择对齐：首次加载，或者别的管理员刚改过。
   useEffect(() => {
@@ -47,6 +55,47 @@ export function SettingsPage() {
     }
 
     toast.ok("系统设置已保存，立即生效");
+    refresh();
+  };
+
+  // 原始密码的强度要求与用户密码一致：长度、字母、数字。
+  const handleSetOriginalPassword = async () => {
+    const value = originalPassword;
+    if (value.length < 8) {
+      toast.error("原始密码至少 8 位");
+      return;
+    }
+    if (!/[A-Za-z]/.test(value) || !/[0-9]/.test(value)) {
+      toast.error("原始密码要同时包含字母与数字");
+      return;
+    }
+
+    setSavingOriginal(true);
+    const result = await saveOriginalPassword(value);
+    setSavingOriginal(false);
+
+    if (!result.ok) {
+      toast.error(result.message ?? "保存失败");
+      return;
+    }
+
+    // 密码只写不回显：设好之后输入框里不留痕迹。
+    setOriginalPassword("");
+    toast.ok("原始密码已设置。重置用户密码时会置成它。");
+    refresh();
+  };
+
+  const handleClearOriginalPassword = async () => {
+    setClearingOriginal(true);
+    const result = await removeOriginalPassword();
+    setClearingOriginal(false);
+
+    if (!result.ok) {
+      toast.error(result.message ?? "清除失败");
+      return;
+    }
+
+    toast.ok("原始密码已清除，此后重置密码会被拒绝");
     refresh();
   };
 
@@ -98,6 +147,51 @@ export function SettingsPage() {
           这是**系统级**设置：改完立即生效，不用重启，也没有「只对我生效」的余地。
           学生端的错题本按这个口径处理重做正确的题目。
         </p>
+      </Card>
+
+      <Card
+        title="原始密码"
+        actions={
+          <span className="text-sm text-3">
+            {loading ? "加载中…" : settings.originalPasswordConfigured ? "已配置" : "未配置"}
+          </span>
+        }
+      >
+        <Field
+          label="原始密码"
+          htmlFor="original-password"
+          hint="管理员重置任意用户密码时置成它：用户用这个密码登录后必须立即改密，请把密码另行告知用户。密码只写不回显——设好之后系统不再显示它，请自行留存。没配置时重置密码会被拒绝。"
+        >
+          <TextInput
+            id="original-password"
+            type="password"
+            value={originalPassword}
+            placeholder="至少 8 位，含字母与数字"
+            onChange={(e) => setOriginalPassword(e.target.value)}
+          />
+        </Field>
+
+        <div className="row-tight">
+          <Button
+            variant="primary"
+            onClick={() => void handleSetOriginalPassword()}
+            disabled={!originalPassword.trim()}
+            loading={savingOriginal}
+            loadingText="保存中…"
+          >
+            设置原始密码
+          </Button>
+          {settings.originalPasswordConfigured ? (
+            <Button
+              variant="secondary"
+              onClick={() => void handleClearOriginalPassword()}
+              loading={clearingOriginal}
+              loadingText="清除中…"
+            >
+              清除原始密码
+            </Button>
+          ) : null}
+        </div>
       </Card>
     </>
   );

@@ -7386,6 +7386,105 @@
         "x-required-permission": "system:configure"
       }
     },
+    "/api/v1/settings/original-password": {
+      "put": {
+        "tags": [
+          "SystemSettings"
+        ],
+        "summary": "设置系统的原始密码。",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetOriginalPasswordRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetOriginalPasswordRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetOriginalPasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemSettingsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-required-permission": "system:configure"
+      },
+      "delete": {
+        "tags": [
+          "SystemSettings"
+        ],
+        "summary": "清除系统的原始密码。",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemSettingsDto"
+                }
+              }
+            }
+          }
+        },
+        "x-required-permission": "system:configure"
+      }
+    },
     "/api/v1/tags": {
       "get": {
         "tags": [
@@ -8014,7 +8113,7 @@
         "tags": [
           "Users"
         ],
-        "summary": "重置用户密码。未指定新密码时返回随机初始密码。",
+        "summary": "重置用户密码。",
         "parameters": [
           {
             "name": "id",
@@ -8026,25 +8125,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ResetPasswordRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ResetPasswordRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/ResetPasswordRequest"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "OK",
@@ -8062,6 +8142,26 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ResetPasswordResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -13266,26 +13366,12 @@
         "additionalProperties": false,
         "description": "上报焦点事件。"
       },
-      "ResetPasswordRequest": {
-        "type": "object",
-        "properties": {
-          "newPassword": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
       "ResetPasswordResult": {
         "type": "object",
         "properties": {
           "userId": {
             "type": "integer",
             "format": "int64"
-          },
-          "initialPassword": {
-            "type": "string",
-            "nullable": true
           }
         },
         "additionalProperties": false
@@ -13814,6 +13900,17 @@
         "additionalProperties": false,
         "description": "设置场次负责人（覆盖式）。"
       },
+      "SetOriginalPasswordRequest": {
+        "type": "object",
+        "properties": {
+          "password": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "设置系统的**原始密码**（管理员重置用户密码时置成它）。\n\n**只写不回显**：请求里给的是明文，响应里不给任何密码，\n只有「有没有配」这一位——原始密码由管理员自己另行告知用户。"
+      },
       "SnapshotAttachmentDto": {
         "type": "object",
         "properties": {
@@ -14027,6 +14124,9 @@
           "mistakeResolutionPolicy": {
             "type": "string",
             "nullable": true
+          },
+          "originalPasswordConfigured": {
+            "type": "boolean"
           },
           "updatedAt": {
             "type": "string",

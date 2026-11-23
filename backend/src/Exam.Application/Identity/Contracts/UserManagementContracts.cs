@@ -52,5 +52,11 @@ public sealed record PermissionDto(
     string Module,
     string? Description);
 
-/// <summary>密码重置结果。生成初始密码时把明文返回给管理员，其余情况为空。</summary>
-public sealed record ResetPasswordResult(long UserId, string? InitialPassword);
+/// <summary>
+/// 密码重置结果。
+/// <para>
+/// **不带任何密码**：重置后的密码是系统设定的原始密码，
+/// 管理员自己知道（它在「系统设置」里配置的），不需要经由接口传回去。
+/// </para>
+/// </summary>
+public sealed record ResetPasswordResult(long UserId);

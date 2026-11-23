@@ -168,13 +168,14 @@ public sealed class AuthEndpointTests : IAsyncLifetime
         var before = await GetMeAsync(oldToken);
         Assert.Equal(HttpStatusCode.OK, before.StatusCode);
 
-        // 管理员重置密码（后端一律置「必须改密」）。
+        // 管理员重置密码：一律置成系统设定的原始密码，并要求下次登录改密。
         var adminToken = await LoginAsAdminAsync();
         var userId = await GetUserIdAsync(username);
+        await SeedOriginalPasswordAsync(OriginalPassword);
         var reset = await PostAsAdminAsync(
             adminToken,
             $"/api/v1/users/{userId}/reset-password",
-            new { newPassword = "NewPass123", mustChangeOnNextLogin = true });
+            null);
         Assert.Equal(HttpStatusCode.OK, reset.StatusCode);
 
         // 旧令牌立即失效。
@@ -184,7 +185,7 @@ public sealed class AuthEndpointTests : IAsyncLifetime
         // 新密码登录拿到的令牌立刻可用：
         // 令牌里的签发时间只到秒，若按整秒判定「重置前的令牌」，
         // 同一秒内登录会被误判成旧令牌（401）。
-        var newToken = await LoginAsync(username, "NewPass123");
+        var newToken = await LoginAsync(username, OriginalPassword);
         var me = await GetMeAsync(newToken);
         Assert.Equal(HttpStatusCode.OK, me.StatusCode);
 
@@ -425,11 +426,29 @@ public sealed class AuthEndpointTests : IAsyncLifetime
         return await LoginAsync(username, password);
     }
 
-    private async Task<HttpResponseMessage> PostAsAdminAsync(string token, string path, object body)
+    /// <summary>系统设定的原始密码（重置密码时置成它）。</summary>
+    private const string OriginalPassword = "OrigPass123";
+
+    /// <summary>直接在库里放一条原始密码设置项（配它要 system:configure，这个管理员没有）。</summary>
+    private async Task SeedOriginalPasswordAsync(string password)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var verifier = scope.ServiceProvider.GetRequiredService<IPasswordVerifier>();
+
+        db.SystemSettings.Add(Domain.Settings.SystemSetting.Create(
+            Domain.Settings.SystemSettingKeys.OriginalPasswordHash,
+            verifier.Hash(password),
+            DateTimeOffset.UtcNow,
+            null));
+        await db.SaveChangesAsync();
+    }
+
+    private async Task<HttpResponseMessage> PostAsAdminAsync(string token, string path, object? body)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, path)
         {
-            Content = JsonContent.Create(body),
+            Content = body is null ? null : JsonContent.Create(body),
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return await _client.SendAsync(request);

@@ -16,6 +16,15 @@ public static class SystemSettingKeys
     /// <para>取值见 <see cref="MistakeResolutionPolicies"/>。</para>
     /// </summary>
     public const string MistakeResolutionPolicy = "mistake_resolution_policy";
+
+    /// <summary>
+    /// 系统设定的**原始密码**（重置密码时置成它）。
+    /// <para>
+    /// 值存的是 PBKDF2 哈希，不是明文：这个设置**只写不回显**——
+    /// 管理端只看得到「是否已配置」。
+    /// </para>
+    /// </summary>
+    public const string OriginalPasswordHash = "original_password_hash";
 }
 
 /// <summary>

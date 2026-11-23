@@ -9,7 +9,9 @@
 
 import { describe, expect, it, vi } from "vitest";
 import {
+  clearOriginalPassword,
   loadSystemSettings,
+  setOriginalPassword,
   toSystemSettings,
   updateSystemSettings,
   type SettingsClient,
@@ -58,5 +60,50 @@ describe("settingsApi · 系统级设置", () => {
     const settings = toSystemSettings({ mistakeResolutionPolicy: "后端新加的档" });
 
     expect(settings.mistakeResolutionPolicy).toBe("remove");
+  });
+
+  it("读设置时带回「有没有配原始密码」", async () => {
+    const get = vi.fn(async (_path: string) => ({
+      mistakeResolutionPolicy: "remove",
+      originalPasswordConfigured: true,
+    }));
+    const client = { get } as unknown as SettingsClient;
+
+    const settings = await loadSystemSettings(client);
+
+    expect(settings.originalPasswordConfigured).toBe(true);
+  });
+
+  it("后端没给这一位时按「没配」算", () => {
+    expect(toSystemSettings({ mistakeResolutionPolicy: "remove" }).originalPasswordConfigured).toBe(
+      false,
+    );
+  });
+
+  it("设置原始密码走 PUT /settings/original-password", async () => {
+    const put = vi.fn(async (_path: string, _body?: unknown) => ({
+      mistakeResolutionPolicy: "remove",
+      originalPasswordConfigured: true,
+    }));
+    const client = { get: vi.fn(), put } as unknown as SettingsClient;
+
+    const settings = await setOriginalPassword("OrigPass123", client);
+
+    expect(put.mock.calls[0]![0]).toBe("/settings/original-password");
+    expect(put.mock.calls[0]![1]).toEqual({ password: "OrigPass123" });
+    expect(settings.originalPasswordConfigured).toBe(true);
+  });
+
+  it("清除原始密码走 DELETE /settings/original-password", async () => {
+    const del = vi.fn(async (_path: string) => ({
+      mistakeResolutionPolicy: "remove",
+      originalPasswordConfigured: false,
+    }));
+    const client = { get: vi.fn(), put: vi.fn(), delete: del } as unknown as SettingsClient;
+
+    const settings = await clearOriginalPassword(client);
+
+    expect(del.mock.calls[0]![0]).toBe("/settings/original-password");
+    expect(settings.originalPasswordConfigured).toBe(false);
   });
 });

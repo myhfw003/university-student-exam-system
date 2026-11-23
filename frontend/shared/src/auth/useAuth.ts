@@ -89,12 +89,13 @@ export interface AuthState {
   changePassword: (current: string, next: string) => Promise<{ ok: boolean; message?: string }>;
   /**
    * 管理员重置他人密码。
-   * <para>后端一律置「必须改密」：重置出来的密码只作首次登录凭据。</para>
+   * <para>
+   * 置为**系统设定的原始密码**（在「系统设置」里配好的那个），
+   * 不由这里传密码——响应里也不带密码。后端一律置「必须改密」：
+   * 重置出来的密码只作首次登录凭据。
+   * </para>
    */
-  resetPassword: (
-    userId: string,
-    next: string,
-  ) => Promise<{ ok: boolean; message?: string }>;
+  resetPassword: (userId: string) => Promise<{ ok: boolean; message?: string }>;
   /** 是否拥有权限点。 */
   can: (point: PermissionPoint) => boolean;
   /** 当前用户的权限点并集。 */
@@ -253,15 +254,12 @@ export const useAuth = create<AuthState>((set, get) => ({
     return { ok: true };
   },
 
-  resetPassword: async (userId, next) => {
+  resetPassword: async (userId) => {
     if (!userId) return { ok: false, message: "用户不存在" };
-    if (!next || next.length < 8) return { ok: false, message: "新密码至少 8 位" };
     if (get().mode === "http") {
       try {
-        // 后端一律置「必须改密」，这里只需要给新密码。
-        await httpClient.post(ENDPOINTS.admin.resetPassword(userId), {
-          newPassword: next,
-        });
+        // 密码由后端取系统设定的原始密码，请求里不带密码。
+        await httpClient.post(ENDPOINTS.admin.resetPassword(userId));
         return { ok: true };
       } catch (error) {
         const message =

@@ -22,6 +22,8 @@ import { MISTAKE_RESOLUTION_POLICY } from "@exam/shared/domain/settings";
 const api = vi.hoisted(() => ({
   loadSystemSettings: vi.fn(),
   updateSystemSettings: vi.fn(),
+  setOriginalPassword: vi.fn(),
+  clearOriginalPassword: vi.fn(),
 }));
 
 vi.mock("@exam/shared/api", async (importOriginal) => ({
@@ -60,6 +62,18 @@ beforeEach(() => {
     mistakeResolutionPolicy: MISTAKE_RESOLUTION_POLICY.remove,
     updatedAt: "2026-11-21T03:00:00Z",
     updatedBy: "7",
+  });
+  api.setOriginalPassword.mockResolvedValue({
+    mistakeResolutionPolicy: MISTAKE_RESOLUTION_POLICY.keepMastered,
+    originalPasswordConfigured: true,
+    updatedAt: null,
+    updatedBy: null,
+  });
+  api.clearOriginalPassword.mockResolvedValue({
+    mistakeResolutionPolicy: MISTAKE_RESOLUTION_POLICY.keepMastered,
+    originalPasswordConfigured: false,
+    updatedAt: null,
+    updatedBy: null,
   });
 });
 
@@ -100,6 +114,33 @@ describe("管理端系统设置页 · HTTP 模式", () => {
       ),
     );
     expect(lastToast()).toBe("系统设置已保存，立即生效");
+  });
+
+  it("原始密码的状态由服务端给", async () => {
+    api.loadSystemSettings.mockResolvedValue({
+      mistakeResolutionPolicy: MISTAKE_RESOLUTION_POLICY.keepMastered,
+      originalPasswordConfigured: true,
+      updatedAt: "2026-11-21T02:00:00Z",
+      updatedBy: "7",
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("已配置")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "清除原始密码" })).toBeInTheDocument();
+  });
+
+  it("设置原始密码时把密码发给服务端", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(api.loadSystemSettings).toHaveBeenCalled());
+
+    await user.type(screen.getByLabelText("原始密码"), "OrigPass123");
+    await user.click(screen.getByRole("button", { name: "设置原始密码" }));
+
+    await waitFor(() => expect(api.setOriginalPassword).toHaveBeenCalledWith("OrigPass123"));
+    expect(lastToast()).toBe("原始密码已设置。重置用户密码时会置成它。");
   });
 
   it("服务端拒绝时把说法原样带出来", async () => {

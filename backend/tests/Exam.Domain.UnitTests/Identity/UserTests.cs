@@ -140,14 +140,25 @@ public sealed class UserTests
     }
 
     [Fact]
-    public void ResetPassword_要求下次登录修改密码()
+    public void ResetPasswordToOriginal_要求下次登录修改密码()
     {
         var user = NewUser();
 
-        user.ResetPassword("Admin@12345", new FakePasswordVerifier(), Now);
+        user.ResetPasswordToOriginal("hash-of-original", Now);
 
         user.MustChangePassword.ShouldBeTrue();
+        user.PasswordHash.ShouldBe("hash-of-original");
         user.DomainEvents.ShouldContain(e => e is UserPasswordChanged);
+    }
+
+    [Fact]
+    public void ResetPasswordToOriginal_没配原始密码时报错()
+    {
+        var user = NewUser();
+
+        var act = () => user.ResetPasswordToOriginal("  ", Now);
+
+        act.ShouldThrow<OriginalPasswordNotConfiguredException>();
     }
 
     [Fact]

@@ -52,6 +52,13 @@ public sealed class InvalidStateTransitionException : DomainException
         : base(message, ErrorCodes.InvalidStateTransition) { }
 }
 
+/// <summary>系统尚未配置原始密码，无法重置密码。</summary>
+public sealed class OriginalPasswordNotConfiguredException : DomainException
+{
+    public OriginalPasswordNotConfiguredException(string message)
+        : base(message, ErrorCodes.OriginalPasswordNotConfigured) { }
+}
+
 /// <summary>业务编码重复。</summary>
 public sealed class DuplicateCodeException : DomainException
 {

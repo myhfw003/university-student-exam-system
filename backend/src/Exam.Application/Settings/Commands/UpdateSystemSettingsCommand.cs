@@ -1,6 +1,7 @@
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
 using Exam.Application.Settings.Contracts;
+using Exam.Application.Settings.Services;
 using Exam.Domain.Identity;
 using Exam.Domain.Settings;
 using Exam.Domain.SharedKernel.Abstractions;
@@ -30,17 +31,20 @@ public sealed class UpdateSystemSettingsCommandValidator : AbstractValidator<Upd
 public sealed class UpdateSystemSettingsHandler : IRequestHandler<UpdateSystemSettingsCommand, SystemSettingsDto>
 {
     private readonly ISystemSettingRepository _settings;
+    private readonly SystemSettingsResolver _resolver;
     private readonly IAuditRecorder _audit;
     private readonly IClock _clock;
     private readonly ICurrentUser _currentUser;
 
     public UpdateSystemSettingsHandler(
         ISystemSettingRepository settings,
+        SystemSettingsResolver resolver,
         IAuditRecorder audit,
         IClock clock,
         ICurrentUser currentUser)
     {
         _settings = settings;
+        _resolver = resolver;
         _audit = audit;
         _clock = clock;
         _currentUser = currentUser;
@@ -77,7 +81,7 @@ public sealed class UpdateSystemSettingsHandler : IRequestHandler<UpdateSystemSe
         }
 
         await _audit.RecordAsync(
-            "system.settings.update",
+            "settings.update",
             "system_setting",
             SystemSettingKeys.MistakeResolutionPolicy,
             new Dictionary<string, object?>
@@ -87,8 +91,11 @@ public sealed class UpdateSystemSettingsHandler : IRequestHandler<UpdateSystemSe
             },
             cancellationToken);
 
+        var originalPasswordHash = await _resolver.GetOriginalPasswordHashAsync(cancellationToken);
+
         return new SystemSettingsDto(
             policy.ToStorage(),
+            originalPasswordHash is not null,
             now,
             actorId);
     }

@@ -9,8 +9,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  clearOriginalPassword as clearOriginalPasswordRemote,
   isBackendEnabled,
   loadSystemSettings,
+  setOriginalPassword as setOriginalPasswordRemote,
   updateSystemSettings,
 } from "@exam/shared/api";
 import {
@@ -23,6 +25,7 @@ import { useMockSettings } from "@exam/shared/mock/settings";
 /** 没配置过时的缺省值。 */
 const FALLBACK: SystemSettings = {
   mistakeResolutionPolicy: DEFAULT_MISTAKE_RESOLUTION_POLICY,
+  originalPasswordConfigured: false,
   updatedAt: null,
   updatedBy: null,
 };
@@ -95,6 +98,52 @@ export async function saveSystemSettings(
     return {
       ok: false,
       message: error instanceof Error && error.message ? error.message : "保存失败",
+    };
+  }
+}
+
+/**
+ * 设置系统的原始密码（管理员重置密码时置成它）。
+ *
+ * 密码**只写不回显**：设好之后系统不再显示它，管理员要自己留存并告知用户。
+ */
+export async function saveOriginalPassword(
+  password: string,
+): Promise<{ ok: boolean; message?: string }> {
+  if (!isBackendEnabled()) {
+    useMockSettings.getState().setOriginalPasswordConfigured(true);
+    return { ok: true };
+  }
+
+  try {
+    await setOriginalPasswordRemote(password);
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error && error.message ? error.message : "保存失败",
+    };
+  }
+}
+
+/**
+ * 清除系统的原始密码。
+ *
+ * 清除后重置密码会被拒绝（没有可置成的目标），直到重新配置。
+ */
+export async function removeOriginalPassword(): Promise<{ ok: boolean; message?: string }> {
+  if (!isBackendEnabled()) {
+    useMockSettings.getState().setOriginalPasswordConfigured(false);
+    return { ok: true };
+  }
+
+  try {
+    await clearOriginalPasswordRemote();
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error && error.message ? error.message : "清除失败",
     };
   }
 }

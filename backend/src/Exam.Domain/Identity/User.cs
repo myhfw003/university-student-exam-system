@@ -163,23 +163,26 @@ public sealed class User : AuditableEntity, IAuditedEntity
         AddDomainEvent(new UserPasswordChanged(Id));
     }
 
-    /// <summary>管理员重置密码。重置后用户下次登录必须修改密码。</summary>
-    public void ResetPassword(
-        string newPassword,
-        IPasswordVerifier verifier,
+    /// <summary>
+    /// 管理员重置密码：置为**系统设定的原始密码**。
+    /// <para>
+    /// 原始密码是全局共享的，系统设置里存的是它的哈希；这里直接沿用同一份哈希，
+    /// 因此被重置的账号在首次登录改密之前用的都是同一个口令。
+    /// </para>
+    /// <para>重置后用户下次登录必须修改密码。</para>
+    /// </summary>
+    public void ResetPasswordToOriginal(
+        string originalPasswordHash,
         DateTimeOffset now,
         long? actorId = null)
     {
-        var failures = PasswordPolicy.Validate(newPassword, Username);
-        if (failures.Count > 0)
+        if (string.IsNullOrWhiteSpace(originalPasswordHash))
         {
-            throw new BusinessRuleException("密码不符合要求。", new Dictionary<string, string[]>(StringComparer.Ordinal)
-            {
-                ["password"] = failures.ToArray(),
-            });
+            throw new OriginalPasswordNotConfiguredException(
+                "尚未配置原始密码，无法重置密码。请先在「系统设置」中配置原始密码。");
         }
 
-        PasswordHash = verifier.Hash(newPassword);
+        PasswordHash = originalPasswordHash;
         MustChangePassword = true;
         FailedLoginCount = 0;
         Status = UserStatus.Active;

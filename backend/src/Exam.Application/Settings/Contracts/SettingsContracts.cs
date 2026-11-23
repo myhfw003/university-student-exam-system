@@ -11,8 +11,14 @@ public sealed record SystemSettingsDto(
     /// <summary>重做正确后的错题处理口径。</summary>
     string MistakeResolutionPolicy,
 
-    /// <summary>最后修改时间。没改过就是空。</summary>
+    /// <summary>
+    /// 系统是否已配置原始密码（管理员重置密码时置成它）。
+    /// <para>只有「有没有」这一位：原始密码本身是**只写不回显**的。</para>
+    /// </summary>
+    bool OriginalPasswordConfigured,
+
+    /// <summary>错题处理口径的最后修改时间。没改过就是空。</summary>
     DateTimeOffset? UpdatedAt,
 
-    /// <summary>最后修改人。没改过就是空。</summary>
+    /// <summary>错题处理口径的最后修改人。没改过就是空。</summary>
     long? UpdatedBy);

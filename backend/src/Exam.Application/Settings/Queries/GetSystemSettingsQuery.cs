@@ -36,8 +36,11 @@ public sealed class GetSystemSettingsHandler : IRequestHandler<GetSystemSettings
             SystemSettingKeys.MistakeResolutionPolicy,
             cancellationToken);
 
+        var originalPasswordHash = await _resolver.GetOriginalPasswordHashAsync(cancellationToken);
+
         return new SystemSettingsDto(
             policy.ToStorage(),
+            originalPasswordHash is not null,
             row?.UpdatedAt,
             row?.UpdatedBy);
     }

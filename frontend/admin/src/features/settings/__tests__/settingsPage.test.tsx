@@ -6,7 +6,7 @@
    ========================================================================== */
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { useToastStore } from "@exam/shared";
@@ -79,5 +79,34 @@ describe("管理端系统设置页", () => {
     expect(useMockSettings.getState().settings.mistakeResolutionPolicy).toBe(
       MISTAKE_RESOLUTION_POLICY.keepMastered,
     );
+  });
+
+  it("原始密码：没配时显示未配置，配好后显示已配置", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(screen.getByText("未配置")).toBeInTheDocument();
+    // 没配的时候没有「清除」可点。
+    expect(screen.queryByRole("button", { name: "清除原始密码" })).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("原始密码"), "OrigPass123");
+    await user.click(screen.getByRole("button", { name: "设置原始密码" }));
+
+    expect(lastToast()).toBe("原始密码已设置。重置用户密码时会置成它。");
+    expect(useMockSettings.getState().settings.originalPasswordConfigured).toBe(true);
+
+    await waitFor(() => expect(screen.getByText("已配置")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "清除原始密码" })).toBeInTheDocument();
+  });
+
+  it("原始密码太弱时不让保存", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(screen.getByLabelText("原始密码"), "short");
+    await user.click(screen.getByRole("button", { name: "设置原始密码" }));
+
+    expect(lastToast()).toBe("原始密码至少 8 位");
+    expect(useMockSettings.getState().settings.originalPasswordConfigured).toBe(false);
   });
 });

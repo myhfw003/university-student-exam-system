@@ -38,4 +38,21 @@ public sealed class SystemSettingsResolver
         return MistakeResolutionPolicies.FromStorage(setting.Value)
             ?? MistakeResolutionPolicies.Default;
     }
+
+    /// <summary>
+    /// 系统设定的**原始密码**哈希（管理员重置密码时置成它）。
+    /// <para>
+    /// 没配置就是空——重置密码会以「尚未配置原始密码」为由拒绝，
+    /// 而不是随便生成一个谁都不知道的密码。
+    /// </para>
+    /// </summary>
+    public async Task<string?> GetOriginalPasswordHashAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var setting = await _settings.GetAsync(
+            SystemSettingKeys.OriginalPasswordHash,
+            cancellationToken);
+
+        return string.IsNullOrWhiteSpace(setting?.Value) ? null : setting.Value;
+    }
 }

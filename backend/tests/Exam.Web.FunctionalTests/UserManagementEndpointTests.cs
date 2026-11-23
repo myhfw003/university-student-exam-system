@@ -22,6 +22,9 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
     private const string AdminUsername = "sysadmin001";
     private const string AdminPassword = "Passw0rd!";
 
+    /// <summary>系统设定的原始密码（重置密码时置成它）。</summary>
+    private const string OriginalPassword = "OrigPass123";
+
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:17-alpine")
         .WithDatabase("exam")
         .WithUsername("exam_owner")
@@ -218,7 +221,7 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task 重置密码_旧密码失效且要求改密()
+    public async Task 重置密码_置为系统设定的原始密码且旧密码失效要求改密()
     {
         var adminToken = await LoginAsync(AdminUsername, AdminPassword);
         UseToken(adminToken);
@@ -231,10 +234,14 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
         var listBody = await users.Content.ReadFromJsonAsync<JsonElement>();
         var userId = listBody.GetProperty("items")[0].GetProperty("id").GetInt64();
 
-        var reset = await _client.PostAsJsonAsync(
-            $"/api/v1/users/{userId}/reset-password",
-            new { newPassword = "NewPassw0rd!" });
-        reset.StatusCode.ShouldBe(HttpStatusCode.OK);
+        // 系统设定的原始密码：管理员配好，用户用它登录。
+        await SeedOriginalPasswordAsync(OriginalPassword);
+
+        var reset = await _client.PostAsync($"/api/v1/users/{userId}/reset-password", null);
+        reset.StatusCode.ShouldBe(HttpStatusCode.OK, await reset.Content.ReadAsStringAsync());
+
+        // 响应里不带任何密码。
+        (await reset.Content.ReadAsStringAsync()).ShouldNotContain("password");
 
         var oldLogin = await _client.PostAsJsonAsync(
             "/api/v1/auth/login",
@@ -243,11 +250,32 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
 
         var newLogin = await _client.PostAsJsonAsync(
             "/api/v1/auth/login",
-            new { username = "reset001", password = "NewPassw0rd!" });
+            new { username = "reset001", password = OriginalPassword });
         newLogin.StatusCode.ShouldBe(HttpStatusCode.OK);
 
         var body = await newLogin.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("user").GetProperty("mustChangePassword").GetBoolean().ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task 重置密码_没配原始密码时被拒绝()
+    {
+        var adminToken = await LoginAsync(AdminUsername, AdminPassword);
+        UseToken(adminToken);
+
+        await _client.PostAsJsonAsync(
+            "/api/v1/users",
+            new { username = "reset002", displayName = "没配原始密码", password = "Passw0rd!" });
+
+        var users = await _client.GetAsync("/api/v1/users?keyword=reset002");
+        var listBody = await users.Content.ReadFromJsonAsync<JsonElement>();
+        var userId = listBody.GetProperty("items")[0].GetProperty("id").GetInt64();
+
+        var reset = await _client.PostAsync($"/api/v1/users/{userId}/reset-password", null);
+        reset.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+
+        var problem = await reset.Content.ReadFromJsonAsync<JsonElement>();
+        problem.GetProperty("errorCode").GetInt32().ShouldBe(29005);
     }
 
     [Fact]
@@ -601,6 +629,27 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         return body.GetProperty("accessToken").GetString()!;
+    }
+
+    /// <summary>
+    /// 直接在库里放一条原始密码设置项。
+    /// <para>
+    /// 管理端配原始密码要 system:configure，这个管理员没有；
+    /// 这里绕过接口直接落库，测的是「重置密码」这条链路本身。
+    /// </para>
+    /// </summary>
+    private async Task SeedOriginalPasswordAsync(string password)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var verifier = new Pbkdf2PasswordVerifier();
+        db.SystemSettings.Add(Exam.Domain.Settings.SystemSetting.Create(
+            Exam.Domain.Settings.SystemSettingKeys.OriginalPasswordHash,
+            verifier.Hash(password),
+            DateTimeOffset.UtcNow,
+            null));
+        await db.SaveChangesAsync();
     }
 
     private static async Task<long> SeedRoleAsync(

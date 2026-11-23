@@ -88,6 +88,9 @@ export const AUDIT_ACTION_LABEL: Record<AuditAction, string> = {
   "attempt.force_submit_by_proctor": "监考强制交卷",
   "attempt.force_submit_by_focus": "切屏强制交卷",
   "attempt.reconciliation_failed": "对账失败",
+  "settings.update": "修改系统设置",
+  "settings.original_password": "设置原始密码",
+  "settings.original_password_clear": "清除原始密码",
 };
 
 /**
@@ -137,6 +140,7 @@ const GROUP_BY_PREFIX: Record<string, string> = {
   review_task: "监考与阅卷",
   practice_assignment: "练习与错题",
   mistake: "练习与错题",
+  settings: "系统设置",
 };
 
 /** 动作码没登记过分组时落到的组（不该出现，测试会盯住）。 */

@@ -45,6 +45,11 @@ export const DEFAULT_MISTAKE_RESOLUTION_POLICY: MistakeResolutionPolicy =
 export interface SystemSettings {
   /** 重做正确后的错题处理口径。 */
   mistakeResolutionPolicy: MistakeResolutionPolicy;
+  /**
+   * 系统是否已配置原始密码（管理员重置密码时置成它）。
+   * <para>原始密码只写不回显：这里只有「有没有」这一位。</para>
+   */
+  originalPasswordConfigured: boolean;
   /** 最后修改时间。没改过就是空。 */
   updatedAt: string | null;
   /** 最后修改人。没改过就是空。 */

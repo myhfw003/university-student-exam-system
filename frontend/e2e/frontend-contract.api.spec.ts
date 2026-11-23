@@ -93,6 +93,7 @@ test.describe("前端适配层联调", () => {
       ENDPOINTS.admin.roles,
       ENDPOINTS.admin.permissions,
       ENDPOINTS.admin.settings,
+      ENDPOINTS.admin.settingsOriginalPassword,
       ENDPOINTS.admin.auditLogs,
       ENDPOINTS.admin.reviewTasks,
       ENDPOINTS.admin.statisticsBySession("{id}"),
@@ -342,11 +343,10 @@ test.describe("前端适配层联调", () => {
     const userId = created.user?.id ?? 0;
     expect(userId).toBeGreaterThan(0);
 
-    // 管理员重置密码并要求下次登录必须改密。
-    await client.post(ENDPOINTS.admin.resetPassword(userId), {
-      newPassword: oldPassword,
-      mustChangeOnNextLogin: true,
-    });
+    // 管理员重置密码：置为**系统设定的原始密码**，响应里不带密码。
+    const originalPassword = `Orig${suffix}Pass1`;
+    await client.put(ENDPOINTS.admin.settingsOriginalPassword, { password: originalPassword });
+    await client.post(ENDPOINTS.admin.resetPassword(userId));
 
     const signIn = async (password: string): Promise<Response> =>
       fetch(`${apiBase}${ENDPOINTS.auth.login}`, {
@@ -355,7 +355,7 @@ test.describe("前端适配层联调", () => {
         body: JSON.stringify({ username, password }),
       });
 
-    const loginResponse = await signIn(oldPassword);
+    const loginResponse = await signIn(originalPassword);
     expect(loginResponse.status).toBe(200);
     const loginBody = (await loginResponse.json()) as {
       accessToken?: string;
@@ -378,7 +378,7 @@ test.describe("前端适配层联调", () => {
     // 改密：返回新令牌。
     const changed = await client.post<{ accessToken?: string }>(
       ENDPOINTS.auth.changePassword,
-      { currentPassword: oldPassword, newPassword },
+      { currentPassword: originalPassword, newPassword },
       asUser,
     );
     expect(changed.accessToken).toBeTruthy();
@@ -390,6 +390,9 @@ test.describe("前端适配层联调", () => {
       headers: { Authorization: `Bearer ${changed.accessToken ?? ""}` },
     });
     expect(allowed).toBeTruthy();
+
+    // 还原：原始密码是全局设置，别把库留在改过的状态。
+    await client.delete(ENDPOINTS.admin.settingsOriginalPassword);
   });
 
   test("学生可见的考试场次：按对象级范围返回", async () => {

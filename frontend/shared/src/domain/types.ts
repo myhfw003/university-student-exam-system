@@ -572,7 +572,10 @@ export type AuditAction =
   | "attempt.submit_by_timeout"
   | "attempt.force_submit_by_proctor"
   | "attempt.force_submit_by_focus"
-  | "attempt.reconciliation_failed";
+  | "attempt.reconciliation_failed"
+  | "settings.update"
+  | "settings.original_password"
+  | "settings.original_password_clear";
 
 /** 审计日志条目。 */
 export interface AuditLog {

@@ -79,4 +79,33 @@ test.describe("系统设置页（真实后端）", () => {
 
     await context.close();
   });
+
+  test("原始密码：配好后显示已配置，刷新还在（跑完清除）", async ({ browser }) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await loginAdmin(page);
+
+    await page.goto("/admin/settings");
+    await expect(page.getByRole("heading", { name: "系统设置" })).toBeVisible();
+
+    // 没配时显示「未配置」。
+    await expect(page.getByText("未配置")).toBeVisible();
+
+    await page.fill("#original-password", "OrigPass123");
+    await page.getByRole("button", { name: "设置原始密码" }).click();
+    await expect(page.getByText("原始密码已设置。重置用户密码时会置成它。")).toBeVisible();
+
+    // 刷新：状态还在——说明真的写进了后端，不是页面自己记着的。
+    await page.reload();
+    await expect(page.getByText("已配置")).toBeVisible();
+
+    // 还原：清除原始密码。
+    await page.getByRole("button", { name: "清除原始密码" }).click();
+    await expect(page.getByText("原始密码已清除，此后重置密码会被拒绝")).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByText("未配置")).toBeVisible();
+
+    await context.close();
+  });
 });

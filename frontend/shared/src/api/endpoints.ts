@@ -92,6 +92,8 @@ export const ENDPOINTS = {
     permissions: "/permissions",
     /** 系统级设置（读与写都要 system:configure）。 */
     settings: "/settings",
+    /** 系统的原始密码：只写不回显，响应里只有「有没有配」。 */
+    settingsOriginalPassword: "/settings/original-password",
     auditLogs: "/audit-logs",
     reviewTasks: "/review-tasks",
     /** 阅卷任务计数（待领取 / 阅卷中 / 已阅完 / 我的）。 */

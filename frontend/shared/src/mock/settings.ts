@@ -17,12 +17,15 @@ interface MockSettingsState {
   settings: SystemSettings;
   /** 改口径。 */
   setMistakeResolutionPolicy: (policy: MistakeResolutionPolicy) => void;
+  /** 配/清原始密码。mock 模式不存密码本身，只记「有没有配」。 */
+  setOriginalPasswordConfigured: (configured: boolean) => void;
 }
 
 /** 系统级设置 store。 */
 export const useMockSettings = create<MockSettingsState>((set) => ({
   settings: {
     mistakeResolutionPolicy: DEFAULT_MISTAKE_RESOLUTION_POLICY,
+    originalPasswordConfigured: false,
     updatedAt: null,
     updatedBy: null,
   },
@@ -35,6 +38,13 @@ export const useMockSettings = create<MockSettingsState>((set) => ({
         updatedBy: "当前管理员",
       },
     })),
+  setOriginalPasswordConfigured: (configured) =>
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        originalPasswordConfigured: configured,
+      },
+    })),
 }));
 
 /** 复位到缺省值（测试之间互不干扰）。 */
@@ -42,6 +52,7 @@ export function resetMockSettings(): void {
   useMockSettings.setState({
     settings: {
       mistakeResolutionPolicy: DEFAULT_MISTAKE_RESOLUTION_POLICY,
+      originalPasswordConfigured: false,
       updatedAt: null,
       updatedBy: null,
     },

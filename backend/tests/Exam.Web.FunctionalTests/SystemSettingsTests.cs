@@ -96,6 +96,91 @@ public sealed class SystemSettingsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task 没配过原始密码时读得到没配()
+    {
+        await LoginAsync(AdminUsername, Password);
+
+        var response = await _client.GetAsync("/api/v1/settings");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("originalPasswordConfigured").GetBoolean().ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task 设置原始密码_读回来只看得到有没有配()
+    {
+        await LoginAsync(AdminUsername, Password);
+
+        var set = await _client.PutAsJsonAsync(
+            "/api/v1/settings/original-password",
+            new { password = "OrigPass123" });
+        set.StatusCode.ShouldBe(HttpStatusCode.OK, await set.Content.ReadAsStringAsync());
+
+        var body = await set.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("originalPasswordConfigured").GetBoolean().ShouldBeTrue();
+
+        // 只写不回显：响应里既没有密码字段，也不含明文。
+        var raw = await set.Content.ReadAsStringAsync();
+        raw.ShouldNotContain("OrigPass123");
+        raw.ShouldNotContain("originalPasswordHash");
+
+        var get = await _client.GetAsync("/api/v1/settings");
+        var getBody = await get.Content.ReadFromJsonAsync<JsonElement>();
+        getBody.GetProperty("originalPasswordConfigured").GetBoolean().ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task 清除原始密码_之后读得到没配()
+    {
+        await LoginAsync(AdminUsername, Password);
+
+        await _client.PutAsJsonAsync(
+            "/api/v1/settings/original-password",
+            new { password = "OrigPass123" });
+
+        var clear = await _client.DeleteAsync("/api/v1/settings/original-password");
+        clear.StatusCode.ShouldBe(HttpStatusCode.OK, await clear.Content.ReadAsStringAsync());
+
+        var body = await clear.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("originalPasswordConfigured").GetBoolean().ShouldBeFalse();
+
+        var get = await _client.GetAsync("/api/v1/settings");
+        var getBody = await get.Content.ReadFromJsonAsync<JsonElement>();
+        getBody.GetProperty("originalPasswordConfigured").GetBoolean().ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task 原始密码太弱被挡下()
+    {
+        await LoginAsync(AdminUsername, Password);
+
+        var set = await _client.PutAsJsonAsync(
+            "/api/v1/settings/original-password",
+            new { password = "short" });
+        set.StatusCode.ShouldBe(HttpStatusCode.BadRequest, await set.Content.ReadAsStringAsync());
+
+        // 挡下之后原值不变。
+        var get = await _client.GetAsync("/api/v1/settings");
+        var body = await get.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("originalPasswordConfigured").GetBoolean().ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task 没有权限的人配不了原始密码()
+    {
+        await LoginAsync(TeacherUsername, Password);
+
+        var set = await _client.PutAsJsonAsync(
+            "/api/v1/settings/original-password",
+            new { password = "OrigPass123" });
+        set.StatusCode.ShouldBe(HttpStatusCode.Forbidden, await set.Content.ReadAsStringAsync());
+
+        var clear = await _client.DeleteAsync("/api/v1/settings/original-password");
+        clear.StatusCode.ShouldBe(HttpStatusCode.Forbidden, await clear.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task 没有权限的人读不到也改不了()
     {
         await LoginAsync(TeacherUsername, Password);

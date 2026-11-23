@@ -241,7 +241,9 @@ export {
   type AbilityClient,
 } from "./abilityApi";
 export {
+  clearOriginalPassword,
   loadSystemSettings,
+  setOriginalPassword,
   toSystemSettings,
   updateSystemSettings,
   type SettingsClient,
