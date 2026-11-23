@@ -133,7 +133,7 @@ RFC 7807 ProblemDetails。
 | POST | `/users/{id}/roles` | `role:write` |
 | DELETE | `/users/{id}/roles/{roleId}` | `role:write` |
 | POST | `/users/import` | `user:import`（multipart CSV） |
-| GET | `/roles` | `role:read` |
+| GET | `/roles` | `user:read`（角色目录是用户管理的配套数据；改权限集合仍要 `role:write`） |
 | POST | `/roles` | `role:write` |
 | PUT | `/roles/{id}` | `role:write` |
 | GET | `/permissions` | `role:read` |
