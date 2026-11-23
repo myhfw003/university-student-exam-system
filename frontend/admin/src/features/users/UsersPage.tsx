@@ -23,6 +23,7 @@ import {
   Stat,
   TextInput,
   decodeCsvBuffer,
+  hasPermission,
   toast,
   useAuth,
 } from "@exam/shared";
@@ -83,6 +84,18 @@ export function UsersPage() {
   const [importing, setImporting] = useState(false);
 
   const doResetPassword = useAuth((state) => state.resetPassword);
+  const authUser = useAuth((state) => state.user);
+
+  // 角色目录**读**只要 user:read（谁在管用户谁就看得到有哪些角色），
+  // 但改角色集合要 role:write——矩阵里只给系统管理员。
+  // 没有 role:write 的账号（例如内容管理员）照样看得到角色清单，
+  // 只是勾不动：与其点一下就撞 403，不如把话说清楚。
+  //
+  // 权限来源与服务端对齐：http 模式用服务端下发的权限码，
+  // mock 模式退回本地角色矩阵。
+  const canAssignRoles =
+    authUser?.permissions?.includes("role:write") ??
+    hasPermission(authUser?.roles, "role:write");
 
   const { roles, byCode } = useAdminRoles();
   const orgTags = useAdminOrgTags();
@@ -574,11 +587,17 @@ export function UsersPage() {
             <p className="section-note" style={{ marginBottom: "var(--sp-4)" }}>
               账号 <span className="mono">{editing.account}</span> · 勾选即生效，权限按并集计算。
             </p>
+            {canAssignRoles ? null : (
+              <p className="section-note" style={{ marginBottom: "var(--sp-3)" }}>
+                当前账号没有「编辑角色」的权限（role:write），只能查看角色，不能改。
+              </p>
+            )}
             <div className="grid-2">
               {roles.map((role) => (
                 <label className="checkline" key={role.code}>
                   <input
                     type="checkbox"
+                    disabled={!canAssignRoles}
                     checked={editing.roles.includes(role.code)}
                     onChange={() => void toggleRole(editing, role.code)}
                   />

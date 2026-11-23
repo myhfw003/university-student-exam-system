@@ -6949,7 +6949,7 @@
         "tags": [
           "Roles"
         ],
-        "summary": "列出全部角色及其权限点。",
+        "summary": "列出全部角色及其权限点。\n\n读角色目录按 **user:read** 判定：角色目录是用户管理的配套数据——\n管用户的人（内容管理员也算）要能看到有哪些角色、才能在用户页上认得出\n每个人身上挂的角色。角色与权限的**配置**（改权限集合）仍要 role:write。",
         "responses": {
           "200": {
             "description": "OK",
@@ -6981,7 +6981,7 @@
             }
           }
         },
-        "x-required-permission": "role:read"
+        "x-required-permission": "user:read"
       },
       "post": {
         "tags": [

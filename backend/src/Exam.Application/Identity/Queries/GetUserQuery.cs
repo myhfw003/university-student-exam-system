@@ -84,10 +84,15 @@ public sealed class GetUserHandler : IRequestHandler<GetUserQuery, UserDetailDto
     }
 }
 
-/// <summary>列出全部角色及其权限点。</summary>
+/// <summary>
+/// 列出全部角色及其权限点。
+/// <para>
+/// 读角色目录按 **user:read** 判定（与控制器一致）：角色目录是用户管理的配套数据。
+/// </para>
+/// </summary>
 public sealed record ListRolesQuery : IAppQuery<IReadOnlyList<RoleDto>>, IAuthorizableRequest
 {
-    public IReadOnlyCollection<string> RequiredPermissions { get; init; } = [PermissionCatalog.RoleRead];
+    public IReadOnlyCollection<string> RequiredPermissions { get; init; } = [PermissionCatalog.UserRead];
 }
 
 public sealed class ListRolesHandler : IRequestHandler<ListRolesQuery, IReadOnlyList<RoleDto>>

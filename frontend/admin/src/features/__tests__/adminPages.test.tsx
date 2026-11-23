@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { useToastStore } from "@exam/shared";
+import { useAuth, useToastStore } from "@exam/shared";
 import { resetCatalog, useCatalog } from "@exam/shared/mock/catalog";
 import { resetAdminOps, useAdminOps, createPracticeAssignment } from "@exam/shared/mock/adminOps";
 import { OverviewPage } from "../overview/OverviewPage";
@@ -50,6 +50,18 @@ beforeEach(() => {
   resetAdminOps();
   // 提示条是全局 store，测试间清空，避免读到上一条用例的文案。
   useToastStore.setState({ toasts: [] });
+  // 登录态：mock 模式下应用会用演示管理员自动登录（app/providers.tsx）。
+  // 页面里「能不能改角色」看的就是它，这里照着来。
+  useAuth.setState({
+    status: "authenticated",
+    user: {
+      id: "u-admin",
+      account: "admin",
+      name: "管理员",
+      roles: ["system_admin"],
+      orgTags: [],
+    },
+  });
 });
 
 /** 最近一条提示条文案（提示条渲染在应用外壳上，单元测试里直接读 store）。 */
@@ -495,6 +507,35 @@ describe("管理端用户页", () => {
     const updated = useAdminOps.getState().users[0];
     expect(updated?.roles).toContain("author_teacher");
     expect(useAdminOps.getState().auditLogs.some((l) => l.action === "user.assign-roles")).toBe(true);
+  });
+
+  it("没有 role:write 的账号看得到角色但改不动", async () => {
+    // 内容管理员：角色目录**读**按 user:read 开放（能看见有哪些角色），
+    // 但改角色集合要 role:write——矩阵里只给系统管理员。
+    useAuth.setState({
+      status: "authenticated",
+      user: {
+        id: "u-ca",
+        account: "ca",
+        name: "内容管理员",
+        roles: ["content_admin"],
+        orgTags: [],
+      },
+    });
+
+    const user = userEvent.setup();
+    renderPage(<UsersPage />);
+
+    await user.click(screen.getAllByRole("button", { name: "角色" })[0]!);
+    const dialog = screen.getByRole("dialog");
+
+    // 角色清单看得到。
+    const teacherBox = within(dialog).getByRole("checkbox", { name: /出题教师/ });
+    expect(teacherBox).toBeInTheDocument();
+
+    // 但勾不动，页面上也说了原因——与其点一下撞 403，不如把话说清楚。
+    expect(teacherBox).toBeDisabled();
+    expect(within(dialog).getByText(/没有「编辑角色」的权限/)).toBeInTheDocument();
   });
 });
 

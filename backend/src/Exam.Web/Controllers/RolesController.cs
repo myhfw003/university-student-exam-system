@@ -19,9 +19,16 @@ public sealed class RolesController : ControllerBase
 
     public RolesController(IMediator mediator) => _mediator = mediator;
 
-    /// <summary>列出全部角色及其权限点。</summary>
+    /// <summary>
+    /// 列出全部角色及其权限点。
+    /// <para>
+    /// 读角色目录按 **user:read** 判定：角色目录是用户管理的配套数据——
+    /// 管用户的人（内容管理员也算）要能看到有哪些角色、才能在用户页上认得出
+    /// 每个人身上挂的角色。角色与权限的**配置**（改权限集合）仍要 role:write。
+    /// </para>
+    /// </summary>
     [HttpGet]
-    [Authorize(Policy = PermissionCatalog.RoleRead)]
+    [Authorize(Policy = PermissionCatalog.UserRead)]
     [ProducesResponseType(typeof(IReadOnlyList<RoleDto>), StatusCodes.Status200OK)]
     public async Task<IReadOnlyList<RoleDto>> List(CancellationToken cancellationToken) =>
         await _mediator.Send(new ListRolesQuery(), cancellationToken);

@@ -265,6 +265,46 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task 角色目录_有用户读权限就能读()
+    {
+        // 角色目录是**用户管理的配套数据**：管用户的人（内容管理员也算）要能看到
+        // 有哪些角色。按 user:read 判定，不再要 role:read——
+        // 否则内容管理员的用户页上，角色筛选是空的、角色分配对话框也是空的。
+        var adminToken = await LoginAsync(AdminUsername, AdminPassword);
+        UseToken(adminToken);
+
+        var created = await _client.PostAsJsonAsync(
+            "/api/v1/users",
+            new { username = "rolecat001", displayName = "只看角色目录", password = "Passw0rd!" });
+        created.StatusCode.ShouldBe(HttpStatusCode.OK, await created.Content.ReadAsStringAsync());
+
+        var users = await _client.GetAsync("/api/v1/users?keyword=rolecat001");
+        var listBody = await users.Content.ReadFromJsonAsync<JsonElement>();
+        var userId = listBody.GetProperty("items")[0].GetProperty("id").GetInt64();
+
+        // 给他一个只有 user:read 的角色。
+        var assign = await _client.PutAsJsonAsync(
+            $"/api/v1/users/{userId}/roles",
+            new { roleIds = new[] { _readerRoleId } });
+        assign.StatusCode.ShouldBe(HttpStatusCode.OK, await assign.Content.ReadAsStringAsync());
+
+        var readerToken = await LoginAsync("rolecat001", "Passw0rd!");
+        UseToken(readerToken);
+
+        var roles = await _client.GetAsync("/api/v1/roles");
+        roles.StatusCode.ShouldBe(HttpStatusCode.OK, await roles.Content.ReadAsStringAsync());
+
+        var roleList = await roles.Content.ReadFromJsonAsync<JsonElement>();
+        roleList.GetArrayLength().ShouldBeGreaterThan(0);
+
+        // 但**改**角色集合仍然要 role:write——矩阵里只给系统管理员。
+        var denied = await _client.PutAsJsonAsync(
+            $"/api/v1/users/{userId}/roles",
+            new { roleIds = new[] { _readerRoleId } });
+        denied.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
     public async Task 权限点目录_可读取()
     {
         var adminToken = await LoginAsync(AdminUsername, AdminPassword);
