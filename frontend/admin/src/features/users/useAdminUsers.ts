@@ -517,10 +517,6 @@ export async function importRosterFile(
       account: failure.username,
       reason: failure.reason,
     })),
-    initialPasswords: result.generatedPasswords.map((item) => ({
-      account: item.username,
-      password: item.password,
-    })),
   };
 }
 

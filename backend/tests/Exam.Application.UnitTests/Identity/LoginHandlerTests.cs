@@ -17,8 +17,6 @@ internal sealed class StubPasswordVerifier : IPasswordVerifier
 
     public PasswordVerificationResult Verify(string password, string passwordHash) =>
         passwordHash == $"hash:{password}" ? PasswordVerificationResult.Success : PasswordVerificationResult.Failed;
-    public string GenerateInitialPassword() => "InitPassw0rd";
-
 }
 
 /// <summary>测试用时钟。</summary>

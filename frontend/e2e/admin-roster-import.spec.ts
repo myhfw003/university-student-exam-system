@@ -5,7 +5,7 @@
 
      ① 上传 CSV → 逐行校验，错误行标红跳过
      ② 确认导入 → 新建账号 + 自动创建组织维度标签
-     ③ 失败明细与初始密码回显
+     ③ 失败明细回显（新账号的密码是系统设定的原始密码，不回显）
    ========================================================================== */
 
 import { expect, test } from "@playwright/test";
@@ -47,7 +47,8 @@ test("管理端：人员名单批量导入，逐行校验并写入账号", async
   await page.getByRole("button", { name: "确认导入" }).click();
   await expect(dialog.getByText(/导入完成：成功 1 行，失败 3 行/)).toBeVisible();
   await expect(dialog.getByText(/第 3 行/)).toBeVisible();
-  await expect(dialog.getByText(/初始密码（仅显示一次）/)).toBeVisible();
+  // 新账号的密码是系统设定的原始密码：只说明，不回显密码。
+  await expect(dialog.getByText(/系统设定的原始密码/)).toBeVisible();
 
   // 关闭弹窗后，新账号已在清单里。
   await dialog.locator("button.btn-secondary", { hasText: "关闭" }).click();

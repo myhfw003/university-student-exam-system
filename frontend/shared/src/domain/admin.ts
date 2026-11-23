@@ -197,6 +197,4 @@ export interface AdminUserImportResult {
   updated: number;
   /** 失败明细（逐行跳过，不阻断整批）。 */
   failures: Array<{ rowNumber: number; username: string; reason: string }>;
-  /** 新建账号的初始密码：只在这里回显一次。 */
-  generatedPasswords: Array<{ username: string; password: string }>;
 }

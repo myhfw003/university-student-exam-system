@@ -3,6 +3,7 @@ using Exam.Application.Common.Attributes;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
 using Exam.Application.Identity.Contracts;
+using Exam.Application.Settings.Services;
 using Exam.Domain.Identity;
 using Exam.Domain.SharedKernel.Abstractions;
 using Exam.Domain.SharedKernel.Exceptions;
@@ -47,6 +48,7 @@ public sealed class ImportUserRosterHandler : IRequestHandler<ImportUserRosterCo
     private readonly ITagRepository _tags;
     private readonly OrganizationTagProvisioner _organizationTags;
     private readonly IPasswordVerifier _passwordVerifier;
+    private readonly SystemSettingsResolver _settings;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAuditRecorder _audit;
     private readonly IClock _clock;
@@ -61,6 +63,7 @@ public sealed class ImportUserRosterHandler : IRequestHandler<ImportUserRosterCo
         ITagRepository tags,
         OrganizationTagProvisioner organizationTags,
         IPasswordVerifier passwordVerifier,
+        SystemSettingsResolver settings,
         IUnitOfWork unitOfWork,
         IAuditRecorder audit,
         IClock clock,
@@ -74,6 +77,7 @@ public sealed class ImportUserRosterHandler : IRequestHandler<ImportUserRosterCo
         _tags = tags;
         _organizationTags = organizationTags;
         _passwordVerifier = passwordVerifier;
+        _settings = settings;
         _unitOfWork = unitOfWork;
         _audit = audit;
         _clock = clock;
@@ -87,13 +91,16 @@ public sealed class ImportUserRosterHandler : IRequestHandler<ImportUserRosterCo
         var rows = _parser.Parse(request.FileContent, request.FileName);
 
         var failures = new List<UserImportFailure>();
-        var generatedPasswords = new List<UserImportGeneratedPassword>();
         var created = 0;
         var updated = 0;
 
+        // CSV 没给密码的行用**系统设定的原始密码**建号。取一次就够：
+        // 整个导入是一次操作，不该每行都去查一遍设置。
+        var originalPasswordHash = await _settings.GetOriginalPasswordHashAsync(cancellationToken);
+
         foreach (var row in rows)
         {
-            var outcome = await ProcessRowAsync(row, generatedPasswords, cancellationToken);
+            var outcome = await ProcessRowAsync(row, originalPasswordHash, cancellationToken);
             switch (outcome.Kind)
             {
                 case RowOutcomeKind.Created:
@@ -127,13 +134,12 @@ public sealed class ImportUserRosterHandler : IRequestHandler<ImportUserRosterCo
             created + updated,
             created,
             updated,
-            failures,
-            generatedPasswords);
+            failures);
     }
 
     private async Task<RowOutcome> ProcessRowAsync(
         UserRosterRow row,
-        List<UserImportGeneratedPassword> generatedPasswords,
+        string? originalPasswordHash,
         CancellationToken cancellationToken)
     {
         var account = row.Account?.Trim();
@@ -210,7 +216,7 @@ public sealed class ImportUserRosterHandler : IRequestHandler<ImportUserRosterCo
             }
 
             await CreateNewAsync(
-                account, displayName, row, role.Id, deepestTagId, generatedPasswords, cancellationToken);
+                account, displayName, row, role.Id, deepestTagId, originalPasswordHash, cancellationToken);
             return RowOutcome.Created();
         }
         catch (DomainException ex)
@@ -267,16 +273,25 @@ public sealed class ImportUserRosterHandler : IRequestHandler<ImportUserRosterCo
         UserRosterRow row,
         long roleId,
         long? tagId,
-        List<UserImportGeneratedPassword> generatedPasswords,
+        string? originalPasswordHash,
         CancellationToken cancellationToken)
     {
+        // 密码有两个来源：CSV 明文给的，或**系统设定的原始密码**。
+        // 没配原始密码就不建号——凭空生成的密码谁也拿不到，账号建出来也是空壳。
         var password = row.Password?.Trim();
-        var generated = false;
+        string passwordHash;
+        var usedOriginalPassword = false;
 
         if (string.IsNullOrEmpty(password))
         {
-            password = _passwordVerifier.GenerateInitialPassword() + "aA1";
-            generated = true;
+            if (originalPasswordHash is null)
+            {
+                throw new OriginalPasswordNotConfiguredException(
+                    "尚未配置原始密码，无法建账号。请先在「系统设置」中配置原始密码。");
+            }
+
+            passwordHash = originalPasswordHash;
+            usedOriginalPassword = true;
         }
         else
         {
@@ -285,19 +300,21 @@ public sealed class ImportUserRosterHandler : IRequestHandler<ImportUserRosterCo
             {
                 throw new BusinessRuleException("密码不符合要求：" + string.Join(" ", failures));
             }
+
+            passwordHash = _passwordVerifier.Hash(password);
         }
 
         var now = _clock.UtcNow;
         var user = User.Register(
             account,
             displayName,
-            _passwordVerifier.Hash(password),
+            passwordHash,
             now,
             _currentUser.UserId);
 
         user.ChangeProfile(displayName, row.Email, null, now, _currentUser.UserId);
 
-        if (generated)
+        if (usedOriginalPassword)
         {
             user.MarkMustChangePassword(now, _currentUser.UserId);
         }
@@ -313,11 +330,6 @@ public sealed class ImportUserRosterHandler : IRequestHandler<ImportUserRosterCo
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        if (generated)
-        {
-            generatedPasswords.Add(new UserImportGeneratedPassword(user.Username, password));
-        }
     }
 
     /// <summary>

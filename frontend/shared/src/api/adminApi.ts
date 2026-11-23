@@ -280,7 +280,8 @@ export async function countUsers(client: AdminClient = httpClient): Promise<numb
  * 上传名单 CSV 并导入。
  *
  * 逐行处理：单行出错只跳过该行并记录原因，不阻断整批。
- * 返回值里的初始密码只在这里回显一次，管理员据此分发。
+ * 响应里**没有任何密码**：CSV 没给密码的账号置为系统设定的原始密码，
+ * 由管理员另行告知用户。
  */
 export async function importUserRoster(
   file: File,
@@ -295,7 +296,6 @@ export async function importUserRoster(
     created?: number;
     updated?: number;
     failed?: Array<{ rowNumber?: number; username?: string | null; reason?: string }>;
-    generatedPasswords?: Array<{ username?: string; password?: string }>;
   }>(`${ENDPOINTS.admin.users}/import`, form);
 
   return {
@@ -307,10 +307,6 @@ export async function importUserRoster(
       rowNumber: num(f.rowNumber),
       username: str(f.username),
       reason: str(f.reason),
-    })),
-    generatedPasswords: (res.generatedPasswords ?? []).map((p) => ({
-      username: str(p.username),
-      password: str(p.password),
     })),
   };
 }

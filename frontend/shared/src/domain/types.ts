@@ -492,7 +492,7 @@ export interface AppUser {
   createdAt: string;
   /** 最后登录时间。 */
   lastLoginAt: string | null;
-  /** 是否要求下次登录修改密码（管理员重置 / 名单导入时下发初始密码）。 */
+  /** 是否要求下次登录修改密码（管理员重置 / 新建账号时置为系统设定的原始密码）。 */
   mustChangePassword?: boolean;
 }
 

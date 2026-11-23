@@ -178,10 +178,12 @@ describe("roster · 导入", () => {
     expect(logs[0]?.summary).toMatch(/批量导入人员名单/);
   });
 
-  it("未指定初始密码时生成一次性初始密码并回显", () => {
+  it("未指定初始密码时不回显密码，新账号标记为要改密", () => {
     const checked = validateRosterRows([row()]);
     const result = importRoster(checked);
-    expect(result.initialPasswords).toHaveLength(1);
-    expect(result.initialPasswords[0]?.password.length).toBeGreaterThanOrEqual(10);
+
+    // 响应里没有密码：新账号的密码是系统设定的原始密码，由管理员另行告知。
+    expect(Object.keys(result)).not.toContain("initialPasswords");
+    expect(findUserByAccount("2023999001")?.mustChangePassword).toBe(true);
   });
 });

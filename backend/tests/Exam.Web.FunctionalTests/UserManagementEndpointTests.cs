@@ -63,6 +63,9 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
         await SeedSystemRoleAsync(db, Role.Codes.GeneralUser, "社会人士");
 
         _adminUserId = await SeedUserAsync(db, AdminUsername, AdminPassword, "系统管理员", _adminRoleId);
+
+        // 系统设定的原始密码：建号与重置密码都要它。
+        await SeedOriginalPasswordAsync(OriginalPassword);
     }
 
     public async Task DisposeAsync()
@@ -260,6 +263,9 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
     [Fact]
     public async Task 重置密码_没配原始密码时被拒绝()
     {
+        // 初始化时配好了原始密码：这条要测的是「没配」的那条路。
+        await ClearOriginalPasswordAsync();
+
         var adminToken = await LoginAsync(AdminUsername, AdminPassword);
         UseToken(adminToken);
 
@@ -483,9 +489,19 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
         var first = await PostCsvAsync("/api/v1/users/import", csv, "名单.csv");
         first.StatusCode.ShouldBe(HttpStatusCode.OK, await first.Content.ReadAsStringAsync());
 
+        // 响应里没有任何密码：新账号的密码是系统设定的原始密码。
+        var firstRaw = await first.Content.ReadAsStringAsync();
+        firstRaw.ShouldNotContain("password");
+        firstRaw.ShouldNotContain("generatedPasswords");
+
         var firstBody = await first.Content.ReadFromJsonAsync<JsonElement>();
-        var generatedPassword = firstBody.GetProperty("generatedPasswords")[0].GetProperty("password").GetString();
-        generatedPassword.ShouldNotBeNullOrWhiteSpace();
+        firstBody.GetProperty("created").GetInt32().ShouldBe(1);
+
+        // 用原始密码能登录。
+        var firstLogin = await _client.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new { username = "20231001", password = OriginalPassword });
+        firstLogin.StatusCode.ShouldBe(HttpStatusCode.OK, await firstLogin.Content.ReadAsStringAsync());
 
         // 再次导入同一账号：更新而非报错，密码保持不变。
         var second = await PostCsvAsync("/api/v1/users/import", csv, "名单.csv");
@@ -498,8 +514,31 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
 
         var login = await _client.PostAsJsonAsync(
             "/api/v1/auth/login",
-            new { username = "20231001", password = generatedPassword });
+            new { username = "20231001", password = OriginalPassword });
         login.StatusCode.ShouldBe(HttpStatusCode.OK, "重复导入不应重置密码。");
+    }
+
+    [Fact]
+    public async Task 名单导入_没配原始密码时建不出账号并说明原因()
+    {
+        var adminToken = await LoginAsync(AdminUsername, AdminPassword);
+        UseToken(adminToken);
+
+        await ClearOriginalPasswordAsync();
+
+        var csv = string.Join("\n", [
+            "账号,姓名,学院,专业,班级",
+            "20233001,吴十,数学学院,数学,数应2302班",
+        ]);
+
+        var response = await PostCsvAsync("/api/v1/users/import", csv, "名单.csv");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("created").GetInt32().ShouldBe(0);
+        body.GetProperty("failed").GetArrayLength().ShouldBe(1);
+        body.GetProperty("failed")[0].GetProperty("reason").GetString()!
+            .ShouldContain("尚未配置原始密码");
     }
 
     [Fact]
@@ -644,12 +683,40 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         var verifier = new Pbkdf2PasswordVerifier();
-        db.SystemSettings.Add(Exam.Domain.Settings.SystemSetting.Create(
-            Exam.Domain.Settings.SystemSettingKeys.OriginalPasswordHash,
-            verifier.Hash(password),
-            DateTimeOffset.UtcNow,
-            null));
+        var hash = verifier.Hash(password);
+        var existing = await db.SystemSettings.FirstOrDefaultAsync(
+            s => s.Key == Exam.Domain.Settings.SystemSettingKeys.OriginalPasswordHash);
+
+        if (existing is null)
+        {
+            db.SystemSettings.Add(Exam.Domain.Settings.SystemSetting.Create(
+                Exam.Domain.Settings.SystemSettingKeys.OriginalPasswordHash,
+                hash,
+                DateTimeOffset.UtcNow,
+                null));
+        }
+        else
+        {
+            existing.SetValue(hash, DateTimeOffset.UtcNow, null);
+        }
+
         await db.SaveChangesAsync();
+    }
+
+    /// <summary>清掉原始密码设置项：测「没配」的那条路。</summary>
+    private async Task ClearOriginalPasswordAsync()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var existing = await db.SystemSettings.FirstOrDefaultAsync(
+            s => s.Key == Exam.Domain.Settings.SystemSettingKeys.OriginalPasswordHash);
+
+        if (existing is not null)
+        {
+            existing.SoftDelete(DateTimeOffset.UtcNow, null);
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task<long> SeedRoleAsync(

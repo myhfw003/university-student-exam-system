@@ -82,8 +82,6 @@ export interface RosterImportResult {
   failed: number;
   /** 失败明细。 */
   failures: RosterFailure[];
-  /** 新建账号的初始密码（系统不落库，仅回显一次供教师分发）。 */
-  initialPasswords: Array<{ account: string; password: string }>;
 }
 
 /* ------------------------------------------------------------------ 列解析 */
@@ -244,18 +242,6 @@ function enrollYearOf(className: string): number {
 
 /* ------------------------------------------------------------------ 导入 */
 
-/** 生成初始密码（示例数据模式不回显用户自带的密码）。 */
-function generatePassword(): string {
-  const letters = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz";
-  const digits = "23456789";
-  const alphabet = letters + digits;
-  const pick = (source: string): string =>
-    source[Math.floor(Math.random() * source.length)] ?? "a";
-  let out = pick(letters) + pick(digits);
-  while (out.length < 10) out += pick(alphabet);
-  return out;
-}
-
 /**
  * 执行导入。
  *
@@ -267,7 +253,6 @@ export function importRoster(
   operator = "陈砚之",
 ): RosterImportResult {
   const failures: RosterFailure[] = [];
-  const initialPasswords: Array<{ account: string; password: string }> = [];
   let created = 0;
   let updated = 0;
 
@@ -297,7 +282,6 @@ export function importRoster(
       updateUser(existing.id, patch);
       updated += 1;
     } else {
-      const password = row.password.trim() || generatePassword();
       const result = createUser({
         account,
         name,
@@ -310,7 +294,6 @@ export function importRoster(
         failures.push({ rowNo: row.rowNo, account, reason: result.message ?? "账号创建失败" });
         continue;
       }
-      if (!row.password.trim()) initialPasswords.push({ account, password });
       created += 1;
     }
 
@@ -341,7 +324,7 @@ export function importRoster(
     userAgent: "Chrome 131 / Windows",
   });
 
-  return { total, succeeded, created, updated, failed, failures, initialPasswords };
+  return { total, succeeded, created, updated, failed, failures };
 }
 
 /* ------------------------------------------------------------------ 内部 */

@@ -84,7 +84,6 @@ describe("管理端用户页 · HTTP 模式", () => {
       created: 1,
       updated: 0,
       failures: [{ rowNumber: 3, username: "bad!", reason: "账号格式不正确。" }],
-      generatedPasswords: [{ username: "t1061794989263723", password: "vtDjhbWjsrXNMmF5aA1" }],
     });
   });
 
@@ -178,11 +177,13 @@ describe("管理端用户页 · HTTP 模式", () => {
     });
     expect(api.importUserRoster.mock.calls[0]![0].name).toBe("roster.csv");
 
-    // 服务端返回的失败明细与初始密码都要显示出来。
+    // 服务端返回的失败明细要显示出来。
     await waitFor(() => {
       expect(screen.getByText(/账号格式不正确/)).toBeInTheDocument();
     });
-    expect(screen.getByText("vtDjhbWjsrXNMmF5aA1")).toBeInTheDocument();
+
+    // 新账号的密码是系统设定的原始密码：页面只说明，不回显密码。
+    expect(screen.getByText(/新账号的初始密码是系统设定的原始密码/)).toBeInTheDocument();
   });
 
   it("重置密码对话框不再收密码：密码由系统设定的原始密码决定", async () => {

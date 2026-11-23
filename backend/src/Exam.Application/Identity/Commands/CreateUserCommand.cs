@@ -3,6 +3,7 @@ using Exam.Application.Common.Interfaces;
 using Exam.Application.Common.Markers;
 using Exam.Application.Common.Security;
 using Exam.Application.Identity.Contracts;
+using Exam.Application.Settings.Services;
 using Exam.Domain.Identity;
 using Exam.Domain.SharedKernel.Abstractions;
 using Exam.Domain.SharedKernel.Exceptions;
@@ -51,6 +52,7 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, UserD
     private readonly IRoleRepository _roles;
     private readonly IPermissionProvider _permissions;
     private readonly IPasswordVerifier _passwordVerifier;
+    private readonly SystemSettingsResolver _settings;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAuditRecorder _audit;
     private readonly IClock _clock;
@@ -62,6 +64,7 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, UserD
         IRoleRepository roles,
         IPermissionProvider permissions,
         IPasswordVerifier passwordVerifier,
+        SystemSettingsResolver settings,
         IUnitOfWork unitOfWork,
         IAuditRecorder audit,
         IClock clock,
@@ -72,6 +75,7 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, UserD
         _roles = roles;
         _permissions = permissions;
         _passwordVerifier = passwordVerifier;
+        _settings = settings;
         _unitOfWork = unitOfWork;
         _audit = audit;
         _clock = clock;
@@ -87,34 +91,46 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, UserD
             throw new DuplicateCodeException($"账号「{username}」已被占用。");
         }
 
+        // 密码有两个来源：管理员明文给的，或**系统设定的原始密码**。
+        // 没有它就别建号——凭空生成的密码谁也拿不到，账号建出来也是空壳。
         var password = request.Password;
-        var generated = false;
+        string passwordHash;
+        var usedOriginalPassword = false;
+
         if (string.IsNullOrWhiteSpace(password))
         {
-            password = _passwordVerifier.GenerateInitialPassword() + "aA1";
-            generated = true;
-        }
+            var originalHash = await _settings.GetOriginalPasswordHashAsync(cancellationToken)
+                ?? throw new OriginalPasswordNotConfiguredException(
+                    "尚未配置原始密码，无法建账号。请先在「系统设置」中配置原始密码。");
 
-        var failures = PasswordPolicy.Validate(password, username);
-        if (failures.Count > 0)
+            passwordHash = originalHash;
+            usedOriginalPassword = true;
+        }
+        else
         {
-            throw new BusinessRuleException("密码不符合要求。", new Dictionary<string, string[]>(StringComparer.Ordinal)
+            var failures = PasswordPolicy.Validate(password, username);
+            if (failures.Count > 0)
             {
-                ["password"] = failures.ToArray(),
-            });
+                throw new BusinessRuleException("密码不符合要求。", new Dictionary<string, string[]>(StringComparer.Ordinal)
+                {
+                    ["password"] = failures.ToArray(),
+                });
+            }
+
+            passwordHash = _passwordVerifier.Hash(password);
         }
 
         var now = _clock.UtcNow;
         var user = User.Register(
             username,
             request.DisplayName,
-            _passwordVerifier.Hash(password),
+            passwordHash,
             now,
             _currentUser.UserId);
 
         user.ChangeProfile(request.DisplayName, request.Email, request.Phone, now, _currentUser.UserId);
 
-        if (generated)
+        if (usedOriginalPassword)
         {
             user.MarkMustChangePassword(now, _currentUser.UserId);
         }
@@ -138,8 +154,8 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, UserD
             {
                 ["username"] = user.Username,
                 ["roleIds"] = roleIds,
-                // 这里记的是「是否由系统生成初始密码」这个标记，不是密码本身。
-                ["generatedPassword"] = generated,
+                // 这里记的是**密码的来源**这个标记，不是密码本身。
+                ["passwordSource"] = usedOriginalPassword ? "original" : "given",
             },
             cancellationToken);
 

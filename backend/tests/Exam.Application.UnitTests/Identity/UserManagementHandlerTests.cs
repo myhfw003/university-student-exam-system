@@ -29,7 +29,8 @@ public sealed class UserManagementHandlerTests
     private readonly ICurrentUser _currentUser = Substitute.For<ICurrentUser>();
 
     private CreateUserHandler CreateUser() =>
-        new(_users, _userRoles, _roles, _permissions, _passwordVerifier, _unitOfWork, _audit, _clock, _currentUser);
+        new(_users, _userRoles, _roles, _permissions, _passwordVerifier,
+            new SystemSettingsResolver(_settings), _unitOfWork, _audit, _clock, _currentUser);
 
     private UpdateUserHandler UpdateUser() =>
         new(_users, _userRoles, _roles, _permissions, _refreshTokens, _blacklist, _audit, _clock, _currentUser);
@@ -68,9 +69,14 @@ public sealed class UserManagementHandlerTests
     }
 
     [Fact]
-    public async Task 新建用户_未指定密码时生成初始密码并要求改密()
+    public async Task 新建用户_未指定密码时置为系统设定的原始密码并要求改密()
     {
         _users.GetByUsernameAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((User?)null);
+        GivenOriginalPasswordHash("hash-of-original");
+
+        User? added = null;
+        _users.When(x => x.AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()))
+            .Do(call => added = call.Arg<User>());
 
         var result = await CreateUser().Handle(
             new CreateUserCommand("zhangsan", "张三", null, null, null, []),
@@ -78,6 +84,22 @@ public sealed class UserManagementHandlerTests
 
         result.User.MustChangePassword.ShouldBeTrue();
         result.User.Username.ShouldBe("zhangsan");
+        // 置的就是系统设定的那份哈希：没有第二个来源。
+        added!.PasswordHash.ShouldBe("hash-of-original");
+    }
+
+    [Fact]
+    public async Task 新建用户_没配原始密码时报错()
+    {
+        _users.GetByUsernameAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((User?)null);
+        GivenOriginalPasswordHash(null);
+
+        var act = async () => await CreateUser().Handle(
+            new CreateUserCommand("zhangsan", "张三", null, null, null, []),
+            CancellationToken.None);
+
+        var ex = await act.ShouldThrowAsync<OriginalPasswordNotConfiguredException>();
+        ex.ErrorCode.ShouldBe(ErrorCodes.OriginalPasswordNotConfigured);
     }
 
     [Fact]

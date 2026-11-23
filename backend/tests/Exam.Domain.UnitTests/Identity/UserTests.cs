@@ -17,8 +17,6 @@ internal sealed class FakePasswordVerifier : IPasswordVerifier
         passwordHash == $"fake:{password}"
             ? PasswordVerificationResult.Success
             : PasswordVerificationResult.Failed;
-    public string GenerateInitialPassword() => "InitPassw0rd";
-
 }
 
 public sealed class UserTests

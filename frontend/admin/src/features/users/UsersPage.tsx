@@ -444,6 +444,8 @@ export function UsersPage() {
             账号、姓名为必填；院系 / 专业 / 班级可空（为空即视为社会人士）；
             邮箱、角色、初始密码可空。角色留空时按「是否有班级」推断。
             导入按行校验，出错的行标红跳过，不阻断整批。
+            初始密码列留空时，账号的密码是系统设定的原始密码（在「系统设置」里配好的那个），
+            导入结果里不回显密码。
           </Callout>
 
           <Field
@@ -473,6 +475,12 @@ export function UsersPage() {
                 title={`导入完成：成功 ${rosterResult.succeeded} 行，失败 ${rosterResult.failed} 行`}
               >
                 新建 {rosterResult.created} 个账号，更新 {rosterResult.updated} 个账号。
+                {rosterResult.created > 0 ? (
+                  <p className="section-note" style={{ marginTop: "var(--sp-3)" }}>
+                    新账号的初始密码是系统设定的原始密码（在「系统设置」里配好的那个），
+                    请自行把密码告知用户；用户首次登录后需修改密码。
+                  </p>
+                ) : null}
                 {rosterResult.failures.length > 0 ? (
                   <ul className="rule-list" style={{ marginTop: "var(--sp-3)" }}>
                     {rosterResult.failures.map((failure) => (
@@ -483,29 +491,6 @@ export function UsersPage() {
                   </ul>
                 ) : null}
               </Callout>
-              {rosterResult.initialPasswords.length > 0 ? (
-                <Callout tone="warn" title="初始密码（仅显示一次）">
-                  <div className="table-wrap">
-                    <table className="table">
-                      <thead>
-                        <tr>
-                          <th scope="col">账号</th>
-                          <th scope="col">初始密码</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rosterResult.initialPasswords.map((item) => (
-                          <tr key={item.account}>
-                            <td>{item.account}</td>
-                            <td className="mono">{item.password}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  用户首次登录后需修改密码。
-                </Callout>
-              ) : null}
             </>
           ) : null}
 
