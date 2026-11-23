@@ -129,7 +129,7 @@ RFC 7807 ProblemDetails。
 | POST | `/users` | `user:write` |
 | GET | `/users/{id}` | `user:read` 或本人 |
 | PUT | `/users/{id}` | `user:write` |
-| POST | `/users/{id}/reset-password` | `user:write` |
+| POST | `/users/{id}/reset-password` | `user:write` | 置为**系统设定的原始密码**（见 §3.1）；响应里不带密码 |
 | POST | `/users/{id}/roles` | `role:write` |
 | DELETE | `/users/{id}/roles/{roleId}` | `role:write` |
 | POST | `/users/import` | `user:import`（multipart CSV） |
@@ -154,6 +154,42 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
   ]
 }
 ```
+
+### 3.1 系统级设置
+
+全局生效的开关：管理员改一次，所有人一起变，学生端没有单独入口。
+读与写都要 `system:configure`（需求文档 §1 的矩阵里只给系统管理员）。
+
+| 方法 | 路径 | 权限 | 说明 |
+|---|---|---|---|
+| GET | `/settings` | `system:configure` | 读当前设置 |
+| PUT | `/settings` | `system:configure` | 改错题处理口径 |
+| PUT | `/settings/original-password` | `system:configure` | 设置**原始密码**（只写不回显） |
+| DELETE | `/settings/original-password` | `system:configure` | 清除原始密码 |
+
+**`GET /settings`**
+
+```json
+{
+  "mistakeResolutionPolicy": "remove",
+  "originalPasswordConfigured": true,
+  "updatedAt": "2026-11-21T02:00:00Z",
+  "updatedBy": "7"
+}
+```
+
+`updatedAt` / `updatedBy` 是**错题处理口径**的最后修改时间与人。
+
+**原始密码**是管理员重置用户密码时的目标值：管理员在「系统设置」里配一次，
+之后重置任意用户密码都置成它。
+
+- **只写不回显**：`PUT /settings/original-password` 的请求体给明文，
+  响应里没有任何密码——只有 `originalPasswordConfigured` 这一位。
+  库里存的是 PBKDF2 哈希，不是明文。
+- 强度要求与用户密码一致：长度 ≥ 8，且至少包含字母与数字。
+- **没配就不能重置**：`POST /users/{id}/reset-password` 在未配置原始密码时
+  返回 `422` + `errorCode=29005`，而不是凭空生成一个谁都不知道的密码。
+- 清除原始密码后，重置密码同样被拒绝，直到重新配置。
 
 ---
 

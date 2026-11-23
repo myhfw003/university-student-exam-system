@@ -819,6 +819,9 @@ Analytics 只读，不写业务表。读模型落后于原始作答数据时，�
 | 27001 | `ImportRowInvalidException` | 422 | 导入行数据非法 |
 | 28001 | `TagCycleException` | 422 | 标签层级成环 |
 | 28002 | `TagInUseException` | 422 | 标签被引用，不可删除 |
+| 29005 | `OriginalPasswordNotConfiguredException` | 422 | 未配置原始密码，无法重置密码 |
+
+29xxx 是身份域的码段；29001–29004 保留未用（登录失败等走 `20005` 业务规则）。
 
 所有领域异常继承 `DomainException`，携带 `ErrorCode`、`Message`（面向用户的中文提示）与可选 `Details`（结构化明细，映射为 ProblemDetails 的 `extensions`）。
 
