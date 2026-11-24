@@ -46,3 +46,6 @@ deploy/secrets/
 # Python（scripts/ 下的 CI 校验脚本）
 __pycache__/
 *.pyc
+
+# TLS 证书（绝不入库）
+deploy/certs/
