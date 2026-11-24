@@ -2,40 +2,56 @@
 //
 // 目标：保存答案这条最高频的链路在持续压力下的 p95 与丢答率。
 // 每个虚拟用户维护自己的 clientSeq 序列（递增），服务端据此判断有没有丢批。
+//
+// 负载模型：常量虚拟用户持续跑，迭代间隔 8 秒
+// ——对应设计文档 §2.1 的「1000 人 ÷ 8 秒/题 = 125 QPS」。
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { authHeaders, login, options, EXAM_SESSION_ID, QUESTION_IDS } from './common.js';
+import {
+  BASE_URL,
+  authHeaders,
+  steadyModel,
+  thresholdsFor,
+  login,
+  jsonField,
+  EXAM_SESSION_ID,
+  QUESTION_IDS,
+  VUS,
+} from './common.js';
 
-export { options };
+/** 每个虚拟用户各自的会话、令牌与序列号（k6 里每个 VU 一份）。 */
+const state = { attemptId: 0, token: null, clientSeq: 0 };
 
-/** 每个虚拟用户的会话与序列号。 */
-const state = { attemptId: 0, clientSeq: 0 };
+export const options = {
+  ...steadyModel('10m'),
+  thresholds: thresholdsFor(VUS * 10),
+};
 
 export default function () {
-  const baseUrl = __ENV.BASE_URL || 'http://localhost:8080';
-
-  if (state.attemptId === 0) {
+  if (!state.token) {
     const token = login(__VU);
     if (!token) {
       return;
     }
+    state.token = token;
+  }
 
+  if (state.attemptId === 0) {
     const start = http.post(
-      `${baseUrl}/api/v1/attempts`,
+      `${BASE_URL}/api/v1/attempts`,
       JSON.stringify({ examSessionId: EXAM_SESSION_ID }),
-      authHeaders(token),
+      authHeaders(state.token, __VU),
     );
 
     if (start.status !== 200) {
+      // 开考失败就不再重试登录，留给下一次迭代重试。
+      state.token = null;
       return;
     }
 
-    state.attemptId = start.json('attemptId');
-  }
-
-  const token = login(__VU);
-  if (!token) {
-    return;
+    state.attemptId = jsonField(start, 'attemptId');
+    // 序列号从服务端记的进度续接：已经保存过的批次不重复提交。
+    state.clientSeq = Math.max(state.clientSeq, jsonField(start, 'lastClientSeq') ?? 0);
   }
 
   state.clientSeq += 1;
@@ -46,9 +62,9 @@ export default function () {
   }));
 
   const response = http.post(
-    `${baseUrl}/api/v1/attempts/${state.attemptId}/answers`,
+    `${BASE_URL}/api/v1/attempts/${state.attemptId}/answers`,
     JSON.stringify({ clientSeq: state.clientSeq, items }),
-    authHeaders(token),
+    authHeaders(state.token, __VU),
   );
 
   check(response, { '保存答案成功': (r) => r.status === 200 });
