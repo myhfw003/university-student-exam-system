@@ -237,8 +237,12 @@ test.describe("阅卷 → 发布成绩 → 学生看到成绩（真实后端）"
     const row = studentPage.getByRole("row", { name: new RegExp(examName) });
     await expect(row).toBeVisible();
     // 8 分满分 10 分——发布之前这里只看得见「待阅」，看不到定分。
-    await expect(row).toContainText("8 / 10");
-    await expect(row).toContainText("已完成");
+    //
+    // 成绩发布走 Outbox：发布接口写完事件就返回，Worker 每 5 秒派发一轮，
+    // 学生端要等派发之后才看得到分数。默认的 10 秒断言超时在跑得慢的机器上
+    // 不够用（Worker 那一轮没赶上就会误判成失败），这里放宽到 30 秒。
+    await expect(row).toContainText("8 / 10", { timeout: 30_000 });
+    await expect(row).toContainText("已完成", { timeout: 30_000 });
 
     // 点「查看」进成绩报告，报告里也是同一个分。
     await row.getByRole("button", { name: "查看" }).click();
