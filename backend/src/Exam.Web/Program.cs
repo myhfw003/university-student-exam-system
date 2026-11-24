@@ -14,6 +14,7 @@ using Exam.Web.Hubs;
 using Exam.Web.Monitoring;
 using Exam.Web.Observability;
 using Exam.Web.Middleware;
+using Exam.Web.RateLimiting;
 using Exam.Web.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -245,34 +246,9 @@ builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProv
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
 // ---------------------------------------------------------------- 限流
-builder.Services.AddRateLimiter(options =>
-{
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-    {
-        // 健康检查与指标不参与限流：探针被限流，容器会被判成不健康。
-        var path = context.Request.Path.Value ?? string.Empty;
-        if (path.StartsWith("/health", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith("/metrics", StringComparison.OrdinalIgnoreCase))
-        {
-            return RateLimitPartition.GetNoLimiter("probe");
-        }
-
-        // 阈值在请求时读配置：配置改完立刻生效，不用重启。
-        var permitLimit = context.RequestServices
-            .GetRequiredService<IConfiguration>()
-            .GetValue("RateLimiting:GlobalPerMinute", 6000);
-
-        return RateLimitPartition.GetFixedWindowLimiter(
-            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = permitLimit,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-            });
-    });
-});
+// 限流分档：登录按 IP + 按账号，写端点与读端点按用户。
+// 档位与阈值见 docs/design/05-api.md §1.5，实现见 Exam.Web/RateLimiting。
+builder.Services.AddRateLimiter(ExamRateLimiter.Configure);
 
 // ---------------------------------------------------------------- CORS
 var allowedOrigins = builder.Configuration.GetSection("CORS:AllowedOrigins").Get<string[]>() ?? [];
@@ -364,16 +340,30 @@ app.UseSerilogRequestLogging(options =>
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 // 请求指标：路由标签取路由模板，原始路径不进指标。
 app.UseMiddleware<HttpMetricsMiddleware>();
-app.UseForwardedHeaders(new ForwardedHeadersOptions
+// 只信任配置里列出的反向代理网段。X-Forwarded-For 是客户端可控的头，
+// 不限定信任范围就等于让任何人都能伪造来源 IP——审计记的 IP 与限流的分区键都靠它。
+var forwardedHeaders = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-});
+};
+
+foreach (var network in TrustedProxyNetworks())
+{
+    forwardedHeaders.KnownIPNetworks.Add(network);
+}
+
+app.UseForwardedHeaders(forwardedHeaders);
 app.UseCors();
-app.UseRateLimiter();
 // API 契约：不需要鉴权，前端与第三方按文档对接。
 app.UseSwagger();
 
+// 认证要先于限流：写端点按用户分区，拿到用户标识才分得开。
 app.UseAuthentication();
+
+// 登录端点还要按账号限流，账号名在请求体里：限流之前先把账号取出来。
+app.UseMiddleware<LoginAccountMiddleware>();
+app.UseRateLimiter();
+
 app.UseAuthorization();
 
 app.MapControllers();
@@ -385,6 +375,33 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c
 app.MapHealthChecks("/health/startup", new HealthCheckOptions { Predicate = _ => false });
 
 app.MapMetrics();
+
+// 受信任的反向代理网段。默认是 Docker 网桥的地址段（compose 里的 nginx 就在这里）。
+// 换部署方式时用 ForwardedHeaders__KnownNetworks__0 覆盖成自己的网段。
+IList<System.Net.IPNetwork> TrustedProxyNetworks()
+{
+    var configured = app.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [];
+    var networks = new List<System.Net.IPNetwork>();
+
+    foreach (var item in configured)
+    {
+        if (string.IsNullOrWhiteSpace(item))
+        {
+            continue;
+        }
+
+        if (System.Net.IPNetwork.TryParse(item, out var network))
+        {
+            networks.Add(network);
+        }
+        else
+        {
+            app.Logger.LogWarning("忽略解析不了的受信任代理网段：{Value}", item);
+        }
+    }
+
+    return networks;
+}
 
 // 业务指标要先建好：即使还没发生过保存答案，/metrics 也要把指标名列出来，
 // 告警表达式才不会因为「指标不存在」而失效。

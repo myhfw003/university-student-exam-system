@@ -25,6 +25,7 @@ public sealed class ExamMetrics : IExamMetrics
     private readonly Counter _sessionsPublished;
     private readonly Counter _httpRequests;
     private readonly Histogram _httpDuration;
+    private readonly Counter _rateLimited;
     private readonly Gauge _signalRConnections;
     private readonly Gauge _clockOffset;
     private readonly Gauge _redisUp;
@@ -70,6 +71,11 @@ public sealed class ExamMetrics : IExamMetrics
                 LabelNames = ["method", "route"],
                 Buckets = Histogram.ExponentialBuckets(0.005, 2, 12),
             });
+
+        _rateLimited = factory.CreateCounter(
+            "http_rate_limited_total",
+            "被限流拒绝的请求数",
+            new CounterConfiguration { LabelNames = ["tier"] });
 
         _signalRConnections = factory.CreateGauge(
             "signalr_connections",
@@ -123,6 +129,8 @@ public sealed class ExamMetrics : IExamMetrics
         _httpRequests.WithLabels(method, route, statusCode.ToString()).Inc();
         _httpDuration.WithLabels(method, route).Observe(durationSeconds);
     }
+
+    public void RecordRateLimited(string tier) => _rateLimited.WithLabels(tier).Inc();
 
     public void SignalRConnected() => _signalRConnections.Inc();
 

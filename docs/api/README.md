@@ -91,9 +91,22 @@ SKIP_BUILD=1 bash scripts/export-openapi.sh # 用现成构建产物导出
 
 ### 限流
 
-- 全局限流：`RateLimiting:GlobalPerMinute`（默认 6000 次/分钟）。
+分档见 [05-api.md §1.5](../design/05-api.md)。阈值在请求时读配置，改完即生效，不用重启。
+
+| 配置键 | 默认值 | 适用范围 |
+|---|---|---|
+| `RateLimiting:LoginPerIpPerMinute` | 10 | 登录：每来源 IP 每分钟 |
+| `RateLimiting:LoginPerAccountPerMinute` | 5 | 登录：每账号每分钟（账号名大小写不敏感） |
+| `RateLimiting:AnswersPerUserPerMinute` | 120 | 保存答案：每用户每分钟 |
+| `RateLimiting:FocusEventsPerUserPerMinute` | 120 | 切屏事件：每用户每分钟 |
+| `RateLimiting:WritesPerUserPerMinute` | 60 | 其余写端点：每用户每分钟 |
+| `RateLimiting:ReadsPerMinute` | 6000 | 读端点兜底：登录用户按用户、未登录按来源 IP |
+
+- 登录同时受来源 IP 与账号两个维度约束，任一维度超限即拒绝；账号维度取请求体里的
+  `username`，大小写归一（查库就是按小写比对的）。
+- 写端点按用户分区，不按来源 IP：一个考场共用出口 IP 时，按 IP 分区会让所有人互相饿死。
 - `/health/*` 与 `/metrics` 不参与限流：探针与采集不能被限流挡住，否则容器会被误判不健康。
-- 触发限流返回 429 与 `Retry-After`。
+- 触发限流返回 429、`Retry-After` 与带错误码的 ProblemDetails（`errorCode=20007`）。
 
 ### 时间
 

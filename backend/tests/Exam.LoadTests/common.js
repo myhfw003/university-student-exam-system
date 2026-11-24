@@ -140,6 +140,65 @@ export function login(vu) {
   return jsonField(response, 'accessToken');
 }
 
+/**
+ * 按卷面里的题型生成作答载荷。
+ *
+ * 载荷必须与题型对上：简答题没有选项，综合题要按步骤作答。
+ * 之前不管题型一律塞 selectedOptionKeys: ['A']——简答题上这个选项根本不存在，
+ * 服务端把这道题判为非法载荷拒掉，接口照样返回 200。那道题根本没存上，
+ * 「保存答案成功」的检查却全绿，丢答也就查不出来。
+ *
+ * @param {object} question 卷面里的一道题（开考接口随 AttemptResponse 一起返回）
+ */
+export function payloadFor(question) {
+  const type = String(question.type || '').toLowerCase();
+
+  if (type === 'short') {
+    return { text: '压测作答：简答题按文本作答。' };
+  }
+
+  if (type === 'comprehensive') {
+    const steps = question.steps || [];
+    if (steps.length > 0) {
+      return {
+        steps: steps.map((step) => ({ code: step.code, text: '压测作答：按步骤作答。' })),
+      };
+    }
+  }
+
+  // 单选、多选、判断：取卷面给的第一个选项键。
+  // 键是原始选项键（卷面置换的是显示顺序，键不变），服务端按它校验。
+  const options = question.options || [];
+  return { selectedOptionKeys: options.length > 0 ? [options[0].key] : [] };
+}
+
+/**
+ * 按卷面生成一批作答。
+ *
+ * @param {Array} questions 卷面里的题目
+ * @param {Array<number>} onlyQuestionIds 只答这些题；为空则全卷都答
+ */
+export function buildAnswerItems(questions, onlyQuestionIds) {
+  const wanted = new Set((onlyQuestionIds || []).map(Number));
+  return (questions || [])
+    .filter((q) => wanted.size === 0 || wanted.has(Number(q.questionId)))
+    .map((q) => ({
+      questionId: Number(q.questionId),
+      payload: payloadFor(q),
+    }));
+}
+
+/**
+ * 这次保存有没有题被拒。
+ *
+ * 响应体里的 rejected 列出被拒的题与原因：接口 200 不等于题存上了，
+ * 有题被拒时对账也看不出来（序列号照样前进），所以这里单独查。
+ */
+export function rejectedCount(response) {
+  const rejected = jsonField(response, 'rejected');
+  return Array.isArray(rejected) ? rejected.length : -1;
+}
+
 /** 带令牌的请求头。 */
 export function authHeaders(token, vu) {
   return {

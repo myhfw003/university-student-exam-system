@@ -14,13 +14,15 @@ import {
   thresholdsFor,
   login,
   jsonField,
+  buildAnswerItems,
+  rejectedCount,
   EXAM_SESSION_ID,
   QUESTION_IDS,
   VUS,
 } from './common.js';
 
-/** 每个虚拟用户各自的会话、令牌与序列号（k6 里每个 VU 一份）。 */
-const state = { attemptId: 0, token: null, clientSeq: 0 };
+/** 每个虚拟用户各自的会话、令牌、卷面与序列号（k6 里每个 VU 一份）。 */
+const state = { attemptId: 0, token: null, clientSeq: 0, questions: [] };
 
 export const options = {
   ...steadyModel('10m'),
@@ -52,14 +54,13 @@ export default function () {
     state.attemptId = jsonField(start, 'attemptId');
     // 序列号从服务端记的进度续接：已经保存过的批次不重复提交。
     state.clientSeq = Math.max(state.clientSeq, jsonField(start, 'lastClientSeq') ?? 0);
+    // 卷面随开考响应一起返回：载荷按题型生成，选项键取卷面给的原始键。
+    state.questions = jsonField(start, 'questions') || [];
   }
 
   state.clientSeq += 1;
 
-  const items = QUESTION_IDS.map((questionId) => ({
-    questionId,
-    payload: { selectedOptionKeys: ['A'] },
-  }));
+  const items = buildAnswerItems(state.questions, QUESTION_IDS);
 
   const response = http.post(
     `${BASE_URL}/api/v1/attempts/${state.attemptId}/answers`,
@@ -67,7 +68,12 @@ export default function () {
     authHeaders(state.token, __VU),
   );
 
-  check(response, { '保存答案成功': (r) => r.status === 200 });
+  check(response, {
+    '保存答案成功': (r) => r.status === 200,
+    // 接口 200 不等于题存上了：被拒的题要单独查，
+    // 否则「简答题没存上」这类缺陷在压测里看不出来。
+    '答案全部被接受': (r) => r.status === 200 && rejectedCount(r) === 0,
+  });
 
   sleep(8);
 }

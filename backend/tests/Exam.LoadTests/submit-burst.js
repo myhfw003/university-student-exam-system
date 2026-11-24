@@ -13,6 +13,8 @@ import {
   thresholdsFor,
   login,
   jsonField,
+  buildAnswerItems,
+  rejectedCount,
   EXAM_SESSION_ID,
   QUESTION_IDS,
   VUS,
@@ -32,7 +34,7 @@ export const options = {
   },
 };
 
-const state = { attemptId: 0, token: null, clientSeq: 0 };
+const state = { attemptId: 0, token: null, clientSeq: 0, questions: [] };
 
 export default function () {
   if (!state.token) {
@@ -57,20 +59,23 @@ export default function () {
 
     state.attemptId = jsonField(start, 'attemptId');
     state.clientSeq = Math.max(state.clientSeq, jsonField(start, 'lastClientSeq') ?? 0);
+    state.questions = jsonField(start, 'questions') || [];
   }
 
   state.clientSeq += 1;
 
-  const items = QUESTION_IDS.map((questionId) => ({
-    questionId,
-    payload: { selectedOptionKeys: ['A'] },
-  }));
+  const items = buildAnswerItems(state.questions, QUESTION_IDS);
 
-  http.post(
+  const answers = http.post(
     `${BASE_URL}/api/v1/attempts/${state.attemptId}/answers`,
     JSON.stringify({ clientSeq: state.clientSeq, items }),
     authHeaders(state.token, __VU),
   );
+
+  check(answers, {
+    '保存答案成功': (r) => r.status === 200,
+    '答案全部被接受': (r) => r.status === 200 && rejectedCount(r) === 0,
+  });
 
   const submit = http.post(
     `${BASE_URL}/api/v1/attempts/${state.attemptId}/submit`,

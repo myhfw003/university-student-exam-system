@@ -21,16 +21,19 @@ public sealed class ExamWebFactory : WebApplicationFactory<Program>
 {
     private readonly string _connectionString;
     private readonly string _redisConnectionString;
-    private readonly int _globalPerMinute;
+    private readonly IDictionary<string, string?> _configuration;
 
+    /// <param name="configuration">
+    /// 追加的配置项（如限流阈值），会覆盖 appsettings.json 里的同名键。
+    /// </param>
     public ExamWebFactory(
         string connectionString,
         string? redisConnectionString = null,
-        int globalPerMinute = 100000)
+        IDictionary<string, string?>? configuration = null)
     {
         _connectionString = connectionString;
         _redisConnectionString = redisConnectionString ?? "localhost:6379,abortConnect=false";
-        _globalPerMinute = globalPerMinute;
+        _configuration = configuration ?? new Dictionary<string, string?>();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -39,15 +42,31 @@ public sealed class ExamWebFactory : WebApplicationFactory<Program>
 
         builder.ConfigureAppConfiguration((_, configuration) =>
         {
-            configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            var values = new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Database"] = _connectionString,
                 ["ConnectionStrings:Redis"] = _redisConnectionString,
                 ["Jwt:Issuer"] = "exam",
                 ["Jwt:Audience"] = "exam-web",
                 ["Jwt:RefreshTokenPepper"] = "test-pepper",
-                ["RateLimiting:GlobalPerMinute"] = _globalPerMinute.ToString(),
-            });
+                // 功能测试不验限流：整个测试类的请求都来自同一个 IP，
+                // 按「登录 10 次/分钟/IP」的阈值会互相踩。
+                // 限流本身由 RateLimitTests 自己配阈值单独验。
+                ["RateLimiting:LoginPerIpPerMinute"] = "100000",
+                ["RateLimiting:LoginPerAccountPerMinute"] = "100000",
+                ["RateLimiting:AnswersPerUserPerMinute"] = "100000",
+                ["RateLimiting:FocusEventsPerUserPerMinute"] = "100000",
+                ["RateLimiting:WritesPerUserPerMinute"] = "100000",
+                ["RateLimiting:ReadsPerMinute"] = "1000000",
+            };
+
+            // 测试要临时改限流阈值：改完只在这一个宿主里生效。
+            foreach (var (key, value) in _configuration)
+            {
+                values[key] = value;
+            }
+
+            configuration.AddInMemoryCollection(values);
         });
 
         builder.ConfigureServices(services =>

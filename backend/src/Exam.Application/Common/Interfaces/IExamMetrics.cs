@@ -46,6 +46,12 @@ public interface IExamMetrics
     /// <param name="route">路由模板（如 api/v1/attempts/{id}），不取原始路径。</param>
     void RecordHttpRequest(string method, string route, int statusCode, double durationSeconds);
 
+    /// <summary>
+    /// 限流拒绝次数。
+    /// </summary>
+    /// <param name="tier">命中的限流档位（登录、保存答案、切屏事件、写端点、读端点）。</param>
+    void RecordRateLimited(string tier);
+
     /// <summary>SignalR 连接建立。</summary>
     void SignalRConnected();
 

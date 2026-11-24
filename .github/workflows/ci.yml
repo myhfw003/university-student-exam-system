@@ -274,10 +274,16 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           cd ../backend
+          # 限流阈值在这一步放开：端到端验功能，不验限流。接口全景巡检会把
+          # 契约里的每个接口都打一遍（几十个写请求同一个管理员账号），
+          # 按 60 次/分钟/用户的阈值会误伤。限流本身由后端功能测试覆盖。
           ASPNETCORE_URLS=http://127.0.0.1:5000 \
           ConnectionStrings__Database="Host=127.0.0.1;Port=5432;Database=exam;Username=exam_app;Password=exam_app_password;Maximum Pool Size=10;Timeout=15;Command Timeout=30" \
           ConnectionStrings__Redis="127.0.0.1:6379,abortConnect=false" \
           Jwt__Issuer=exam Jwt__Audience=exam-web Jwt__RefreshTokenPepper=e2e-pepper \
+          RateLimiting__LoginPerIpPerMinute=100000 RateLimiting__LoginPerAccountPerMinute=100000 \
+          RateLimiting__AnswersPerUserPerMinute=100000 RateLimiting__FocusEventsPerUserPerMinute=100000 \
+          RateLimiting__WritesPerUserPerMinute=100000 RateLimiting__ReadsPerMinute=1000000 \
           ObjectStorage__Enabled=true ObjectStorage__Endpoint=127.0.0.1:9000 \
           ObjectStorage__AccessKey=exam ObjectStorage__SecretKey=exam-e2e-password \
           ObjectStorage__Bucket=exam-attachments ObjectStorage__UseSsl=false \

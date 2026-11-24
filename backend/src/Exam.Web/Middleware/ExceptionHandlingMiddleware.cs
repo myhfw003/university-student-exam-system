@@ -1,6 +1,4 @@
-using System.Diagnostics;
 using Exam.Domain.SharedKernel.Exceptions;
-using Microsoft.AspNetCore.Mvc;
 
 namespace Exam.Web.Middleware;
 
@@ -94,48 +92,12 @@ public sealed class ExceptionHandlingMiddleware
         }
     }
 
-    private static async Task WriteProblemAsync(
+    private static Task WriteProblemAsync(
         HttpContext context,
         int errorCode,
         string detail,
         int statusCode,
         IReadOnlyDictionary<string, string[]>? errors,
         IReadOnlyDictionary<string, object?>? payload = null)
-    {
-        if (context.Response.HasStarted)
-        {
-            return;
-        }
-
-        var problem = new ProblemDetails
-        {
-            Type = $"https://api.example.edu/errors/{errorCode}",
-            Title = detail,
-            Status = statusCode,
-            Detail = detail,
-            Instance = context.Request.Path,
-        };
-
-        problem.Extensions["errorCode"] = errorCode;
-        problem.Extensions["traceId"] = Activity.Current?.Id ?? context.TraceIdentifier;
-
-        if (errors is { Count: > 0 })
-        {
-            problem.Extensions["errors"] = errors;
-        }
-
-        // 结构化载荷：缺什么、差多少这类明细直接进响应体。
-        if (payload is { Count: > 0 })
-        {
-            foreach (var (key, value) in payload)
-            {
-                problem.Extensions[key] = value;
-            }
-        }
-
-        context.Response.StatusCode = statusCode;
-        context.Response.ContentType = "application/problem+json";
-
-        await context.Response.WriteAsJsonAsync(problem);
-    }
+        => ProblemDetailsWriter.WriteAsync(context, errorCode, detail, statusCode, errors, payload);
 }

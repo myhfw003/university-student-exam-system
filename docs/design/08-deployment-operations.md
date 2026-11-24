@@ -273,6 +273,7 @@ EF 的 Design 包只在「生成迁移」时需要；运行时直接调用 `Migr
 |---|---|---|---|
 | `http_requests_total` | Counter | method, route, status | 请求量 |
 | `http_request_duration_seconds` | Histogram | method, route | 延迟分位 |
+| `http_rate_limited_total` | Counter | tier | 被限流拒绝的请求数（tier：Login / Answers / FocusEvents / Write / Read） |
 | `attempt_answers_saved_total` | Counter | result | 保存批次（saved / duplicate / rejected） |
 | `attempt_answers_saved_duration_seconds` | Histogram | — | 落库延迟（关键 SLO） |
 | `attempt_answer_items_rejected_total` | Counter | — | 单题被拒数 |

@@ -12,6 +12,7 @@ public static class ErrorCodes
     public const int Forbidden = 20004;
     public const int BusinessRuleViolated = 20005;
     public const int ObjectStorageUnavailable = 20006;
+    public const int RateLimitExceeded = 20007;
 
     public const int InvalidStateTransition = 21001;
 

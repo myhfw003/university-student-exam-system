@@ -33,6 +33,12 @@ export STUDENT_PASSWORD='Passw0rd!'
 export EXAM_SESSION_ID=30
 export QUESTION_IDS='501,502,503,504,505'
 
+# 后端侧（不是 k6 的环境变量）：直连后端压测时，后端要信任压测客户端带来的
+# X-Forwarded-For，否则每个虚拟用户的出口 IP 会被算成同一个，
+# 登录按 IP 的限流会把整场压测限掉。走 nginx 时 nginx 就在受信任网段里，不用额外配。
+#   ForwardedHeaders__KnownNetworks__0=127.0.0.1/32
+#   ForwardedHeaders__KnownNetworks__1=172.16.0.0/12
+
 # 3. 跑场景
 k6 run tests/Exam.LoadTests/login.js
 k6 run tests/Exam.LoadTests/start-exam.js
@@ -49,8 +55,18 @@ DATABASE_URL=postgres://exam_owner:exam_owner_password@localhost:5432/exam \
   ./tests/Exam.LoadTests/reconcile.sh
 ```
 
-判据：会话上记下的最大 `client_seq` 必须等于库里落库的最大 `client_seq`；
-会话说收到了、库里没有，就是丢了一批答案，脚本以非零码退出。
+两条判据，脚本都以非零码退出表示失败：
+
+1. **序列号**：会话上记下的最大 `client_seq` 必须等于库里落库的最大 `client_seq`；
+   会话说收到了、库里没有，就是丢了一批答案。
+2. **答题覆盖率**：每个已交卷会话答过的题数必须等于卷面题数。序列号照样前进、
+   但题被服务端拒了（题型对不上的载荷），序列号对账查不出来，只有覆盖率能查出来。
+
+压测只答卷面的一部分时，用 `SKIP_COVERAGE=1` 跳过第二条。
+
+> 载荷按题型生成：简答题用 `text`、综合题用 `steps`、客观题用 `selectedOptionKeys`
+> （选项键取卷面给的原始键）。题型对不上时服务端会拒掉那道题——接口照样返回 200，
+> 题却没存上，只看 HTTP 成功率是发现不了的。
 
 同一套判据在生产里由 `Exam.Worker` 的 **答卷对账作业**（`AnswerReconciliationJob`）定时执行：
 考试期间每 10 分钟一轮，发现差异就写审计流水并报警。

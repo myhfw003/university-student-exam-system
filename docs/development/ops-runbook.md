@@ -152,7 +152,7 @@ docker compose -f deploy/docker-compose.yml run --rm \
    docker compose logs api | grep -i "429"
    ```
    限流阈值为每用户每分钟 120 次（正常约 20 次/分钟）。若确为限流误伤，临时调高
-   `RateLimiting:GlobalPerMinute` 并观察。
+   `RateLimiting:AnswersPerUserPerMinute` 并观察（改完即生效，不用重启）。
 4. 若客户端处于离线状态，答案在浏览器 IndexedDB 队列中，恢复网络后会自动重放。
    考生报障时先问「当时网络是否断开」。
 
