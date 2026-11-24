@@ -6,7 +6,7 @@
    ========================================================================== */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
@@ -198,6 +198,9 @@ describe("管理端用户页 · HTTP 模式", () => {
 
     // 对话框里没有密码输入框：密码不再由管理员临时指定。
     expect(screen.queryByLabelText("新密码")).not.toBeInTheDocument();
-    expect(screen.getByText(/系统设定的原始密码/)).toBeInTheDocument();
+    // 断言限定在重置对话框里：页面上批量导入的说明也提到「原始密码」，
+    // 全页匹配会命中两处。
+    const dialog = screen.getByRole("dialog", { name: /重置密码/ });
+    expect(within(dialog).getByText(/系统设定的原始密码/)).toBeInTheDocument();
   });
 });
