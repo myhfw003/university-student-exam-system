@@ -33,6 +33,26 @@ const API_MODE = Boolean(process.env.E2E_API_BASE_URL);
  */
 const HTTP_UI_MODE = Boolean(process.env.E2E_API_BASE_URL);
 
+/**
+ * 本次点名要跑的项目；没点名就是全部。
+ *
+ * 用来决定要不要起「连后端模式」的静态服务器：`--project=api` 那组
+ * 只打接口、不开浏览器，不需要静态服务器；而它的产物（`dist-http`）
+ * 是 `pnpm build:http` 才生成的，CI 里 api 组恰恰跑在 build:http **之前**。
+ * 不按项目区分的话，静态服务器会因产物不存在而启动失败，整步 playwright
+ * 直接挂掉——连 api 那组的用例都没跑到。
+ */
+function requestedProjects(): string[] | undefined {
+  const flag = process.argv.find((arg) => arg.startsWith("--project="));
+  if (!flag) return undefined;
+  return flag.slice("--project=".length).split(",").map((name) => name.trim());
+}
+
+const requested = requestedProjects();
+
+/** 只有会用到连后端模式产物的那组，才需要起静态服务器。 */
+const needsHttpUiServer = requested === undefined || requested.includes("ui-http");
+
 export default defineConfig({
   testDir: "./e2e",
   timeout: 60_000,
@@ -89,7 +109,7 @@ export default defineConfig({
             stderr: "pipe",
           },
         ]),
-    ...(HTTP_UI_MODE
+    ...(HTTP_UI_MODE && needsHttpUiServer
       ? [
           {
             // 与 nginx 布局一致：`/api/` 反代到真实后端，前端因此用相对路径。
