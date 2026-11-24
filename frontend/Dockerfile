@@ -11,6 +11,16 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
+# 产物默认连真实后端。
+# 不设这两个变量时，前端构建走 mock 模式：内容数据来自 shared/src/mock 的本地
+# 示例数据，页面一个后端请求都不发——那个产物发出去是个假系统，
+# 题目、成绩、监考全是示例数据。同源部署（nginx 把 /api/ 反代到 api 服务）
+# 用相对路径 /api/v1 即可，不必配基地址。
+ARG VITE_DATA_SOURCE=http
+ARG VITE_API_BASE_URL=
+ENV VITE_DATA_SOURCE=${VITE_DATA_SOURCE}
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+
 # shared 是源码包（exports 指向 src/index.ts），无需构建产物
 RUN pnpm --filter @exam/student build
 RUN pnpm --filter @exam/admin build

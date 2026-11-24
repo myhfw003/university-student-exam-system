@@ -24,7 +24,10 @@ export type DataSourceMode = "mock" | "http";
 function envValue(key: string): string | undefined {
   try {
     const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
-    return env?.[key];
+    const value = env?.[key];
+    // 空串按「没配」处理：镜像里没给基地址时会传一个空串进来，
+    // 而空串不是 undefined，会把基地址算成空串——请求路径直接拼坏。
+    return typeof value === "string" && value.length > 0 ? value : undefined;
   } catch {
     return undefined;
   }

@@ -133,6 +133,11 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
+      - name: 前端镜像的数据源配置
+        # 镜像产物必须连真实后端。不设构建变量时前端走 mock 模式，
+        # 那个产物发出去是假系统——页面不发任何后端请求，题目与成绩全是示例数据，
+        # 而前端单测跑的是 mock 产物，查不出来。
+        run: python3 scripts/check-frontend-image-data-source.py
       - name: 安装 headless 浏览器（渲染冒烟检查用）
         # 渲染冒烟检查需要真实的 Chromium。CI 里用 playwright 只做浏览器下载，
         # 检查脚本本身零依赖（直接走 CDP），本地也复用 playwright 的缓存。
