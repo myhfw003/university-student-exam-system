@@ -63,17 +63,37 @@ public sealed class LoginAccountMiddleware
 
         request.Body.Position = 0;
 
-        string body;
+        // 有上限地读：分块请求没有 Content-Length，不设限就是往内存里灌。
+        var buffer = new char[MaxBodyBytes + 1];
+        var read = 0;
         try
         {
             using var reader = new StreamReader(request.Body, leaveOpen: true);
-            body = await reader.ReadToEndAsync();
+            while (read < buffer.Length)
+            {
+                var count = await reader.ReadAsync(buffer.AsMemory(read, buffer.Length - read));
+                if (count == 0)
+                {
+                    break;
+                }
+
+                read += count;
+            }
         }
         catch (IOException)
         {
             request.Body.Position = 0;
             return null;
         }
+
+        if (read > MaxBodyBytes)
+        {
+            // 正常登录请求体只有几十字节，这么大的是别的东西。
+            request.Body.Position = 0;
+            return null;
+        }
+
+        var body = new string(buffer, 0, read);
 
         // 读过的流要拨回去：不然后面的模型绑定会读到空请求体。
         request.Body.Position = 0;
