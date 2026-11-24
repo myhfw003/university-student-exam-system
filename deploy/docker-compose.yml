@@ -178,6 +178,19 @@ services:
       Jwt__SigningPrivateKeyPemBase64: ${JWT_SIGNING_PRIVATE_KEY_PEM_BASE64:-}
       Jwt__SigningPrivateKeyPem: ${JWT_SIGNING_PRIVATE_KEY_PEM:-}
       Jwt__RefreshTokenPepper: ${JWT_REFRESH_TOKEN_PEPPER:?必须设置 JWT_REFRESH_TOKEN_PEPPER}
+      # 限流阈值（docs/design/05-api.md §1.5）。请求时读配置，改完即生效，不用重启。
+      # 一个考场共用出口 IP 时，登录这一档要考虑调高 IP 阈值：
+      # 默认 10 次/分钟/IP 是按「每人一个出口地址」定的。
+      RateLimiting__LoginPerIpPerMinute: ${RATE_LIMITING_LOGIN_PER_IP_PER_MINUTE:-10}
+      RateLimiting__LoginPerAccountPerMinute: ${RATE_LIMITING_LOGIN_PER_ACCOUNT_PER_MINUTE:-5}
+      RateLimiting__AnswersPerUserPerMinute: ${RATE_LIMITING_ANSWERS_PER_USER_PER_MINUTE:-120}
+      RateLimiting__FocusEventsPerUserPerMinute: ${RATE_LIMITING_FOCUS_EVENTS_PER_USER_PER_MINUTE:-120}
+      RateLimiting__WritesPerUserPerMinute: ${RATE_LIMITING_WRITES_PER_USER_PER_MINUTE:-60}
+      RateLimiting__ReadsPerMinute: ${RATE_LIMITING_READS_PER_MINUTE:-6000}
+      # 受信任的反向代理网段：只有这些网段的 X-Forwarded-For 才认。
+      # 默认是 Docker 网桥段（compose 里的 nginx 就在这里）。多个网段用逗号隔开。
+      # 不限定范围的话，这个头就成了任何人都能伪造的来源 IP。
+      ForwardedHeaders__KnownNetworks: ${FORWARDED_HEADERS_KNOWN_NETWORKS:-172.16.0.0/12}
       # 对象存储（题目附件）。附件桶是私有的，外部只通过短期签名 URL 访问。
       ObjectStorage__Enabled: ${OBJECT_STORAGE_ENABLED:-true}
       ObjectStorage__Endpoint: ${OBJECT_STORAGE_ENDPOINT:-minio:9000}
