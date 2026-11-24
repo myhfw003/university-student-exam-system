@@ -65,7 +65,7 @@ docker compose up -d                          # 不启用，API 直连 PG
 | `postgres` | `postgres:17-alpine` | 1（主） | 业务库 |
 | `pgbouncer` | `edgedb/pgbouncer` | 1 | 事务池化 |
 | `redis` | `redis:7-alpine` | 1 | 见 `02-architecture.md` §10 |
-| `minio` | `minio/minio` | 1 | 题目附件 |
+| `minio` | `pgsty/silo`（MinIO 社区分支；官方镜像已下架） | 1 | 题目附件 |
 | `prometheus` | `prom/prometheus:v2.54` | 1 | 指标 |
 | `grafana` | `grafana/grafana` | 1 | 看板 |
 | `alertmanager` | `prom/alertmanager` | 1 | 告警路由 |

@@ -245,10 +245,17 @@ jobs:
         # 附件上传与题库导入会把文件写进对象存储。没起 MinIO 的话，
         # 那几个端点在真实后端上跑不起来（早期版本直接 500）。
         run: |
+          # 拉取重试：Docker Hub 对匿名拉取有每 IP 的配额，
+          # 共享出口 IP 的 runner 偶尔会撞上限流。
+          for i in 1 2 3; do
+            if docker pull pgsty/silo:RELEASE.2026-11-12T00-00-00Z; then break; fi
+            echo "拉取失败（第 ${i} 次），重试……"
+            sleep 10
+          done
           docker run -d --name e2e-minio -p 9000:9000 \
             -e MINIO_ROOT_USER=exam \
             -e MINIO_ROOT_PASSWORD=exam-e2e-password \
-            minio/minio:RELEASE.2024-08-17T01-24-54Z server /data
+            pgsty/silo:RELEASE.2026-11-12T00-00-00Z server /data
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:9000/minio/health/live > /dev/null; then
               echo "MinIO 已就绪"; break
