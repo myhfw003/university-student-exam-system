@@ -81,6 +81,11 @@ jobs:
         # 那一块就会一直显示成默认值（比如「有没有配原始密码」）——
         # 管理员明明配过了却看不到，而且单元测试全绿。
         run: python3 ../scripts/check-system-setting-fields.py
+      - name: 错误码三处一致
+        # 错误码是前后端与设计文档共用的词表：后端定义、前端取文案、
+        # 文档 §11 是权威清单。三处各写一套时漂移几乎不可见——单测照过，
+        # 接口照通，只有用户在界面上看到一句对不上的话。
+        run: python3 ../scripts/check-error-codes.py
       - name: 标签维度词表前后端一致
         # 标签维度是共享词表：后端决定哪些维度之间能成树（内容维度可跨维度），
         # 前端决定父标签下拉里给哪些维度。两边对不上时，用户在界面上
@@ -110,7 +115,16 @@ jobs:
       - name: 监控栈配置渲染
         run: |
           cd deploy
-          GRAFANA_ADMIN_PASSWORD=ci-only docker compose --profile monitoring config > /dev/null
+          # compose 里这几个口令是必填的（:? 语法），CI 上没有 deploy/.env，
+          # 不给值时 `docker compose config` 直接失败——这里给的是占位值，
+          # 只做配置渲染，不起容器。
+          POSTGRES_OWNER_PASSWORD=ci-only \
+          POSTGRES_APP_PASSWORD=ci-only \
+          REDIS_PASSWORD=ci-only \
+          MINIO_ROOT_PASSWORD=ci-only \
+          JWT_REFRESH_TOKEN_PEPPER=ci-only \
+          GRAFANA_ADMIN_PASSWORD=ci-only \
+            docker compose --profile monitoring config > /dev/null
 
   frontend:
     name: 前端构建与测试
@@ -137,7 +151,7 @@ jobs:
         # 镜像产物必须连真实后端。不设构建变量时前端走 mock 模式，
         # 那个产物发出去是假系统——页面不发任何后端请求，题目与成绩全是示例数据，
         # 而前端单测跑的是 mock 产物，查不出来。
-        run: python3 scripts/check-frontend-image-data-source.py
+        run: python3 ../scripts/check-frontend-image-data-source.py
       - name: 安装 headless 浏览器（渲染冒烟检查用）
         # 渲染冒烟检查需要真实的 Chromium。CI 里用 playwright 只做浏览器下载，
         # 检查脚本本身零依赖（直接走 CDP），本地也复用 playwright 的缓存。
@@ -227,6 +241,21 @@ jobs:
           ConnectionStrings__Database: "Host=127.0.0.1;Port=5432;Database=exam;Username=exam_owner;Password=exam_owner_password;Maximum Pool Size=5;Timeout=15;Command Timeout=120"
           Seed__AdminUsername: admin
           Seed__AdminPassword: admin-e2e-password
+      - name: 启动 MinIO（附件与文件导入要真对象存储）
+        # 附件上传与题库导入会把文件写进对象存储。没起 MinIO 的话，
+        # 那几个端点在真实后端上跑不起来（早期版本直接 500）。
+        run: |
+          docker run -d --name e2e-minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=exam \
+            -e MINIO_ROOT_PASSWORD=exam-e2e-password \
+            minio/minio:RELEASE.2024-08-17T01-24-54Z server /data
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:9000/minio/health/live > /dev/null; then
+              echo "MinIO 已就绪"; break
+            fi
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:9000/minio/health/live > /dev/null
       - name: 安装 headless 浏览器（浏览器连后端那组用例用）
         # api 那组只打接口、不开浏览器；ui-http 那组要真的在浏览器里点页面。
         working-directory: frontend
@@ -242,6 +271,9 @@ jobs:
           ConnectionStrings__Database="Host=127.0.0.1;Port=5432;Database=exam;Username=exam_app;Password=exam_app_password;Maximum Pool Size=10;Timeout=15;Command Timeout=30" \
           ConnectionStrings__Redis="127.0.0.1:6379,abortConnect=false" \
           Jwt__Issuer=exam Jwt__Audience=exam-web Jwt__RefreshTokenPepper=e2e-pepper \
+          ObjectStorage__Enabled=true ObjectStorage__Endpoint=127.0.0.1:9000 \
+          ObjectStorage__AccessKey=exam ObjectStorage__SecretKey=exam-e2e-password \
+          ObjectStorage__Bucket=exam-attachments ObjectStorage__UseSsl=false \
           dotnet run --project src/Exam.Web -c Release --no-build > /tmp/api.log 2>&1 &
           ready=0
           for i in $(seq 1 60); do

@@ -78,6 +78,8 @@ stages:
               # 镜像产物必须连真实后端（mock 产物发出去是假系统）。
               cd ..
               python3 scripts/check-frontend-image-data-source.py
+              # 错误码三处（后端 / 前端文案表 / 设计文档）必须是同一套。
+              python3 scripts/check-error-codes.py
               cd frontend
               # 渲染冒烟检查需要真实的 Chromium：脚本零依赖（直接走 CDP），
               # 这里用 playwright 只做浏览器下载。缺浏览器即失败，不静默跳过。
