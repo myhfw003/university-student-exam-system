@@ -28,10 +28,18 @@ test("学生端：进入考试 → 作答 → 交卷 → 看到已交卷状态",
   await page.getByRole("button", { name: "确认交卷", exact: true }).click();
 
   // 4. 交卷成功 → 跳到成绩报告页。
-  //    mock 模式下的报告内容取自预置的历史成绩（刚交的这���没有历史记录，
+  //    mock 模式下的报告内容取自预置的历史成绩（刚交的这卷没有历史记录，
   //    报告会显示「暂未参加该考试」）；报告内容本身由前端单测覆盖，
   //    真实后端路径由接口巡检覆盖。
-  await expect(page.getByText(/已交卷/)).toBeVisible();
+  //
+  //    这里断言「落到了报告页」，而不是「页面上出现『已交卷』三个字」：
+  //    交卷后原地会同时出现「本场考试已交卷」的空状态与「已交卷，正在生成成绩报告」
+  //    的提示条，正则会同时命中两处，Playwright 的 strict 模式直接报错；
+  //    提示条只存在几秒，命中几处全看断言落在哪一刻——这条用例因此一直时绿时红。
+  //    跳到报告页本身就是交卷成功的证据：只有交卷成功才会跳过去。
   await expect(page).toHaveURL(/\/exams\/exam-net-mid\/report/);
+  // 报告页上的「交卷时间」是这次的交卷时刻：页面上是刚交出来的那份，
+  // 不是预置的历史成绩。exact 是为了只命中统计卡片的标签那一个元素。
+  await expect(page.getByText("交卷时间", { exact: true })).toBeVisible();
   await expect(page.getByText("计算机网络期中考试").first()).toBeVisible();
 });
