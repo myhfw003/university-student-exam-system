@@ -66,6 +66,13 @@ public sealed class DuplicateCodeException : DomainException
         : base(message, ErrorCodes.DuplicateCode) { }
 }
 
+/// <summary>对象存储未启用或未配置，附件与文件导入做不了。</summary>
+public sealed class ObjectStorageUnavailableException : DomainException
+{
+    public ObjectStorageUnavailableException(string message)
+        : base(message, ErrorCodes.ObjectStorageUnavailable) { }
+}
+
 /// <summary>标签被引用，不可删除。</summary>
 public sealed class TagInUseException : DomainException
 {

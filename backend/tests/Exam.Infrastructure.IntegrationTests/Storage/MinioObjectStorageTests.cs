@@ -1,4 +1,5 @@
 using System.Net;
+using Exam.Domain.SharedKernel.Exceptions;
 using Exam.Infrastructure.Configuration;
 using Exam.Infrastructure.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -50,6 +51,64 @@ public sealed class MinioObjectStorageTests
         await stream!.CopyToAsync(buffer);
 
         stream.CanRead.ShouldBeTrue();
+    }
+
+    /// <summary>
+    /// 未启用对象存储时，构造不能炸。
+    ///
+    /// 回归缺陷：构造时就把空 endpoint 丢给 MinIO SDK，SDK 抛
+    /// ArgumentException，于是每一个碰对象存储的端点都变成 500——
+    /// 看不出是「没启用对象存储」，只看得到「服务器内部错误」。
+    /// </summary>
+    [Fact]
+    public void 未启用对象存储时构造不抛异常()
+    {
+        var options = Options.Create(new ObjectStorageOptions
+        {
+            Enabled = false,
+            Endpoint = "",
+            AccessKey = "",
+            SecretKey = "",
+            Bucket = "exam-attachments",
+        });
+
+        var storage = new MinioObjectStorage(options, NullLogger<MinioObjectStorage>.Instance);
+
+        storage.ShouldNotBeNull();
+    }
+
+    /// <summary>
+    /// 未启用对象存储时，上传与取签名 URL 要报**业务错误**（422），
+    /// 而不是 500。
+    /// </summary>
+    [Fact]
+    public async Task 未启用对象存储时报业务错误而不是内部错误()
+    {
+        var options = Options.Create(new ObjectStorageOptions
+        {
+            Enabled = false,
+            Endpoint = "",
+            Bucket = "exam-attachments",
+        });
+
+        var storage = new MinioObjectStorage(options, NullLogger<MinioObjectStorage>.Instance);
+
+        var put = await Should.ThrowAsync<ObjectStorageUnavailableException>(
+            async () => await storage.PutAsync(
+                "questions/2026/a.png",
+                new MemoryStream(new byte[] { 1, 2, 3 }),
+                3,
+                "image/png"));
+
+        put.ErrorCode.ShouldBe(ErrorCodes.ObjectStorageUnavailable);
+
+        await Should.ThrowAsync<ObjectStorageUnavailableException>(
+            async () => await storage.GetPresignedUrlAsync(
+                "questions/2026/a.png",
+                TimeSpan.FromMinutes(5)));
+
+        await Should.ThrowAsync<ObjectStorageUnavailableException>(
+            async () => await storage.GetAsync("questions/2026/a.png"));
     }
 
     [Fact]

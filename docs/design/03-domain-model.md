@@ -803,6 +803,7 @@ Analytics 只读，不写业务表。读模型落后于原始作答数据时，�
 | 20003 | `NotFoundException` | 404 | 资源不存在 |
 | 20004 | `ForbiddenException` | 403 | 无权限 |
 | 20005 | `BusinessRuleException` | 422 | 违反业务规则（携带明细） |
+| 20006 | `ObjectStorageUnavailableException` | 422 | 对象存储未启用或未配置，附件与文件导入做不了 |
 | 21001 | `InvalidStateTransitionException` | 422 | 非法状态流转 |
 | 22001 | `DuplicateCodeException` | 409 | 编码重复 |
 | 22101 | `TagUsageException` | 422 | 标签被引用，不可删除 |
