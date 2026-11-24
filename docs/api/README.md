@@ -204,6 +204,18 @@ cd frontend && E2E_API_BASE_URL=http://127.0.0.1:5000 \
   E2E_ADMIN_USERNAME=admin E2E_ADMIN_PASSWORD=... pnpm e2e:api
 ```
 
+打真实后端那组，后端要满足两个条件，缺一个就会有用例莫名其妙地红：
+
+- **限流阈值放开**（`RateLimiting__*` 环境变量，档位见 [05-api.md §1.5](../design/05-api.md)）：
+  接口全景巡检会把契约里的每个接口都打一遍（几十个写请求都出自同一个管理员账号），
+  按「写端点 60 次/分钟/用户」的阈值会误伤成 429。
+- **对象存储可用**（`ObjectStorage__Enabled=true` 加上 MinIO 的地址与口令）：
+  题库导入与附件上传要真的写对象存储。没起 MinIO 的话，
+  导入端点会返回 20006（对象存储未启用），或者在写入时抛 500。
+
+这两条 CI 里都配好了（`.github/workflows/ci.yml` 的「端到端测试（真实后端）」作业），
+本地照抄那一段环境变量即可。
+
 ## 相关文档
 
 - 接口设计全文：[《05-api.md》](../design/05-api.md)
