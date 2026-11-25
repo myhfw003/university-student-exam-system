@@ -43,6 +43,16 @@ PG 侧 `listen_addresses='*'`，`pg_hba.conf` 放行 `172.16.0.0/12`（覆盖 do
 8. **备份**：宿主机装 pgbackrest 2.60 + stanza + `archive_command`，定时任务用 systemd
    （复用 `deploy/backup/entrypoint.sh` 的逻辑）。仓库里那个 backup 容器这时**不适用**，
    它操作的是容器里的 pgdata 卷。
+   三处必须写对，否则备份静默失败：
+   - `archive_command` 里要带 **`%p`**（要归档的 WAL 段号），且 `LC_ALL=C` 与
+     `PATH=/usr/lib/postgresql/17/bin` 要**写在命令里**（它跑在 postgres 进程的境里，
+     `pg_controldata` 不在默认 PATH，输出又跟着 locale 走）；
+   - stanza 里**不要写 `pg1-host`**：写了 `localhost` 会被当成远端主机去走 SSH；
+   - 定时任务的 `PGHOST` 要指本地 socket（`/var/run/postgresql`），否则脚本卡在
+     「等待数据库就绪」的死循环里。
+   备份指标写进 node-exporter 读的那个卷：`/var/lib/docker/volumes` 是 700，
+   postgres 用户穿不过去，需要 `chmod o+x /var/lib/docker /var/lib/docker/volumes`
+   （只放开穿越，目录内容仍是 root 的）。
 
 ## 3. 验证结果
 
