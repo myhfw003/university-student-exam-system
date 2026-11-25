@@ -181,6 +181,10 @@ services:
       Jwt__SigningPrivateKeyPemBase64: ${JWT_SIGNING_PRIVATE_KEY_PEM_BASE64:-}
       Jwt__SigningPrivateKeyPem: ${JWT_SIGNING_PRIVATE_KEY_PEM:-}
       Jwt__RefreshTokenPepper: ${JWT_REFRESH_TOKEN_PEPPER:?必须设置 JWT_REFRESH_TOKEN_PEPPER}
+      # 刷新令牌的 Cookie 是否带 Secure。**纯 HTTP 部署**（局域网里不给证书，
+      # 直接 http://ip:端口 访问）时必须显式关掉：浏览器不保存 Secure Cookie，
+      # 刷新令牌会丢，用户每 15 分钟被登出一次。走 HTTPS 时保持 true。
+      Jwt__RefreshCookieSecure: ${JWT_REFRESH_COOKIE_SECURE:-true}
       # 限流阈值（docs/design/05-api.md §1.5）。请求时读配置，改完即生效，不用重启。
       # 一个考场共用出口 IP 时，登录这一档要考虑调高 IP 阈值：
       # 默认 10 次/分钟/IP 是按「每人一个出口地址」定的。

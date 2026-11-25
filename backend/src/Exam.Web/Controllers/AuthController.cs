@@ -21,11 +21,16 @@ public sealed class AuthController : ControllerBase
 
     private readonly IMediator _mediator;
     private readonly IHostEnvironment _environment;
+    private readonly IConfiguration _configuration;
 
-    public AuthController(IMediator mediator, IHostEnvironment environment)
+    public AuthController(
+        IMediator mediator,
+        IHostEnvironment environment,
+        IConfiguration configuration)
     {
         _mediator = mediator;
         _environment = environment;
+        _configuration = configuration;
     }
 
     /// <summary>登录。返回访问令牌与当前用户档案（含权限码）。</summary>
@@ -112,7 +117,11 @@ public sealed class AuthController : ControllerBase
         Response.Cookies.Append(RefreshCookieName, token, new CookieOptions
         {
             HttpOnly = true,
-            Secure = !_environment.IsDevelopment(),
+            // 默认 Secure（生产走 HTTPS）。**纯 HTTP 部署**（局域网内不给证书，
+            // 直接用 http://ip:端口）时，浏览器不会保存 Secure Cookie，
+            // 刷新令牌就丢了——用户每到令牌过期就被登出一次。
+            // 那种部署显式设 Jwt__RefreshCookieSecure=false。
+            Secure = _configuration.GetValue("Jwt:RefreshCookieSecure", !_environment.IsDevelopment()),
             SameSite = SameSiteMode.Strict,
             Expires = expiresAt,
             Path = "/api/v1/auth",
