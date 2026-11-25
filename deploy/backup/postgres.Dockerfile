@@ -5,4 +5,9 @@
 # 只装 pgbackrest，不改 PostgreSQL 本身的行为。
 FROM postgres:17-alpine
 
-RUN apk add --no-cache pgbackrest tzdata
+# apk 源可配：国内构建走 Alpine 的国内镜像（默认仍是官方源）。
+ARG ALPINE_MIRROR=
+RUN if [ -n "$ALPINE_MIRROR" ]; then \
+      sed -i "s#dl-cdn.alpinelinux.org#$ALPINE_MIRROR#" /etc/apk/repositories; \
+    fi \
+ && apk add --no-cache pgbackrest tzdata

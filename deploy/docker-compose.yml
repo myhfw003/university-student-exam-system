@@ -7,6 +7,9 @@ services:
     build:
       context: .
       dockerfile: backup/postgres.Dockerfile
+      args:
+        # apk 源：国内部署走国内镜像（留空即官方源）。
+        ALPINE_MIRROR: ${ALPINE_MIRROR:-mirrors.tuna.tsinghua.edu.cn}
     image: exam-postgres:17-pgbackrest
     restart: unless-stopped
     environment:
@@ -243,6 +246,10 @@ services:
     build:
       context: ../frontend
       dockerfile: Dockerfile
+      args:
+        # 包源：国内部署走 npmmirror（corepack 取 pnpm 版本列表也走它）。
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com/}
+        COREPACK_NPM_REGISTRY: ${COREPACK_NPM_REGISTRY:-https://registry.npmmirror.com/}
     restart: unless-stopped
     # 前端只由 nginx 内部反代访问，不对宿主机发布端口
 

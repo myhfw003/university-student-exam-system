@@ -1,6 +1,14 @@
 # ---------- 构建 ----------
 FROM node:24-alpine AS build
 WORKDIR /app
+
+# 包源可配：国内构建走 npmmirror（corepack 取 pnpm 版本列表也走它，
+# 否则 corepack 直接找 registry.npmjs.org，在境内会超时）。
+# 默认仍是官方源；deploy/docker-compose.yml 按部署环境传入。
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+ARG COREPACK_NPM_REGISTRY=https://registry.npmjs.org/
+ENV npm_config_registry=${NPM_REGISTRY} \
+    COREPACK_NPM_REGISTRY=${COREPACK_NPM_REGISTRY}
 RUN corepack enable && corepack prepare pnpm@11 --activate
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
