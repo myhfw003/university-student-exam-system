@@ -55,7 +55,7 @@ until pg_isready -h "${PGHOST:-postgres}" -p "${PGPORT:-5432}" -U "${PGUSER:-exa
 done
 
 log "开始基线全量备份。"
-if pgbackrest --stanza="$STANZA" --type=backup backup; then
+if pgbackrest --stanza="$STANZA" --type=full backup; then
     save_success
     publish_metrics 1
     log "基线全量备份完成。"
@@ -71,7 +71,7 @@ while true; do
 
     if [ "$now" = "0200" ]; then
         log "每日全量备份。"
-        if pgbackrest --stanza="$STANZA" --type=backup backup; then
+        if pgbackrest --stanza="$STANZA" --type=full backup; then
             save_success
             publish_metrics 1
         else
