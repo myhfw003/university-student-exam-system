@@ -90,6 +90,30 @@ docker compose exec postgres psql -U exam_owner -d exam \
 
 ---
 
+### 1.3 用宿主机 PostgreSQL 的部署形态
+
+有时数据库不跑在容器里——目标机已经装了 PostgreSQL，或运维要求数据库由宿主机统一管。
+这时**应用仍在容器里**，只有数据库换成宿主机上的：
+
+1. 宿主机装 PostgreSQL 17（用 PGDG 源），并让它监听容器能到的地址：
+   `postgresql.conf` 里 `listen_addresses = '*'`，
+   `pg_hba.conf` 放行 docker 网段（`host all all 172.16.0.0/12 scram-sha-256`，
+   这个段覆盖 docker0 与 compose 的各个网桥）。
+2. `.env` 里把 `DB_HOST` 指到宿主机的 docker0 网关（`172.17.0.1`），
+   **不是** compose 里的服务名 `postgres`——那个服务这时根本不启动。
+3. 迁移与授权照旧，只是连接串换成宿主机地址：
+   `docker compose run --rm --no-deps -e ConnectionStrings__Database="Host=172.17.0.1;..." migrate`；
+   授权同理：`docker compose run --rm --no-deps db-grants sh -c "psql -h 172.17.0.1 ..."`。
+4. 起栈时**不起 postgres / migrate / db-grants / backup**：
+   `docker compose up -d --no-deps api worker web nginx redis minio`。
+5. **备份要另做**：仓库里的 pgbackrest 备份服务是给容器里的 PG 用的
+   （它直接操作容器的 pgdata 卷）。数据库在宿主机上时，要么在宿主机上装
+   pgbackrest 并按《08-deployment-operations.md》§7 配一个 stanza，
+   要么用宿主机自己的备份方案。**别以为容器里那个 backup 服务还在跑**——
+   它没起来，备份就是没有。
+
+---
+
 ## 2. 启动顺序与依赖
 
 ```
