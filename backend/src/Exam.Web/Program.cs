@@ -340,17 +340,31 @@ app.UseSerilogRequestLogging(options =>
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 // 请求指标：路由标签取路由模板，原始路径不进指标。
 app.UseMiddleware<HttpMetricsMiddleware>();
-// 只信任配置里列出的反向代理网段。X-Forwarded-For 是客户端可控的头，
+// 只信任**明确的**反向代理网段。X-Forwarded-For 是客户端可控的头，
 // 不限定信任范围就等于让任何人都能伪造来源 IP——审计记的 IP 与限流的分区键都靠它。
+//
+// 限流按客户端的**局域网地址**分桶（一台机器一个桶），前提是这个地址不可伪造：
+// 考场局域网里的机器直连 API 端口时，它自带的 X-Forwarded-For 必须被忽略，
+// 用的只能是连接本身的来源地址。
 var forwardedHeaders = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+    // 只认紧挨着的那一跳：X-Forwarded-For 最右边一项由代理写入，是客户端地址。
+    ForwardLimit = 1,
 };
 
-foreach (var network in TrustedProxyNetworks())
+var trustedNetworks = TrustedProxyNetworks();
+foreach (var network in trustedNetworks)
 {
     forwardedHeaders.KnownIPNetworks.Add(network);
 }
+
+app.Logger.LogInformation(
+    "受信任的反向代理网段：{Networks}；未列入的来源地址一律按直连处理，"
+    + "来源 IP 取连接本身的地址（限流按客户端局域网地址分桶）。",
+    trustedNetworks.Count == 0
+        ? "（无，只认回环）"
+        : string.Join(", ", trustedNetworks.Select(n => n.ToString())));
 
 app.UseForwardedHeaders(forwardedHeaders);
 app.UseCors();
@@ -376,20 +390,22 @@ app.MapHealthChecks("/health/startup", new HealthCheckOptions { Predicate = _ =>
 
 app.MapMetrics();
 
-// 受信任的反向代理网段。默认是 Docker 网桥的地址段（compose 里的 nginx 就在这里）。
-// 换部署方式时用 ForwardedHeaders__KnownNetworks__0 覆盖成自己的网段。
+// 受信任的反向代理网段。
+//
+// 三种写法都认（逗号分隔或逐项）：
+//   ForwardedHeaders:KnownNetworks: ["10.0.0.0/8"]        （appsettings 数组）
+//   ForwardedHeaders__KnownNetworks=10.0.0.0/8,10.1.0.0/16 （环境变量标量）
+//   ForwardedHeaders__KnownNetworks__0=10.0.0.0/8            （环境变量逐项）
+//
+// 没配就按**容器自身网段**兜底：跑在 compose 里时，nginx 与 API 之间的那段
+// 网桥就是容器网络——局域网里的机器地址不在其中，它们自带的
+// X-Forwarded-For 因此不会被采信。显式配了就以配置的为准。
 IList<System.Net.IPNetwork> TrustedProxyNetworks()
 {
-    var configured = app.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [];
     var networks = new List<System.Net.IPNetwork>();
 
-    foreach (var item in configured)
+    foreach (var item in ConfiguredProxyNetworks())
     {
-        if (string.IsNullOrWhiteSpace(item))
-        {
-            continue;
-        }
-
         if (System.Net.IPNetwork.TryParse(item, out var network))
         {
             networks.Add(network);
@@ -400,7 +416,41 @@ IList<System.Net.IPNetwork> TrustedProxyNetworks()
         }
     }
 
+    if (networks.Count > 0)
+    {
+        return networks;
+    }
+
+    if (ClientAddress.IsContainer())
+    {
+        foreach (var network in ClientAddress.LocalNetworks())
+        {
+            app.Logger.LogInformation("未配置受信任代理网段，按容器自身网段兜底：{Network}", network);
+            networks.Add(network);
+        }
+    }
+
     return networks;
+}
+
+// 配置里的受信任代理网段。数组、标量、逐项环境变量三种写法都收进来。
+List<string> ConfiguredProxyNetworks()
+{
+    var section = app.Configuration.GetSection("ForwardedHeaders:KnownNetworks");
+    var items = new List<string>();
+
+    // 逐项写法（KnownNetworks__0 / __1）：子节点优先。
+    var children = section.GetChildren().ToList();
+    if (children.Count > 0)
+    {
+        items.AddRange(children.Select(c => c.Value ?? string.Empty));
+    }
+    else if (section.Value is { Length: > 0 } scalar)
+    {
+        items.AddRange(scalar.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+    }
+
+    return items.Where(i => !string.IsNullOrWhiteSpace(i)).ToList();
 }
 
 // 业务指标要先建好：即使还没发生过保存答案，/metrics 也要把指标名列出来，

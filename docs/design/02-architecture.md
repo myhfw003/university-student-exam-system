@@ -343,7 +343,7 @@ ASP.NET Core 中间件顺序（`Program.cs` 中严格按此顺序注册）：
 ```
 1. ExceptionHandlingMiddleware      # 全局异常 → ProblemDetails
 2. SerilogRequestLoggingMiddleware # 结构化访问日志
-3. ForwardedHeadersMiddleware       # 正确识别代理后的客户端 IP
+3. ForwardedHeadersMiddleware       # 识别代理后的客户端 IP；只认受信任代理网段带来的转发头
 4. HttpsRedirection / HSTS         # 生产启用
 5. ResponseCompressionMiddleware    # gzip
 6. RateLimitingMiddleware           # .NET 8+ 内置限流（Redis 分布式实现）

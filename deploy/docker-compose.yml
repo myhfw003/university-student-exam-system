@@ -187,10 +187,11 @@ services:
       RateLimiting__FocusEventsPerUserPerMinute: ${RATE_LIMITING_FOCUS_EVENTS_PER_USER_PER_MINUTE:-120}
       RateLimiting__WritesPerUserPerMinute: ${RATE_LIMITING_WRITES_PER_USER_PER_MINUTE:-60}
       RateLimiting__ReadsPerMinute: ${RATE_LIMITING_READS_PER_MINUTE:-6000}
-      # 受信任的反向代理网段：只有这些网段的 X-Forwarded-For 才认。
-      # 默认是 Docker 网桥段（compose 里的 nginx 就在这里）。多个网段用逗号隔开。
-      # 不限定范围的话，这个头就成了任何人都能伪造的来源 IP。
-      ForwardedHeaders__KnownNetworks: ${FORWARDED_HEADERS_KNOWN_NETWORKS:-172.16.0.0/12}
+      # 受信任的反向代理网段：只有这些网段带来的 X-Forwarded-For 才认。
+      # 留空即可：应用会按**容器自身网段**兜底（compose 里 nginx 与 api 之间那段网桥），
+      # 考场局域网里的机器直连 API 端口时，自带的 X-Forwarded-For 不会被采信。
+      # 只有反向代理不在容器网段里时才要显式指定，多个网段用逗号隔开。
+      ForwardedHeaders__KnownNetworks: ${FORWARDED_HEADERS_KNOWN_NETWORKS:-}
       # 对象存储（题目附件）。附件桶是私有的，外部只通过短期签名 URL 访问。
       ObjectStorage__Enabled: ${OBJECT_STORAGE_ENABLED:-true}
       ObjectStorage__Endpoint: ${OBJECT_STORAGE_ENDPOINT:-minio:9000}

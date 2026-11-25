@@ -34,10 +34,11 @@ export EXAM_SESSION_ID=30
 export QUESTION_IDS='501,502,503,504,505'
 
 # 后端侧（不是 k6 的环境变量）：直连后端压测时，后端要信任压测客户端带来的
-# X-Forwarded-For，否则每个虚拟用户的出口 IP 会被算成同一个，
+# X-Forwarded-For，否则每个虚拟用户的来源地址会被算成同一个，
 # 登录按 IP 的限流会把整场压测限掉。走 nginx 时 nginx 就在受信任网段里，不用额外配。
+# 局域网部署时每台机器各有地址，所以压测也按「每个虚拟用户一个地址」建模。
 #   ForwardedHeaders__KnownNetworks__0=127.0.0.1/32
-#   ForwardedHeaders__KnownNetworks__1=172.16.0.0/12
+#   ForwardedHeaders__KnownNetworks__1=10.0.0.0/8
 
 # 3. 跑场景
 k6 run tests/Exam.LoadTests/login.js

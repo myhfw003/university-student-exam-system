@@ -2,6 +2,7 @@ using Exam.Application.Common.Interfaces;
 using Exam.Infrastructure.Audit;
 using Exam.Infrastructure.Messaging;
 using Exam.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -81,6 +82,11 @@ public sealed class ExamWebFactory : WebApplicationFactory<Program>
             services.RemoveAll<IObjectStorage>();
             services.AddSingleton<IObjectStorage, InMemoryObjectStorage>();
 
+            // 测试专用的「来源地址」注入：TestServer 没有真实的远端地址，
+            // 验证受信任代理的边界时需要模拟「请求来自某个地址」。
+            // 用启动过滤器插到管线最前面——转发头处理在它之后才对。
+            services.AddTransient<IStartupFilter, TestRemoteIpStartupFilter>();
+
             services.AddDbContext<AppDbContext>((sp, options) =>
                 options.UseNpgsql(_connectionString)
                     .UseSnakeCaseNamingConvention()
@@ -90,4 +96,30 @@ public sealed class ExamWebFactory : WebApplicationFactory<Program>
                         sp.GetRequiredService<OutboxSaveChangesInterceptor>()));
         });
     }
+}
+
+/// <summary>
+/// 把请求头 <c>X-Test-Remote-Ip</c> 指的地址设成连接的对端地址。
+/// <para>
+/// 只在功能测试宿主里注册：TestServer 默认没有对端地址，
+/// 而「来源地址不在受信任网段时转发头一律不认」这条边界必须有真实对端才验得了。
+/// </para>
+/// </summary>
+internal sealed class TestRemoteIpStartupFilter : IStartupFilter
+{
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+    {
+        app.Use(async (context, nextMiddleware) =>
+        {
+            if (context.Request.Headers.TryGetValue("X-Test-Remote-Ip", out var value)
+                && System.Net.IPAddress.TryParse(value.ToString(), out var address))
+            {
+                context.Connection.RemoteIpAddress = address;
+            }
+
+            await nextMiddleware();
+        });
+
+        next(app);
+    };
 }

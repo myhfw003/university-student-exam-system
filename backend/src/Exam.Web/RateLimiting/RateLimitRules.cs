@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
+using Exam.Web.Security;
 using Microsoft.AspNetCore.Routing;
 
 namespace Exam.Web.RateLimiting;
@@ -135,9 +136,15 @@ internal static class RateLimitRules
             : $"{prefix}:u:{userId}:{limit}";
     }
 
-    /// <summary>客户端来源 IP。经过反向代理转发头处理后，这里已经是真实客户端地址。</summary>
+    /// <summary>
+    /// 客户端来源 IP。经反向代理转发头处理后，这里已经是真实客户端地址。
+    /// <para>
+    /// 归一过 IPv4 映射的 IPv6：同一台机器经代理（干净的 IPv4）与直连
+    /// （映射地址）两条路进来时，必须落进同一个限流桶，否则额度凭空翻倍。
+    /// </para>
+    /// </summary>
     public static string ClientIp(HttpContext context) =>
-        context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        ClientAddress.Normalize(context.Connection.RemoteIpAddress) ?? "unknown";
 
     /// <summary>当前登录用户标识，未登录或令牌无效时为空。</summary>
     public static string? UserId(HttpContext context)
