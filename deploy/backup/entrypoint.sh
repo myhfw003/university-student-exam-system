@@ -54,15 +54,22 @@ until pg_isready -h "${PGHOST:-postgres}" -p "${PGPORT:-5432}" -U "${PGUSER:-exa
     sleep 5
 done
 
-log "开始基线全量备份。"
-if pgbackrest --stanza="$STANZA" --type=full backup; then
-    save_success
+# 已经有备份时不再做基线全量：服务重启（崩溃自愈、宿主机重启）不该
+# 每次都多出一份全量。保留策略本来就只留 2 份全量，反复基线会把有用的那份挤掉。
+if pgbackrest --stanza="$STANZA" info 2>/dev/null | grep -q "full backup:"; then
+    log "仓库里已有备份，跳过基线全量。"
     publish_metrics 1
-    log "基线全量备份完成。"
 else
-    publish_metrics 0
-    log "基线全量备份失败。"
-    exit 1
+    log "开始基线全量备份。"
+    if pgbackrest --stanza="$STANZA" --type=full backup; then
+        save_success
+        publish_metrics 1
+        log "基线全量备份完成。"
+    else
+        publish_metrics 0
+        log "基线全量备份失败。"
+        exit 1
+    fi
 fi
 
 while true; do
