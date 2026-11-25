@@ -11,8 +11,8 @@
 | 数据库 | **宿主机 PostgreSQL 17.12**（按要求不用容器），数据目录 `/var/lib/postgresql/17/main` |
 | 应用 | 容器：`api` / `worker` / `web` / `nginx` / `redis` / `minio` |
 | 监控 | 容器（monitoring profile）：`prometheus` / `alertmanager` / `grafana` / `node-exporter` |
-| 入口 | `https://172.16.90.253/`（自签证书）；`http://<host>:8088/` 301 跳 HTTPS；API 直连 8080 |
-| 宿主机的 80 | **被既有 nginx 占用**（另有 pm2 起的 node 服务），本系统不碰 |
+| 入口 | `http://172.16.90.253/`（学生端）、`http://172.16.90.253/admin/`（管理端）、`/portal/`（门户） |
+| 宿主机的 80 | **被既有 nginx 占用** → 复用它做反向代理：配置在 `/etc/nginx/conf.d/exam.conf`，把请求转给 compose 的入口容器（宿主机的 8088） |
 
 数据库在宿主机上时，容器经 **docker0 网关 `172.17.0.1`** 连它；
 PG 侧 `listen_addresses='*'`，`pg_hba.conf` 放行 `172.16.0.0/12`（覆盖 docker0 与 compose 网段）。
@@ -39,6 +39,31 @@ PG 侧 `listen_addresses='*'`，`pg_hba.conf` 放行 `172.16.0.0/12`（覆盖 do
 6. **起栈**（**不起 postgres / migrate / db-grants / backup**）：
    `docker compose up -d --no-deps api worker web nginx redis minio`。
    顺序有讲究：**先 api 再 nginx**——nginx 的上游是 api 的服务名，api 不在 DNS 里它起不来。
+   入口容器的 8088 对宿主机开放，**宿主机原有的 nginx 反代到它**：
+   ```nginx
+   # /etc/nginx/conf.d/exam.conf
+   map $http_upgrade $connection_upgrade { default upgrade; "" close; }
+   server {
+       listen 80;
+       listen [::]:80;
+       server_name 172.16.90.253;
+       client_max_body_size 20m;
+       location / {
+           proxy_pass http://127.0.0.1:8088;
+           proxy_http_version 1.1;
+           proxy_set_header Host              $host;
+           proxy_set_header X-Real-IP         $remote_addr;
+           proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+           proxy_set_header Upgrade           $http_upgrade;
+           proxy_set_header Connection        $connection_upgrade;
+           proxy_read_timeout 600s;
+       }
+   }
+   ```
+   原有 nginx 里没有 `connection_upgrade` 这个 map，要在这个文件里自己定义
+   （conf.d 是在 http 上下文里加载的 ✓）。原有的 `npm.soft.com` / `sprite.soft.com`
+   两个 vhost 不受影响 ✓（它们按 server_name 匹配 ✓）。
 7. **种子管理员要用 `exam_owner` 连**（应用账号没有建角色的权限，种子会报 `aclcheck_error`）。
 8. **备份**：宿主机装 pgbackrest 2.60 + stanza + `archive_command`，定时任务用 systemd
    （复用 `deploy/backup/entrypoint.sh` 的逻辑）。仓库里那个 backup 容器这时**不适用**，
@@ -59,7 +84,8 @@ PG 侧 `listen_addresses='*'`，`pg_hba.conf` 放行 `172.16.0.0/12`（覆盖 do
 | 项 | 结果 |
 |---|---|
 | API | `exam-api-1` healthy，`/health/live` 200 |
-| 前端入口 | `https://172.16.90.253/` 与 `/admin/` 均 200；HTTP 8088 → 301 → HTTPS |
+| 前端入口 | `http://172.16.90.253/`、`/admin/`、`/portal/` 均 200；管理端页面标题「知行测评 · 管理端」 |
+| 刷新令牌 Cookie | `Set-Cookie` **不带 Secure**（纯 HTTP 部署，`JWT_REFRESH_COOKIE_SECURE=false`），浏览器才会保存 |
 | 管理员登录 | 200，拿到令牌 |
 | 系统设定的原始密码 | 已配置（`originalPasswordConfigured=true`） |
 | 来源地址：直连 API + 伪造 `X-Forwarded-For` | 审计记的是**真实对端 172.16.90.253**，伪造的 `203.0.113.88` 被忽略 ✓ |
@@ -69,10 +95,12 @@ PG 侧 `listen_addresses='*'`，`pg_hba.conf` 放行 `172.16.0.0/12`（覆盖 do
 
 ## 4. 已知限制
 
-1. **TLS 是自签证书**（SAN 含 172.16.90.253）：浏览器会告警。
-   正式公测应换成有 CA 签发的证书或域名证书。
-2. **宿主机 80 被既有 nginx 占用**：本系统入口在 443 / 8088。
-   要让用户只记一个地址，得在那套既有 nginx 上加一条反代。
+1. **入口是纯 HTTP**（按部署要求走 80 端口复用原有 nginx）：登录口令在局域网里是明文传输的。
+   要加密就上 TLS——compose 的 TLS 覆盖层已经备好（`deploy/docker-compose.tls.yml` +
+   `deploy/certs/`），并把原有 nginx 改成 301 到 https。
+2. **刷新令牌的 Cookie 不带 Secure**（`JWT_REFRESH_COOKIE_SECURE=false`）：
+   浏览器只在 HTTPS 下保存 Secure Cookie，纯 HTTP 下不关掉它，刷新令牌会丢，
+   用户每 15 分钟被登出一次。改成 HTTPS 后要把它调回 true。
 3. **仓库里的 backup 容器没有运行**（数据库在宿主机上，它不适用）；
    备份由宿主机的 `exam-backup.service` 做。
 4. **目标机容器网络无 DNS**：那边不能再构建镜像，容器里也访问不了外网（应用本身不需要）。
