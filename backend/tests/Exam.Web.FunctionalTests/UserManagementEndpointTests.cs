@@ -519,6 +519,111 @@ public sealed class UserManagementEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task 名单导入_初始密码列就是该账号的登录密码()
+    {
+        var adminToken = await LoginAsync(AdminUsername, AdminPassword);
+        UseToken(adminToken);
+
+        await SeedOriginalPasswordAsync(OriginalPassword);
+
+        var csv = string.Join("\n", [
+            "账号,姓名,学院,专业,班级,邮箱,角色,初始密码",
+            "20232001,钱九,计算机学院,计算机科学与技术,计科2303班,qianjiu@example.edu,,Init9pass",
+        ]);
+
+        var response = await PostCsvAsync("/api/v1/users/import", csv, "名单.csv");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("created").GetInt32().ShouldBe(1);
+
+        // 「初始密码」只是注册时给的那个密码的叫法：它就是这个账号的登录密码，
+        // 散列存进这个账号自己的密码字段。
+        var login = await _client.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new { username = "20232001", password = "Init9pass" });
+        login.StatusCode.ShouldBe(HttpStatusCode.OK, await login.Content.ReadAsStringAsync());
+
+        // 教师逐个给定的密码不是全系统共用的那个值，不强制改密。
+        var loginBody = await login.Content.ReadFromJsonAsync<JsonElement>();
+        loginBody.GetProperty("user").GetProperty("mustChangePassword").GetBoolean().ShouldBeFalse();
+
+        // 这一列不是白填的：系统设定的原始密码对这个账号不生效。
+        var originalLogin = await _client.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new { username = "20232001", password = OriginalPassword });
+        originalLogin.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+    }
+
+    [Fact]
+    public async Task 名单导入_没给初始密码时用系统原始密码且首次登录须改密()
+    {
+        var adminToken = await LoginAsync(AdminUsername, AdminPassword);
+        UseToken(adminToken);
+
+        await SeedOriginalPasswordAsync(OriginalPassword);
+
+        var csv = string.Join("\n", [
+            "账号,姓名,学院,专业,班级,邮箱,角色,初始密码",
+            "20234001,许十二,计算机学院,计算机科学与技术,计科2305班,xushier@example.edu,,",
+        ]);
+
+        var response = await PostCsvAsync("/api/v1/users/import", csv, "名单.csv");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+
+        // 那一列留空 → 落到系统设定的原始密码（全系统共用一个值）。
+        var login = await _client.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new { username = "20234001", password = OriginalPassword });
+        login.StatusCode.ShouldBe(HttpStatusCode.OK, await login.Content.ReadAsStringAsync());
+
+        // 共用的密码不能长期有效：首次登录必须改掉。
+        var loginBody = await login.Content.ReadFromJsonAsync<JsonElement>();
+        loginBody.GetProperty("user").GetProperty("mustChangePassword").GetBoolean().ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task 重置密码_回到系统原始密码而不是名单给的注册密码()
+    {
+        var adminToken = await LoginAsync(AdminUsername, AdminPassword);
+        UseToken(adminToken);
+
+        await SeedOriginalPasswordAsync(OriginalPassword);
+
+        var csv = string.Join("\n", [
+            "账号,姓名,学院,专业,班级,邮箱,角色,初始密码",
+            "20233001,孙十,计算机学院,计算机科学与技术,计科2304班,sunshi@example.edu,,Init9pass",
+        ]);
+
+        var imported = await PostCsvAsync("/api/v1/users/import", csv, "名单.csv");
+        imported.StatusCode.ShouldBe(HttpStatusCode.OK, await imported.Content.ReadAsStringAsync());
+
+        // 名单里的初始密码是这个账号的注册密码，能登录。
+        var login = await _client.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new { username = "20233001", password = "Init9pass" });
+        login.StatusCode.ShouldBe(HttpStatusCode.OK, await login.Content.ReadAsStringAsync());
+
+        var users = await _client.GetAsync("/api/v1/users?keyword=20233001");
+        var listBody = await users.Content.ReadFromJsonAsync<JsonElement>();
+        var userId = listBody.GetProperty("items")[0].GetProperty("id").GetInt64();
+
+        var reset = await _client.PostAsync($"/api/v1/users/{userId}/reset-password", null);
+        reset.StatusCode.ShouldBe(HttpStatusCode.OK, await reset.Content.ReadAsStringAsync());
+
+        // 重置回的是**系统设定的原始密码**，不是这个账号自己的注册密码。
+        var oldLogin = await _client.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new { username = "20233001", password = "Init9pass" });
+        oldLogin.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+
+        var newLogin = await _client.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new { username = "20233001", password = OriginalPassword });
+        newLogin.StatusCode.ShouldBe(HttpStatusCode.OK, await newLogin.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task 名单导入_没配原始密码时建不出账号并说明原因()
     {
         var adminToken = await LoginAsync(AdminUsername, AdminPassword);

@@ -276,8 +276,14 @@ public sealed class ImportUserRosterHandler : IRequestHandler<ImportUserRosterCo
         string? originalPasswordHash,
         CancellationToken cancellationToken)
     {
-        // 密码有两个来源：CSV 明文给的，或**系统设定的原始密码**。
+        // 密码有两个来源：CSV 的「初始密码」列明文给的，或**系统设定的原始密码**。
         // 没配原始密码就不建号——凭空生成的密码谁也拿不到，账号建出来也是空壳。
+        //
+        // 「初始密码」只是**注册时给的那个密码的叫法**，不是另一类凭据：
+        // CSV 给了就用它，它以散列形式存进**该账号自己的密码字段**，
+        // 就是这个账号的登录密码（教师按学生逐个定的，不是全系统共用的）。
+        // 落回系统设定的原始密码时是另一回事——那是全系统共用的一个值，
+        // 用户登录后必须改掉。
         var password = row.Password?.Trim();
         string passwordHash;
         var usedOriginalPassword = false;
@@ -314,6 +320,9 @@ public sealed class ImportUserRosterHandler : IRequestHandler<ImportUserRosterCo
 
         user.ChangeProfile(displayName, row.Email, null, now, _currentUser.UserId);
 
+        // 只有落到**系统设定的原始密码**时才置「必须改密」：那是全系统共用的
+        // 一个值，用户登录后必须改掉。CSV 里教师逐个给定的密码就是这个账号
+        // 自己的登录密码，不强制改。
         if (usedOriginalPassword)
         {
             user.MarkMustChangePassword(now, _currentUser.UserId);

@@ -14,6 +14,7 @@
     "./domain/attempt": "./src/domain/attempt.ts",
     "./domain/audit": "./src/domain/audit.ts",
     "./domain/paper": "./src/domain/paper.ts",
+    "./domain/password": "./src/domain/password.ts",
     "./domain/practice": "./src/domain/practice.ts",
     "./domain/settings": "./src/domain/settings.ts",
     "./domain/types": "./src/domain/types.ts",

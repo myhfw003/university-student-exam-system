@@ -106,7 +106,7 @@ describe("管理端系统设置页", () => {
     await user.type(screen.getByLabelText("原始密码"), "short");
     await user.click(screen.getByRole("button", { name: "设置原始密码" }));
 
-    expect(lastToast()).toBe("原始密码至少 8 位");
+    expect(lastToast()).toBe("原始密码至少 8 位、需包含数字");
     expect(useMockSettings.getState().settings.originalPasswordConfigured).toBe(false);
   });
 });

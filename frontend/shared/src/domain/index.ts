@@ -5,6 +5,16 @@
 /* 内容域：题目 / 题库 / 试卷 / 练习 / 标签 / 学生等（design 03 §3–§4）。 */
 export * from "./types";
 
+/* 密码域：密码强度规则（与后端 PasswordPolicy 对齐）。 */
+export {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  describePasswordViolation,
+  describePasswordViolations,
+  passwordPolicyViolations,
+  type PasswordViolation,
+} from "./password";
+
 /* 审计域：动作码、中文名与业务分组（与后端写出的动作码一一对应）。 */
 export {
   AUDIT_ACTION_GROUPS,

@@ -51,6 +51,41 @@ describe("roster · 名单 CSV 解析", () => {
     expect(() => parseRosterCsv("姓名,邮箱\n张三,a@b.com")).toThrow(/账号/);
     expect(() => parseRosterCsv("账号,邮箱\n2023999003,a@b.com")).toThrow(/姓名/);
   });
+
+  it("「初始密码」列要认出来，不能被当成没有密码", () => {
+    // 2026-11-25 的真缺陷：后端词表里没有「初始密码」，那一列被静默丢弃，
+    // 教师给每个学生设的初始密码整列没进库。前端认、后端不认，才更要盯住。
+    const rows = parseRosterCsv(
+      "账号,姓名,初始密码\n2023999004,张三,Init9pass",
+    );
+    expect(rows[0]?.password).toBe("Init9pass");
+  });
+
+  it("认常见的列名别名", () => {
+    const rows = parseRosterCsv(
+      "帐号,名字,院系,班级,邮件,身份,初始密码\n2023999005,张三,计算机学院,软工2301,a@b.com,学生,Init9pass",
+    );
+    expect(rows[0]).toMatchObject({
+      account: "2023999005",
+      name: "张三",
+      faculty: "计算机学院",
+      className: "软工2301",
+      email: "a@b.com",
+      role: "学生",
+      password: "Init9pass",
+    });
+  });
+
+  it("username 与 name 两列不互相抢", () => {
+    // 「username」里含「name」：按包含关系匹配时它会被姓名列抢走。
+    const rows = parseRosterCsv("username,name\n2023999006,张三");
+    expect(rows[0]).toMatchObject({ account: "2023999006", name: "张三" });
+  });
+
+  it("表头里带修饰词时按包含关系匹配", () => {
+    const rows = parseRosterCsv("考生账号,考生姓名\n2023999007,张三");
+    expect(rows[0]).toMatchObject({ account: "2023999007", name: "张三" });
+  });
 });
 
 describe("roster · 逐行校验", () => {
@@ -69,6 +104,13 @@ describe("roster · 逐行校验", () => {
     expect(checked[2]?.error).toMatch(/重复/);
     expect(checked[3]?.error).toMatch(/角色无法识别/);
     expect(checked[4]?.error).toMatch(/初始密码/);
+  });
+
+  it("初始密码含账号时标红（规则与后端 PasswordPolicy 一致）", () => {
+    const checked = validateRosterRows([
+      row({ account: "2023999008", password: "Pass2023999008" }),
+    ]);
+    expect(checked[0]?.error).toMatch(/不能包含账号/);
   });
 
   it("重复判定不受该行其他错误影响：缺姓名的行也占位，后面的同名行仍算重复", () => {
@@ -185,5 +227,14 @@ describe("roster · 导入", () => {
     // 响应里没有密码：新账号的密码是系统设定的原始密码，由管理员另行告知。
     expect(Object.keys(result)).not.toContain("initialPasswords");
     expect(findUserByAccount("2023999001")?.mustChangePassword).toBe(true);
+  });
+
+  it("名单里给了初始密码的账号，那个密码就是它自己的登录密码，不强制改密", () => {
+    const checked = validateRosterRows([row({ account: "2023999007", password: "Init9pass" })]);
+    importRoster(checked);
+
+    // 与后端一致：教师逐个给定的密码不进「必须改密」，落回系统原始密码才要改。
+    // mock 里没有这个标记就是「不需要改」（字段本身可选）。
+    expect(findUserByAccount("2023999007")?.mustChangePassword).toBeFalsy();
   });
 });

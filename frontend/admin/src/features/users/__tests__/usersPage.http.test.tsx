@@ -182,8 +182,10 @@ describe("管理端用户页 · HTTP 模式", () => {
       expect(screen.getByText(/账号格式不正确/)).toBeInTheDocument();
     });
 
-    // 新账号的密码是系统设定的原始密码：页面只说明，不回显密码。
-    expect(screen.getByText(/新账号的初始密码是系统设定的原始密码/)).toBeInTheDocument();
+    // 新账号的登录密码：名单里填了「初始密码」列的用它，没填的用系统设定的原始密码。
+    // 页面只说明，不回显密码。
+    expect(screen.getByText(/新账号的登录密码/)).toBeInTheDocument();
+    expect(screen.getByText(/没填的用系统设定的原始密码/)).toBeInTheDocument();
   });
 
   it("重置密码对话框不再收密码：密码由系统设定的原始密码决定", async () => {

@@ -17,6 +17,10 @@
    ========================================================================== */
 
 import type { AppUser, UserRole } from "../domain/types";
+import {
+  describePasswordViolations,
+  passwordPolicyViolations,
+} from "../domain/password";
 import { parseCsv } from "../utils/csv";
 import {
   CLASS_TO_ORG,
@@ -86,17 +90,66 @@ export interface RosterImportResult {
 
 /* ------------------------------------------------------------------ 列解析 */
 
-/** 列名关键词 → 名单字段。 */
+/**
+ * 列名关键词 → 名单字段。**顺序即匹配优先级**。
+ *
+ * 与后端 `UserRosterCsvParser.Columns` 是**同一套词**，
+ * `scripts/check-roster-columns.py` 会比对两边，漂了 CI 就红。
+ */
 const COLUMN_KEYWORDS: Array<{ field: keyof RosterRow; keywords: string[] }> = [
-  { field: "account", keywords: ["账号", "帐号", "学号", "工号", "用户名", "account", "username"] },
+  { field: "account", keywords: ["账号", "帐号", "学号", "工号", "用户名", "登录账号", "account", "username"] },
   { field: "name", keywords: ["姓名", "名字", "name"] },
-  { field: "faculty", keywords: ["院系", "学院", "faculty", "college"] },
+  { field: "faculty", keywords: ["院系", "学院", "faculty", "college", "department"] },
   { field: "major", keywords: ["专业", "major"] },
   { field: "className", keywords: ["班级", "班", "class"] },
   { field: "email", keywords: ["邮箱", "邮件", "email"] },
   { field: "role", keywords: ["角色", "身份", "role"] },
   { field: "password", keywords: ["初始密码", "密码", "password"] },
 ];
+
+/**
+ * 按词表把表头映射到标准字段。
+ *
+ * 逐个字段找列：先找**完全相等**的表头，找不到再找**包含**关键词的表头；
+ * 一列被认领后不再给别的字段用。与后端 `UserRosterCsvParser.MapColumns` 一致。
+ */
+export function mapColumns(headers: string[]): Map<keyof RosterRow, number> {
+  const used = new Array<boolean>(headers.length).fill(false);
+  const mapping = new Map<keyof RosterRow, number>();
+
+  for (const { field, keywords } of COLUMN_KEYWORDS) {
+    let index = findHeader(headers, used, keywords, true);
+    if (index < 0) {
+      index = findHeader(headers, used, keywords, false);
+    }
+    if (index >= 0) {
+      mapping.set(field, index);
+      used[index] = true;
+    }
+  }
+
+  return mapping;
+}
+
+function findHeader(
+  headers: string[],
+  used: boolean[],
+  keywords: string[],
+  exact: boolean,
+): number {
+  for (let i = 0; i < headers.length; i += 1) {
+    if (used[i]) continue;
+    const header = headers[i]?.trim() ?? "";
+    if (!header) continue;
+    const lower = header.toLowerCase();
+    const hit = keywords.some((kw) => {
+      const key = kw.toLowerCase();
+      return exact ? lower === key : lower.includes(key);
+    });
+    if (hit) return i;
+  }
+  return -1;
+}
 
 /**
  * 解析名单 CSV 文本为行数组。
@@ -108,28 +161,22 @@ export function parseRosterCsv(text: string): RosterRow[] {
   const headers = (grid[0] ?? []).map((h) => h.trim());
   if (headers.length === 0) throw new Error("CSV 为空");
 
-  const indexOf = (field: keyof RosterRow): number => {
-    const keywords = COLUMN_KEYWORDS.find((c) => c.field === field)?.keywords ?? [];
-    return headers.findIndex((h) => {
-      const lower = h.toLowerCase();
-      return keywords.some((kw) => lower.includes(kw.toLowerCase()));
-    });
-  };
+  const columns = mapColumns(headers);
 
-  const accountCol = indexOf("account");
-  const nameCol = indexOf("name");
+  const accountCol = columns.get("account") ?? -1;
+  const nameCol = columns.get("name") ?? -1;
   if (accountCol < 0) throw new Error("CSV 缺少「账号」列");
   if (nameCol < 0) throw new Error("CSV 缺少「姓名」列");
 
   const cols = {
     account: accountCol,
     name: nameCol,
-    faculty: indexOf("faculty"),
-    major: indexOf("major"),
-    className: indexOf("className"),
-    email: indexOf("email"),
-    role: indexOf("role"),
-    password: indexOf("password"),
+    faculty: columns.get("faculty") ?? -1,
+    major: columns.get("major") ?? -1,
+    className: columns.get("className") ?? -1,
+    email: columns.get("email") ?? -1,
+    role: columns.get("role") ?? -1,
+    password: columns.get("password") ?? -1,
   };
 
   const cell = (row: string[], col: number): string => (col >= 0 ? (row[col] ?? "").trim() : "");
@@ -148,13 +195,15 @@ export function parseRosterCsv(text: string): RosterRow[] {
 
 /* ------------------------------------------------------------------ 校验 */
 
-/** 密码强度：至少 8 位且含字母与数字（PasswordPolicy）。 */
-function passwordProblem(password: string): string | null {
-  if (password.length < 8) return "初始密码至少 8 位";
-  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
-    return "初始密码需同时包含字母与数字";
-  }
-  return null;
+/**
+ * 密码强度：规则与后端 PasswordPolicy 一致（长度、字母 + 数字、不能包含账号）。
+ *
+ * @param account 该行的账号，用来检查「密码不能包含账号」
+ */
+function passwordProblem(password: string, account: string): string | null {
+  const violations = passwordPolicyViolations(password, account);
+  if (violations.length === 0) return null;
+  return describePasswordViolations(violations, "初始密码");
 }
 
 /**
@@ -190,7 +239,7 @@ export function validateRosterRows(rows: readonly RosterRow[]): RosterPreviewRow
       return { ...preview, error: `角色无法识别：${row.role}` };
     }
     if (row.password.trim()) {
-      const problem = passwordProblem(row.password.trim());
+      const problem = passwordProblem(row.password.trim(), account);
       if (problem) return { ...preview, error: problem };
     }
 
@@ -288,7 +337,9 @@ export function importRoster(
         email: row.email.trim(),
         roles,
         orgTags: tagIds,
-        mustChangePassword: true,
+        // 与后端一致：教师在名单里逐个给了密码的，那个密码就是该账号自己的
+        // 登录密码，不强制改密；没给（落回系统设定的原始密码）才必须改。
+        mustChangePassword: !row.password.trim(),
       });
       if (!result.ok) {
         failures.push({ rowNo: row.rowNo, account, reason: result.message ?? "账号创建失败" });

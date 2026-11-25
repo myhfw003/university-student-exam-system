@@ -22,6 +22,7 @@ import { refreshAccessToken } from "../api/authRefresh";
 import { clearTokens, getAccessToken, setTokens } from "../api/tokenStore";
 import { permissionsFor, type PermissionPoint } from "./permissions";
 import { writeAudit } from "../mock/adminOps";
+import { describePasswordViolations, passwordPolicyViolations } from "../domain/password";
 
 /**
  * mock 模式审计行的来源信息。沿用其它示例审计的同一套取值：
@@ -221,7 +222,13 @@ export const useAuth = create<AuthState>((set, get) => ({
   changePassword: async (current, next) => {
     if (!current || !next) return { ok: false, message: "请填写原密码与新密码" };
     if (current === next) return { ok: false, message: "新密码不能与原密码相同" };
-    if (next.length < 8) return { ok: false, message: "新密码至少 8 位" };
+    const violations = passwordPolicyViolations(next, get().user?.account ?? "");
+    if (violations.length > 0) {
+      return {
+        ok: false,
+        message: describePasswordViolations(violations, "新密码"),
+      };
+    }
     if (get().mode === "http") {
       try {
         const res = await httpClient.post<{

@@ -15,6 +15,7 @@ import {
   MISTAKE_RESOLUTION_POLICY_LABEL,
   type MistakeResolutionPolicy,
 } from "@exam/shared/domain/settings";
+import { describePasswordViolations, passwordPolicyViolations } from "@exam/shared/domain/password";
 import {
   removeOriginalPassword,
   saveOriginalPassword,
@@ -61,12 +62,10 @@ export function SettingsPage() {
   // 原始密码的强度要求与用户密码一致：长度、字母、数字。
   const handleSetOriginalPassword = async () => {
     const value = originalPassword;
-    if (value.length < 8) {
-      toast.error("原始密码至少 8 位");
-      return;
-    }
-    if (!/[A-Za-z]/.test(value) || !/[0-9]/.test(value)) {
-      toast.error("原始密码要同时包含字母与数字");
+    // 规则与后端 PasswordPolicy 一致（设置原始密码时没有账号，不查「不能包含账号」）。
+    const violations = passwordPolicyViolations(value);
+    if (violations.length > 0) {
+      toast.error(describePasswordViolations(violations, "原始密码"));
       return;
     }
 

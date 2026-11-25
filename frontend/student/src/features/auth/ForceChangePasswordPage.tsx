@@ -7,6 +7,7 @@
 
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Callout, Card, ChangePasswordForm, toast, useAuth } from "@exam/shared";
+import { PASSWORD_MIN_LENGTH } from "@exam/shared/domain/password";
 
 /** 强制改密页。 */
 export function ForceChangePasswordPage() {
@@ -54,7 +55,7 @@ export function ForceChangePasswordPage() {
           <Callout tone="info" title="改密之后">
             <ul className="plain-list">
               <li>当前账号：{user?.account ?? "—"}</li>
-              <li>新密码至少 8 位，且不能与原密码相同。</li>
+              <li>新密码至少 {PASSWORD_MIN_LENGTH} 位，且不能与原密码相同。</li>
               <li>改密后其它设备上的登录会立即失效。</li>
             </ul>
           </Callout>

@@ -10,8 +10,13 @@ namespace Exam.Infrastructure.Identity;
 /// <summary>
 /// 学生名单 CSV 解析器。
 /// <para>
-/// 列名同时接受中文与英文：账号 / 姓名 / 学院 / 专业 / 班级 / 邮箱 / 角色 / 密码，
-/// 以及 account / name / faculty / major / class / email / role / password。
+/// 列名同时接受中文与英文，词表见 <see cref="Columns"/>：账号 / 姓名 / 学院 / 专业 /
+/// 班级 / 邮箱 / 角色 / 初始密码，以及 account / name / faculty / major / class /
+/// email / role / password。
+/// </para>
+/// <para>
+/// 词表与前端 <c>frontend/shared/src/mock/roster.ts</c> 的 COLUMN_KEYWORDS 是**同一套词**，
+/// <c>scripts/check-roster-columns.py</c> 会比对两边，漂了 CI 就红。
 /// </para>
 /// <para>
 /// 编码自动识别：UTF-8 带 BOM、UTF-8 无 BOM、GB18030（国内 Excel 默认导出）。
@@ -27,32 +32,24 @@ public sealed class UserRosterCsvParser : IUserRosterParser
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
     }
 
-    /// <summary>列名别名 → 标准字段名。</summary>
-    private static readonly Dictionary<string, string> ColumnAliases = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["账号"] = "account",
-        ["学号"] = "account",
-        ["登录账号"] = "account",
-        ["account"] = "account",
-        ["username"] = "account",
-        ["姓名"] = "name",
-        ["名字"] = "name",
-        ["name"] = "name",
-        ["学院"] = "faculty",
-        ["院系"] = "faculty",
-        ["faculty"] = "faculty",
-        ["department"] = "faculty",
-        ["专业"] = "major",
-        ["major"] = "major",
-        ["班级"] = "class",
-        ["class"] = "class",
-        ["邮箱"] = "email",
-        ["email"] = "email",
-        ["角色"] = "role",
-        ["role"] = "role",
-        ["密码"] = "password",
-        ["password"] = "password",
-    };
+    /// <summary>
+    /// 列名词表：标准字段 → 可接受的表头关键词。**顺序即匹配优先级**。
+    /// <para>
+    /// 一列只会被认领一次，所以「username」不会被「name」抢走，「初始密码」也不会
+    /// 被「密码」抢走。与前端 roster.ts 的 COLUMN_KEYWORDS 保持逐字一致。
+    /// </para>
+    /// </summary>
+    internal static readonly (string Field, string[] Keywords)[] Columns =
+    [
+        ("account", ["账号", "帐号", "学号", "工号", "用户名", "登录账号", "account", "username"]),
+        ("name", ["姓名", "名字", "name"]),
+        ("faculty", ["院系", "学院", "faculty", "college", "department"]),
+        ("major", ["专业", "major"]),
+        ("className", ["班级", "班", "class"]),
+        ("email", ["邮箱", "邮件", "email"]),
+        ("role", ["角色", "身份", "role"]),
+        ("password", ["初始密码", "密码", "password"]),
+    ];
 
     public IReadOnlyList<UserRosterRow> Parse(byte[] content, string fileName)
     {
@@ -83,20 +80,7 @@ public sealed class UserRosterCsvParser : IUserRosterParser
         }
 
         var headers = csv.HeaderRecord ?? [];
-        var mapping = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        for (var i = 0; i < headers.Length; i++)
-        {
-            var header = headers[i]?.Trim();
-            if (string.IsNullOrEmpty(header))
-            {
-                continue;
-            }
-
-            if (ColumnAliases.TryGetValue(header, out var canonical))
-            {
-                mapping[canonical] = i;
-            }
-        }
+        var mapping = MapColumns(headers);
 
         if (!mapping.ContainsKey("account"))
         {
@@ -122,7 +106,7 @@ public sealed class UserRosterCsvParser : IUserRosterParser
                 Get(mapping, csv, "name"),
                 Get(mapping, csv, "faculty"),
                 Get(mapping, csv, "major"),
-                Get(mapping, csv, "class"),
+                Get(mapping, csv, "className"),
                 Get(mapping, csv, "email"),
                 Get(mapping, csv, "role"),
                 Get(mapping, csv, "password"));
@@ -137,6 +121,68 @@ public sealed class UserRosterCsvParser : IUserRosterParser
         }
 
         return rows;
+    }
+
+    /// <summary>
+    /// 按词表把表头映射到标准字段。
+    /// <para>
+    /// 逐个字段找列：先找**完全相等**的表头，找不到再找**包含**关键词的表头；
+    /// 一列被认领后不再给别的字段用。与前端 roster.ts 的算法一致。
+    /// </para>
+    /// </summary>
+    internal static Dictionary<string, int> MapColumns(IReadOnlyList<string?> headers)
+    {
+        var mapping = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var used = new bool[headers.Count];
+
+        foreach (var (field, keywords) in Columns)
+        {
+            var index = FindHeader(headers, used, keywords, exact: true);
+            if (index < 0)
+            {
+                index = FindHeader(headers, used, keywords, exact: false);
+            }
+
+            if (index >= 0)
+            {
+                mapping[field] = index;
+                used[index] = true;
+            }
+        }
+
+        return mapping;
+    }
+
+    private static int FindHeader(
+        IReadOnlyList<string?> headers,
+        bool[] used,
+        string[] keywords,
+        bool exact)
+    {
+        for (var i = 0; i < headers.Count; i++)
+        {
+            if (used[i])
+            {
+                continue;
+            }
+
+            var header = headers[i]?.Trim();
+            if (string.IsNullOrEmpty(header))
+            {
+                continue;
+            }
+
+            var hit = keywords.Any(keyword => exact
+                ? string.Equals(header, keyword, StringComparison.OrdinalIgnoreCase)
+                : header.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+
+            if (hit)
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     /// <summary>读一行。行结构损坏时跳过该行，不中断整批。</summary>
