@@ -112,6 +112,42 @@ docker compose exec postgres psql -U exam_owner -d exam \
    要么用宿主机自己的备份方案。**别以为容器里那个 backup 服务还在跑**——
    它没起来，备份就是没有。
 
+### 1.4 容器出不了网的机器：API 改用宿主网络
+
+有些网络环境里，容器**转发**出去的包收不到回包，于是「容器能连数据库、但连不上外网」。
+2026-11-26 在公测机（172.16.90.253）实测到的现场：
+
+- 容器发出的 SYN 正常出网（抓包可见，源地址被 NAT 成宿主机地址）；
+- 回包也到了宿主机（抓包可见 SYN-ACK），但 **TTL 只有 1**；
+- 转发时 TTL 减到 0，内核把包丢掉 —— 容器永远收不到回包；
+- 宿主机自己 `curl` 同一个地址却正常：**本地投递不减 TTL**，绕开了转发路径。
+
+怎么确认是不是这个原因（容器里直接测）：
+
+```bash
+# 容器里能不能解析、能不能连上外网
+docker exec exam-api-1 getent hosts api.minimaxi.com
+docker exec exam-api-1 bash -c 'timeout 5 bash -c "cat < /dev/null > /dev/tcp/101.132.45.96/443"'
+# 宿主机上抓包，看回包的 TTL（回包 ttl 1 或 ttl 0 就是它）
+tcpdump -ni ens192 -v 'host <外网地址> and tcp[tcpflags] & tcp-ack != 0'
+```
+
+**解法**：让 API 容器直接用宿主网络（`deploy/docker-compose.hostnet.yml`），
+出网流量由宿主机栈发出，与宿主机自己的 curl 完全同路，回包走本地投递：
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.hostnet.yml up -d \
+  api worker web nginx redis minio
+```
+
+覆盖层做了四件事：api 改 `network_mode: host`（端口不能再绑，清掉原文件的 ports）；
+api 改连发布到回环地址的 redis / minio（宿主网络里解析不到容器名）；
+redis / minio 发布到 `127.0.0.1`（外网访问不到）；入口 nginx 用 `extra_hosts`
+把 `api` 指到宿主机网关。
+
+**什么时候不需要它**：容器能正常出网的机器（本地开发、CI、云上常规 VPC）用默认的
+compose 文件即可，别多套一层网络。worker 不出网，保持默认网络即可。
+
 ---
 
 ## 2. 启动顺序与依赖

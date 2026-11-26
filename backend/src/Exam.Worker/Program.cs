@@ -77,7 +77,9 @@ if (args.Contains("--seed", StringComparer.OrdinalIgnoreCase))
     var adminPassword = builder.Configuration["Seed:AdminPassword"];
 
     var outcome = await seeder.SeedAsync(adminUsername, adminPassword);
-    Console.WriteLine(outcome == SeedOutcome.Seeded ? "种子数据写入完成。" : "种子数据已存在，跳过。");
+    Console.WriteLine(outcome == SeedOutcome.Seeded
+        ? "种子数据写入完成。"
+        : "种子数据已存在：权限目录、默认角色权限与预置标签已补齐，管理员账号未改动。");
     return;
 }
 

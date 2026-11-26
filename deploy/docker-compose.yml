@@ -345,8 +345,17 @@ services:
         condition: service_healthy
       web:
         condition: service_started
+    environment:
+      # 上游地址（见 nginx.conf 里的说明）。模板化是为了让「API 跑在宿主网络」
+      # 那种形态也能指对地址——那种形态下 Docker 的内嵌 DNS 不认 extra_hosts。
+      EXAM_API_UPSTREAM: "api:8080 resolve"
+      # 模板渲染的输出目录：默认是 /etc/nginx/conf.d（那里的文件会被 include
+      # 进 http 块），主配置必须落在 /etc/nginx/nginx.conf 才合法。
+      NGINX_ENVSUBST_OUTPUT_DIR: /etc/nginx
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # 挂成模板：nginx 镜像的入口脚本会用 envsubst 把 ${EXAM_API_UPSTREAM}
+      # 渲染成 /etc/nginx/nginx.conf 再启动。
+      - ./nginx/nginx.conf:/etc/nginx/templates/nginx.conf.template:ro
     ports:
       - "${WEB_PORT:-8088}:80"
 

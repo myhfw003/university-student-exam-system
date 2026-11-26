@@ -70,12 +70,55 @@ public sealed class DataSeeder
         var alreadySeeded = await _db.Set<SeedMarker>()
             .AnyAsync(x => x.Name == MarkerName, cancellationToken);
 
+        // 权限目录、默认角色权限与预置标签**每次都补齐**：
+        // 新增权限码后，老部署重跑种子就能拿到——否则新功能对所有人都是 403，
+        // 而现场只能靠手工改库才能解开（运维手册 §10.5 就是这么写的）。
+        var roles = await SyncPermissionsAsync(now, cancellationToken);
+        await SeedSystemTagsAsync(now, cancellationToken);
+
         if (alreadySeeded)
         {
-            _logger.LogInformation("种子数据已存在，跳过。");
+            _logger.LogInformation(
+                "种子数据已存在：权限目录、默认角色权限与预置标签已补齐，管理员账号未改动。");
             return SeedOutcome.AlreadySeeded;
         }
 
+        // 3. 管理员账号
+        var admin = await _db.Users.FirstOrDefaultAsync(x => x.Username == adminUsername, cancellationToken);
+        string effectivePassword = adminPassword ?? string.Empty;
+
+        if (admin is null)
+        {
+            if (string.IsNullOrWhiteSpace(effectivePassword))
+            {
+                effectivePassword = Pbkdf2PasswordVerifier.GenerateRandomPassword() + "aA1";
+            }
+
+            admin = User.Register(adminUsername, "系统管理员", _passwordVerifier.Hash(effectivePassword), now);
+            await _db.Users.AddAsync(admin, cancellationToken);
+            await _db.SaveChangesAsync(cancellationToken);
+
+            await _db.UserRoles.AddAsync(UserRole.Create(admin.Id, roles[Role.Codes.SystemAdmin].Id, null, now));
+            _logger.LogInformation("已创建管理员账号 {Username}，初始密码：{Password}", adminUsername, effectivePassword);
+        }
+
+        // 4. 标记
+        await _db.Set<SeedMarker>().AddAsync(SeedMarker.Create(MarkerName, now));
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return SeedOutcome.Seeded;
+    }
+    /// <summary>
+    /// 补齐权限目录、默认角色与它们的权限集合。
+    /// <para>
+    /// **每次种子都跑**：新增权限码后，老部署重跑种子就能拿到，不必手工改库。
+    /// 只补缺失的行，管理员在管理端做过的调整（自定义角色、手工增减的权限）不动。
+    /// </para>
+    /// </summary>
+    private async Task<Dictionary<string, Role>> SyncPermissionsAsync(
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
         // 1. 权限
         var permissions = new List<Permission>();
         foreach (var code in PermissionCatalog.All)
@@ -148,33 +191,8 @@ public sealed class DataSeeder
             }
         }
 
-        // 3. 系统预置标签（难度维度三档）。系统标签不可删除。
-        await SeedSystemTagsAsync(now, cancellationToken);
 
-        // 4. 管理员账号
-        var admin = await _db.Users.FirstOrDefaultAsync(x => x.Username == adminUsername, cancellationToken);
-        string effectivePassword = adminPassword ?? string.Empty;
-
-        if (admin is null)
-        {
-            if (string.IsNullOrWhiteSpace(effectivePassword))
-            {
-                effectivePassword = Pbkdf2PasswordVerifier.GenerateRandomPassword() + "aA1";
-            }
-
-            admin = User.Register(adminUsername, "系统管理员", _passwordVerifier.Hash(effectivePassword), now);
-            await _db.Users.AddAsync(admin, cancellationToken);
-            await _db.SaveChangesAsync(cancellationToken);
-
-            await _db.UserRoles.AddAsync(UserRole.Create(admin.Id, roles[Role.Codes.SystemAdmin].Id, null, now));
-            _logger.LogInformation("已创建管理员账号 {Username}，初始密码：{Password}", adminUsername, effectivePassword);
-        }
-
-        // 5. 标记
-        await _db.Set<SeedMarker>().AddAsync(SeedMarker.Create(MarkerName, now));
-        await _db.SaveChangesAsync(cancellationToken);
-
-        return SeedOutcome.Seeded;
+        return roles;
     }
 }
 

@@ -1,0 +1,54 @@
+# ==========================================================================
+#    覆盖层：API 容器改用宿主网络（容器出不了网的机器用这个）
+# --------------------------------------------------------------------------
+# 有些网络环境里，容器**转发**出去的包收不到回包。出网包走了宿主机的转发
+# 路径，回包却在转发那一段被内核丢掉。典型现场（2026-11-26 在公测机实测）：
+#
+#   - 容器发出的 SYN 正常出网（抓包能看到，源地址被 NAT 成宿主机地址）；
+#   - 回包也到了宿主机（抓包能看到 SYN-ACK），但 TTL 只有 1；
+#   - 转发时 TTL 减到 0，内核把包丢掉 —— 于是容器永远收不到回包；
+#   - 宿主机自己 curl 同一个地址却正常：本地投递不减 TTL，绕开了转发路径。
+#
+# 这个覆盖层让 **api 容器直接用宿主网络**：出网流量由宿主机栈发出，与宿主机
+# 自己的 curl 完全同路，回包走本地投递，不再经过转发路径。实测可通。
+#
+# 配套改动（都在这份覆盖层里）：
+#   - api 不能再绑端口（宿主网络下 Docker 会直接报错），把原文件的 ports 清掉；
+#   - 宿主网络里解析不到容器名，api 改连发布到回环地址的 redis / minio；
+#   - 入口 nginx 仍在容器网络里，用 extra_hosts 把 "api" 指到宿主机网关。
+#
+# 用法：
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.hostnet.yml up -d
+#
+# 什么时候**不需要**这个覆盖层：容器能正常出网的机器（本地开发、CI、
+# 云上常规 VPC）用默认的 compose 文件即可，别多套一层网络。
+# ==========================================================================
+services:
+  api:
+    network_mode: host
+    # 宿主网络下不能再绑端口，原文件里的 ports 要清掉。
+    ports: !reset []
+    environment:
+      # 宿主网络里解析不到容器名（redis / minio 都在容器网络里），
+      # 改走宿主机上发布出来的回环端口。
+      ConnectionStrings__Redis: "127.0.0.1:6379,password=${REDIS_PASSWORD},abortConnect=false"
+      ObjectStorage__Endpoint: "127.0.0.1:9000"
+
+  redis:
+    # 只发布到宿主机回环：外网访问不到，宿主网络里的 api 能连。
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  minio:
+    ports:
+      - "127.0.0.1:9000:9000"
+
+  nginx:
+    # 入口 nginx 还在容器网络里："api" 要指向宿主机的 api。
+    extra_hosts:
+      - "api:host-gateway"
+    environment:
+      # 宿主网络里的 api 地址固定（extra_hosts 指到宿主机），但 Docker 的
+      # 内嵌 DNS 不认 extra_hosts —— 带 resolve 会一直报「could not be
+      # resolved」，所以改成启动时一次性解析（读 /etc/hosts）。
+      EXAM_API_UPSTREAM: "api:8080"
