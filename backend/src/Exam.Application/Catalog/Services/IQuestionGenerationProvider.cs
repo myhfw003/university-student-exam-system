@@ -47,4 +47,16 @@ public interface IQuestionGenerationProvider
         AiGenerationRequest request,
         string model,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 流式生成：逐段吐出模型输出的文本片段。
+    /// <para>
+    /// 调用方把片段拼起来解析——凑齐一道题就能先落库、先给老师看，
+    /// 不用等整批出完（8 道题实测要 25–60 秒）。
+    /// </para>
+    /// </summary>
+    IAsyncEnumerable<string> GenerateStreamAsync(
+        AiGenerationRequest request,
+        string model,
+        CancellationToken cancellationToken);
 }

@@ -24,7 +24,7 @@ describe("导入模板（mock）", () => {
 
   it("第一行是表头，后面每行一道示例题", () => {
     const lines = importTemplateCsv()
-      .replace(/^﻿/, "")
+      .replace(/^\uFEFF/, "")
       .split("\r\n")
       .filter((line) => line.length > 0);
 

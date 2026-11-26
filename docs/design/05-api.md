@@ -356,7 +356,8 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 | 方法 | 路径 | 权限 | 说明 |
 |---|---|---|---|
 | GET | `/ai/providers` | `ai:generate` | 可用的供应商与可切换的模型 |
-| POST | `/ai/generations` | `ai:generate` | 生成试题 |
+| POST | `/ai/generations` | `ai:generate` | 生成试题（一次性返回整批结果） |
+| POST | `/ai/generations/stream` | `ai:generate` | 生成试题（SSE，题目一道道回来） |
 
 **`GET /ai/providers`**
 
@@ -423,6 +424,36 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 ```
 
 错误：未配置 API Key 返回 422（`27101`）；调用上游失败返回 502（`27102`）。
+
+**`POST /ai/generations/stream`**
+
+请求体与一次性接口完全相同。响应是 **SSE**（`text/event-stream`）：
+
+| 事件 | 何时发出 | 载荷 |
+|---|---|---|
+| `question` | 一道题**落库后**立刻 | `{index, succeeded, questionId, code, type, stem, score, errors}` |
+| `failed` | 一道题没过校验（没落库） | 同上，`succeeded=false`、`errors` 里有原因 |
+| `done` | 整批结束 | `{requested, succeeded, failed, provider, providerName, model}` |
+| `error` | 生成过程出错 | `{errorCode, message}` |
+
+```
+event: question
+data: {"index":1,"succeeded":true,"questionId":900,"code":"AI-20261126103000-01","type":"single","stem":"TCP 建立连接时采用三次握手，其主要目的是：","score":5,"errors":[]}
+
+event: done
+data: {"requested":3,"succeeded":2,"failed":1,"provider":"minimax","providerName":"MiniMax","model":"MiniMax-M2.7"}
+```
+
+要点：
+
+- **事件到达时题目已经在库里**。`question` 事件是在这道题落库之后才推的，
+  老师刷新页面不会看到「界面上有、库里没有」的题。
+- **流开始后改不了 HTTP 状态码**（响应头早已发出）。所以出错时推 `error` 事件，
+  而不是改状态码——前端据此提示，不会看着像「生成完了却一道题都没有」。
+- **校验与非流式接口同一套规则**：一次最多 10 道、出题要求最长 2000 字、
+  题型要认得、难度与标签要选。两个入口对同一个请求给出同一个结论。
+- 反向代理**必须关掉响应缓冲**（nginx：`proxy_buffering off`），
+  否则事件会被攒着一起到，「一道道出现」就没了。
 
 ---
 

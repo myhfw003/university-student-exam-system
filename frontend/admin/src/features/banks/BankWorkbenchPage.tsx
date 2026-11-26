@@ -15,6 +15,7 @@ import {
   Callout,
   ConfirmDialog,
   Field,
+  Meter,
   PageHead,
   SearchInput,
   Segmented,
@@ -31,13 +32,14 @@ import {
 } from "@exam/shared";
 import {
   adoptImportBatch,
-  generateAiQuestions,
+  generateAiQuestionsStream,
   isBackendEnabled,
   loadAiProviders,
   loadImportTemplate,
   updateImportMapping,
   uploadImportBatch,
   type AiGenerationResult,
+  type AiGenerationStreamItem,
   type AiProvider,
   type ImportBatchDetail,
   type ImportRow,
@@ -256,6 +258,10 @@ export function BankWorkbenchPage() {
   const [genModel, setGenModel] = useState("");
   /** 最近一次生成的逐题结果（HTTP 模式）。 */
   const [genResult, setGenResult] = useState<AiGenerationResult | null>(null);
+  /** 流式生成：一道道回来的题（边生成边显示）。 */
+  const [genItems, setGenItems] = useState<AiGenerationStreamItem[]>([]);
+  /** 流式生成的进度：目标几道、已经回来几道。 */
+  const [genProgress, setGenProgress] = useState<{ requested: number; done: number } | null>(null);
   const [genBusy, setGenBusy] = useState(false);
   /** 导入模板：HTTP 模式取服务端那份，mock 模式用本地同样的定义。 */
   const [template, setTemplate] = useState<ImportTemplate | null>(null);
@@ -546,27 +552,59 @@ export function BankWorkbenchPage() {
       }
 
       setGenBusy(true);
+      setGenItems([]);
+      setGenProgress({ requested: genCount, done: 0 });
+
+      const push = (item: AiGenerationStreamItem): void => {
+        setGenItems((prev) => [...prev, item]);
+        setGenProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev));
+      };
+
       try {
-        const result = await generateAiQuestions({
-          provider: genProvider,
-          model: genModel,
-          count: genCount,
-          type: genType,
-          difficultyTagId: genDifficultyTagId,
-          tagIds: genTags,
-          prompt: genPrompt,
-        });
-        setGenResult(result);
-        if (result.failed > 0) {
-          toast.error(`已生成 ${result.succeeded} 道候选题，${result.failed} 道未通过校验`);
-        } else {
-          toast.ok(`已生成 ${result.succeeded} 道候选题，请到候选题队列审核`);
-        }
-        candidateQuery.refresh();
+        // 流式：服务器每落一道题就推一条，题目一道道出现，
+        // 不用等整批出完（8 道题实测 25–60 秒）。
+        await generateAiQuestionsStream(
+          {
+            provider: genProvider,
+            model: genModel,
+            count: genCount,
+            type: genType,
+            difficultyTagId: genDifficultyTagId,
+            tagIds: genTags,
+            prompt: genPrompt,
+          },
+          {
+            onQuestion: push,
+            onFailed: push,
+            onError: (error) => {
+              // 流开始后 HTTP 状态码已经发出去了，错误只能靠这条事件：
+              // 不提示的话，老师会看着像「生成完了却一道题都没有」。
+              toast.error(error.message);
+            },
+            onDone: (summary) => {
+              setGenResult({
+                provider: summary.provider,
+                providerName: summary.providerName,
+                model: summary.model,
+                requested: summary.requested,
+                succeeded: summary.succeeded,
+                failed: summary.failed,
+                items: [],
+              });
+              if (summary.failed > 0) {
+                toast.error(`已生成 ${summary.succeeded} 道候选题，${summary.failed} 道未通过校验`);
+              } else {
+                toast.ok(`已生成 ${summary.succeeded} 道候选题，请到候选题队列审核`);
+              }
+              candidateQuery.refresh();
+            },
+          },
+        );
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "生成失败");
       } finally {
         setGenBusy(false);
+        setGenProgress(null);
       }
       return;
     }
@@ -1381,16 +1419,34 @@ export function BankWorkbenchPage() {
             </div>
           </section>
 
-          {produceMode === "gen" && remote && genResult ? (
+          {/* 生成中也要显示：等第一道题的那几秒（实测 5 秒以上），
+              没有进度条就是一片空白，用户不知道系统在干什么。 */}
+          {produceMode === "gen" && remote && (genBusy || genItems.length > 0 || genResult) ? (
             <section className="card" style={{ marginTop: "var(--sp-4)" }}>
               <div className="card-head">
                 <h2 className="card-title">生成结果</h2>
                 <span className="text-sm text-3">
-                  {genResult.providerName} · {genResult.model} · 成功 {genResult.succeeded} 道 / 未通过{" "}
-                  {genResult.failed} 道
+                  {genResult
+                    ? `${genResult.providerName} · ${genResult.model} · 成功 ${genResult.succeeded} 道 / 未通过 ${genResult.failed} 道`
+                    : genBusy
+                      ? "正在生成…"
+                      : "尚未生成"}
                 </span>
               </div>
               <div className="card-body">
+                {genBusy && genProgress ? (
+                  <div style={{ marginBottom: "var(--sp-3)" }}>
+                    <Callout tone="info" title="正在生成">
+                      模型正在出题，已回 {genProgress.done} 道（目标 {genProgress.requested} 道）。
+                      题目会一道道落进候选题队列，不用等整批出完。
+                    </Callout>
+                    <Meter
+                      value={genProgress.done}
+                      max={genProgress.requested}
+                      label="生成进度"
+                    />
+                  </div>
+                ) : null}
                 <div className="table-wrap">
                   <table className="table">
                     <thead>
@@ -1402,17 +1458,21 @@ export function BankWorkbenchPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {genResult.items.length === 0 ? (
+                      {genItems.length === 0 ? (
                         <tr>
                           <td colSpan={4}>
                             <div className="empty">
-                              <span className="empty-title">模型没有给出题目</span>
-                              <span className="empty-body">换一下出题要求再试一次。</span>
+                              <span className="empty-title">
+                                {genBusy ? "模型正在出题…" : "模型没有给出题目"}
+                              </span>
+                              <span className="empty-body">
+                                {genBusy ? "出好一道就会出现在这里。" : "换一下出题要求再试一次。"}
+                              </span>
                             </div>
                           </td>
                         </tr>
                       ) : (
-                        genResult.items.map((item) => (
+                        genItems.map((item) => (
                           <tr key={item.index}>
                             <td className="num">{item.index}</td>
                             <td>{item.stem ?? "—"}</td>

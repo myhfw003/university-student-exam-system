@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Exam.Application.Catalog.Services;
 using Exam.Domain.Catalog;
 
@@ -36,12 +37,41 @@ internal sealed class StubAiProvider : IQuestionGenerationProvider
     {
         LastRequest = request;
 
+        EnsureConfigured();
+
+        return Task.FromResult(new AiGenerationResult(Content, model, Name));
+    }
+
+    /// <summary>
+    /// 流式：把内容切成几段吐。
+    /// <para>
+    /// 刻意切成小段：这样「边到边解析、一道道落库」那条路径在测试里真的被跑到，
+    /// 而不是整段一次给完、恰好也能过。
+    /// </para>
+    /// </summary>
+    public async IAsyncEnumerable<string> GenerateStreamAsync(
+        AiGenerationRequest request,
+        string model,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        LastRequest = request;
+
+        EnsureConfigured();
+
+        const int chunkSize = 24;
+        for (var i = 0; i < Content.Length; i += chunkSize)
+        {
+            yield return Content.Substring(i, Math.Min(chunkSize, Content.Length - i));
+            await Task.Yield();
+        }
+    }
+
+    private void EnsureConfigured()
+    {
         if (!IsConfigured)
         {
             throw new Application.Common.Exceptions.AiProviderNotConfiguredException(
                 "测试模型尚未配置 API Key，无法生成试题。");
         }
-
-        return Task.FromResult(new AiGenerationResult(Content, model, Name));
     }
 }

@@ -91,6 +91,31 @@ public static class AiQuestionDraftParser
         return results;
     }
 
+    /// <summary>
+    /// 解析**一道**题的 JSON 对象。
+    /// <para>流式生成时用：每凑齐一道就单独喂进来。</para>
+    /// </summary>
+    public static AiQuestionDraftResult ParseQuestion(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return AiQuestionDraftResult.Failed("题目内容为空。");
+        }
+
+        JsonElement item;
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            item = document.RootElement.Clone();
+        }
+        catch (JsonException ex)
+        {
+            return AiQuestionDraftResult.Failed($"题目 JSON 无法解析：{ex.Message}");
+        }
+
+        return ParseOne(item, 1);
+    }
+
     private static AiQuestionDraftResult ParseOne(JsonElement item, int index)
     {
         if (item.ValueKind != JsonValueKind.Object)

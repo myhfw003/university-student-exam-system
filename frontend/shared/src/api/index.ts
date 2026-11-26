@@ -195,13 +195,20 @@ export {
   type ImportTemplateColumn,
 } from "./importApi";
 export {
+  AI_GENERATION_IDLE_TIMEOUT_MS,
   generateAiQuestions,
+  generateAiQuestionsStream,
   loadAiProviders,
+  parseSseBlock,
   toAiGenerationResult,
   toAiProvider,
   type AiClient,
   type AiGenerationItem,
   type AiGenerationResult,
+  type AiGenerationStreamError,
+  type AiGenerationStreamHandlers,
+  type AiGenerationStreamItem,
+  type AiGenerationStreamSummary,
   type AiProvider,
 } from "./aiApi";
 export { toQuestionSource } from "./questionSource";

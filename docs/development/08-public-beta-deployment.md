@@ -60,10 +60,29 @@ PG 侧 `listen_addresses='*'`，`pg_hba.conf` 放行 `172.16.0.0/12`（覆盖 do
            proxy_read_timeout 600s;
        }
    }
+
+   # AI 生成走 SSE：/api/ 这一段不能缓冲。
+   # 少了这三行，事件会被外层 nginx 攒着一起到 ——
+   # 界面上的「题目一道道出现」就没了，看着像接口坏了。
+   location /api/ {
+       proxy_pass http://127.0.0.1:8088;
+       proxy_http_version 1.1;
+       proxy_set_header Host              $host;
+       proxy_set_header X-Real-IP         $remote_addr;
+       proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-Proto $scheme;
+       proxy_buffering off;
+       proxy_cache off;
+       proxy_read_timeout 300s;
+       proxy_send_timeout 300s;
+   }
    ```
    原有 nginx 里没有 `connection_upgrade` 这个 map，要在这个文件里自己定义
    （conf.d 是在 http 上下文里加载的 ✓）。原有的 `npm.soft.com` / `sprite.soft.com`
    两个 vhost 不受影响 ✓（它们按 server_name 匹配 ✓）。
+
+   **两段反代都要关缓冲**：compose 栈自己的 nginx（`deploy/nginx/nginx.conf`）
+   与宿主机这套 nginx 各是一段代理，只关一段不解决问题。
 7. **种子管理员要用 `exam_owner` 连**（应用账号没有建角色的权限，种子会报 `aclcheck_error`）。
 8. **备份**：宿主机装 pgbackrest 2.60 + stanza + `archive_command`，定时任务用 systemd
    （复用 `deploy/backup/entrypoint.sh` 的逻辑）。仓库里那个 backup 容器这时**不适用**，
@@ -111,3 +130,6 @@ PG 侧 `listen_addresses='*'`，`pg_hba.conf` 放行 `172.16.0.0/12`（覆盖 do
    （Docker 的 NAT 会把来源改写成网桥网关），它们自带的 `X-Forwarded-For` 会被采信。
    **局域网里的真实机器不受影响**——直连 API 时来源就是它自己的地址（已实测）。
 6. 应用日志里会有一条 `libgssapi_krb5.so.2` 缺失的告警：非致命（认证回落口令），可忽略。
+7. **AI 生成走 SSE，两段反代都要 `proxy_buffering off`**：compose 栈的 nginx
+   （仓库里已配好）与宿主机的这套 nginx（手工配，见 §2.6）。
+   少配一段，事件就会被攒着一起到——接口看着是好的，但「一道道出现」的可见性没了。

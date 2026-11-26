@@ -141,6 +141,39 @@
         "x-required-permission": "ai:generate"
       }
     },
+    "/api/v1/ai/generations/stream": {
+      "post": {
+        "tags": [
+          "AiGenerations"
+        ],
+        "summary": "流式生成试题。\n\n服务器发的是 SSE：每道题**落库后立刻**推一条事件，界面上题目一道道出现，\n不用等整批出完（8 道题实测 25–60 秒）。最后一条是「完成」，带整批计数。",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateAiQuestionsRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateAiQuestionsRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateAiQuestionsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "x-required-permission": "ai:generate"
+      }
+    },
     "/api/v1/attempts": {
       "get": {
         "tags": [

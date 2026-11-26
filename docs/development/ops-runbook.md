@@ -246,6 +246,11 @@ compose 会把它注入成应用配置：`AiGeneration__Providers__minimax__ApiK
   - 入口 nginx 的 `/api/` 读超时 300 秒。
 
   改任何一处都要记得另外两处，否则又是一句「请求超时」。
+- **入口代理必须关掉响应缓冲**（nginx：`proxy_buffering off; proxy_cache off;`）。
+  AI 生成走 SSE，缓冲会把事件攒着一起到——接口看着是好的，
+  但「题目一道道出现」没了，界面上又变成一个转圈。
+  仓库里的 `deploy/nginx/nginx.conf` 已经配好；
+  **自己另写 nginx 反代时要记得加上**，这是最容易漏且最难一眼看出来的坑。
 - **Key 会出现在进程环境里**。不要把它打进镜像、不要写进 compose 文件，
   更不要贴进工单或聊天记录。
 

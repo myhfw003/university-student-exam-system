@@ -1,5 +1,7 @@
 /* ==========================================================================
-   AI 生成试题接口的适配
+   AI 生成试题接口的适配（非流式）
+   --------------------------------------------------------------------------
+   流式的消费在 aiStream.test.ts；这里只管一次性返回的那条路与 SSE 分块解析。
    --------------------------------------------------------------------------
    两件事要在这一层做对：
 
@@ -15,6 +17,7 @@ import {
   AI_GENERATION_TIMEOUT_MS,
   generateAiQuestions,
   loadAiProviders,
+  parseSseBlock,
   toAiGenerationResult,
   type AiClient,
 } from "../aiApi";
@@ -126,7 +129,8 @@ describe("aiApi · 生成试题", () => {
   });
 
   it("用长超时：模型调用要几十秒，默认的 15 秒会一直报「请求超时」", async () => {
-    const post = vi.fn(async (_path: string, _body?: unknown) => GENERATION);
+    // 第三个参数是请求配置（超时等）：httpClient.post(path, body, options)。
+    const post = vi.fn(async (_path: string, _body?: unknown, _options?: unknown) => GENERATION);
     const client = { get: vi.fn(), post } as unknown as AiClient;
 
     await generateAiQuestions(
@@ -156,5 +160,34 @@ describe("aiApi · 生成试题", () => {
     expect(result.items).toEqual([]);
     expect(result.succeeded).toBe(0);
     expect(result.failed).toBe(0);
+  });
+});
+
+describe("parseSseBlock · 解析一段 SSE", () => {
+  it("取出事件名与数据", () => {
+    const block = 'event: question\ndata: {"index":1,"succeeded":true}';
+
+    const parsed = parseSseBlock(block);
+
+    expect(parsed?.event).toBe("question");
+    expect(parsed?.data).toBe('{"index":1,"succeeded":true}');
+  });
+
+  it("多行 data 拼回一起", () => {
+    const block = 'event: done\ndata: {"a":1,\ndata: "b":2}';
+
+    const parsed = parseSseBlock(block);
+
+    expect(parsed?.data).toBe('{"a":1,\n"b":2}');
+  });
+
+  it("没有 data 的块不算事件", () => {
+    expect(parseSseBlock("event: ping")).toBeNull();
+  });
+
+  it("没有 event 时默认是 message", () => {
+    const parsed = parseSseBlock('data: {"x":1}');
+
+    expect(parsed?.event).toBe("message");
   });
 });

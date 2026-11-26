@@ -13,7 +13,10 @@
    ========================================================================== */
 
 import { ENDPOINTS } from "./endpoints";
-import { httpClient } from "./httpClient";
+import { HttpError, httpClient } from "./httpClient";
+import { normalizeProblem } from "./problemDetails";
+import { apiBaseUrl } from "./dataSource";
+import { getAccessToken } from "./tokenStore";
 
 /** AI 接口所需的客户端。 */
 export type AiClient = Pick<typeof httpClient, "get" | "post">;
@@ -159,4 +162,233 @@ export async function generateAiQuestions(
   );
 
   return toAiGenerationResult(res);
+}
+
+/* --------------------------------------------------------------- 流式生成 */
+
+/**
+ * 流式生成里的一道题。
+ * <para>
+ * 一道题**落库后**就推一条，所以界面上题目是一道道出现的，
+ * 不是等整批出完才一起亮出来。
+ * </para>
+ */
+export interface AiGenerationStreamItem {
+  /** 第几道（从 1 开始）。 */
+  index: number;
+  /** 是否已落库成候选题。 */
+  succeeded: boolean;
+  /** 题目主键（成功时）。 */
+  questionId: string | null;
+  /** 题号（成功时）。 */
+  code: string | null;
+  /** 题型（存储值）。 */
+  type: string | null;
+  /** 题干。 */
+  stem: string | null;
+  /** 分值。 */
+  score: number | null;
+  /** 未通过校验的原因。 */
+  errors: string[];
+}
+
+/** 整批结束的汇总。 */
+export interface AiGenerationStreamSummary {
+  requested: number;
+  succeeded: number;
+  failed: number;
+  provider: string;
+  providerName: string;
+  model: string;
+}
+
+/** 流式生成里的错误。 */
+export interface AiGenerationStreamError {
+  /** 领域错误码（稳定契约）。 */
+  errorCode: number;
+  /** 面向用户的中文说明。 */
+  message: string;
+}
+
+/** 流式生成的事件回调。 */
+export interface AiGenerationStreamHandlers {
+  /** 一道题落库了。 */
+  onQuestion?: (item: AiGenerationStreamItem) => void;
+  /** 一道题没过校验（没落库）。 */
+  onFailed?: (item: AiGenerationStreamItem) => void;
+  /** 整批结束。 */
+  onDone?: (summary: AiGenerationStreamSummary) => void;
+  /**
+   * 出错了。
+   * <para>
+   * 流开始之后 HTTP 状态码已经发出去了，改不了，
+   * 所以服务端把错误当作一条事件推过来——前端据此提示，
+   * 而不是让老师看着像「生成完了但一道题都没有」。
+   * </para>
+   */
+  onError?: (error: AiGenerationStreamError) => void;
+}
+
+/**
+ * 空闲超时：一段时间没收到任何数据就判定为卡住。
+ * <para>
+ * 用**空闲**超时而不是总超时：整批可能要一分多钟，
+ * 但只要还在吐字就不算卡住。
+ * </para>
+ */
+export const AI_GENERATION_IDLE_TIMEOUT_MS = 120_000;
+
+/**
+ * 解析一段 SSE 文本（<c>event: xxx\ndata: {...}</c>）。
+ * <para>导出出来是为了能单独测：流式解析最容易错在分隔与换行上。</para>
+ */
+export function parseSseBlock(raw: string): { event: string; data: string } | null {
+  let event = "message";
+  const dataLines: string[] = [];
+
+  for (const line of raw.split("\n")) {
+    const trimmed = line.trimEnd();
+    if (trimmed.startsWith("event:")) {
+      event = trimmed.slice("event:".length).trim();
+    } else if (trimmed.startsWith("data:")) {
+      dataLines.push(trimmed.slice("data:".length).replace(/^ /, ""));
+    }
+  }
+
+  if (dataLines.length === 0) {
+    return null;
+  }
+
+  return { event, data: dataLines.join("\n") };
+}
+
+function toStreamItem(payload: unknown): AiGenerationStreamItem {
+  const dto = (payload ?? {}) as Record<string, unknown>;
+  const num = (value: unknown): number | null =>
+    value === null || value === undefined || value === "" ? null : Number(value);
+
+  return {
+    index: Number(dto.index ?? 0),
+    succeeded: dto.succeeded === true,
+    questionId: dto.questionId === null || dto.questionId === undefined ? null : String(dto.questionId),
+    code: dto.code ? String(dto.code) : null,
+    type: dto.type ? String(dto.type) : null,
+    stem: dto.stem ? String(dto.stem) : null,
+    score: num(dto.score),
+    errors: Array.isArray(dto.errors) ? dto.errors.map((e) => String(e)) : [],
+  };
+}
+
+/**
+ * 流式生成试题。
+ * <para>
+ * 走 SSE：服务器每落一道题就推一条事件，这边收到就回调——
+ * 界面上的行是一道道长出来的。
+ * </para>
+ */
+export async function generateAiQuestionsStream(
+  input: {
+    provider: string;
+    model: string;
+    count: number;
+    type: string;
+    difficultyTagId: string;
+    tagIds: string[];
+    prompt: string;
+  },
+  handlers: AiGenerationStreamHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  const controller = new AbortController();
+  const forwardAbort = (): void => controller.abort();
+  signal?.addEventListener("abort", forwardAbort);
+
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  const armIdle = (): void => {
+    if (idleTimer !== undefined) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => controller.abort(), AI_GENERATION_IDLE_TIMEOUT_MS);
+  };
+  armIdle();
+
+  try {
+    const token = getAccessToken();
+    const response = await fetch(`${apiBaseUrl()}${ENDPOINTS.ai.generationsStream}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        provider: input.provider,
+        model: input.model,
+        count: input.count,
+        type: input.type,
+        difficultyTagId: Number(input.difficultyTagId),
+        tagIds: input.tagIds.map(Number),
+        prompt: input.prompt,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok || !response.body) {
+      const problem = await response.json().catch(() => null);
+      throw new HttpError(normalizeProblem(problem));
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      armIdle();
+      buffer += decoder.decode(value, { stream: true });
+
+      let separator = buffer.indexOf("\n\n");
+      while (separator >= 0) {
+        const block = buffer.slice(0, separator);
+        buffer = buffer.slice(separator + 2);
+        dispatchSseBlock(block, handlers);
+        separator = buffer.indexOf("\n\n");
+      }
+    }
+  } finally {
+    if (idleTimer !== undefined) clearTimeout(idleTimer);
+    signal?.removeEventListener("abort", forwardAbort);
+  }
+}
+
+function dispatchSseBlock(block: string, handlers: AiGenerationStreamHandlers): void {
+  const parsed = parseSseBlock(block);
+  if (!parsed) return;
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(parsed.data);
+  } catch {
+    return;
+  }
+
+  if (parsed.event === "done") {
+    handlers.onDone?.(payload as AiGenerationStreamSummary);
+    return;
+  }
+
+  if (parsed.event === "error") {
+    const dto = (payload ?? {}) as Record<string, unknown>;
+    handlers.onError?.({
+      errorCode: Number(dto.errorCode ?? 20500),
+      message: typeof dto.message === "string" ? dto.message : "生成中断，请重试。",
+    });
+    return;
+  }
+
+  const item = toStreamItem(payload);
+  if (parsed.event === "question") {
+    handlers.onQuestion?.(item);
+  } else if (parsed.event === "failed") {
+    handlers.onFailed?.(item);
+  }
 }

@@ -37,8 +37,10 @@ export const ENDPOINTS = {
   ai: {
     /** 可用的 AI 供应商与模型（切换模型靠它）。 */
     providers: "/ai/providers",
-    /** 生成试题。 */
+    /** 生成试题（一次性返回）。 */
     generations: "/ai/generations",
+    /** 流式生成：SSE，题目一道道回来。 */
+    generationsStream: "/ai/generations/stream",
   },
   delivery: {
     examSessions: "/exam-sessions",

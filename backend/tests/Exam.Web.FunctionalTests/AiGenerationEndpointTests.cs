@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using Exam.Domain.Catalog;
 using Exam.Domain.Identity;
@@ -228,6 +229,131 @@ public sealed class AiGenerationEndpointTests : IAsyncLifetime
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("errorCode").GetInt32().ShouldBe(27101);
+    }
+
+    [Fact]
+    public async Task 流式生成_题目一道道回来且事件到达时已落库()
+    {
+        await LoginAsync();
+
+        // 两道题：能看出「一道道来」，而不是等整批出完才一次性推。
+        _factory.AiProvider.Content = """
+            [{"stem":"TCP 建立连接时采用三次握手，其主要目的是：","type":"single","options":{"A":"提高可靠性","B":"确认双方的收发能力"},"answer":"B"},
+             {"stem":"TCP 可靠传输依赖滑动窗口机制，其作用是：","type":"single","options":{"A":"流量控制","B":"拥塞控制"},"answer":"A"}]
+            """;
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/ai/generations/stream")
+        {
+            Content = JsonContent.Create(new
+            {
+                provider = "stub",
+                model = "stub-model",
+                count = 2,
+                type = "single",
+                difficultyTagId = _difficultyTagId,
+                tagIds = new[] { _knowledgeTagId },
+                prompt = "围绕 TCP 出单选题",
+            }),
+        };
+
+        // 不等整个响应体：题目一道道来，事件就该一道道到。
+        var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        response.Content.Headers.ContentType!.MediaType.ShouldBe("text/event-stream");
+
+        var events = new List<(string Name, string Data)>();
+
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        using var reader = new StreamReader(stream);
+
+        var buffer = new StringBuilder();
+        string? line;
+        while ((line = await reader.ReadLineAsync()) != null)
+        {
+            if (line.Length > 0)
+            {
+                buffer.AppendLine(line);
+                continue;
+            }
+
+            if (buffer.Length == 0)
+            {
+                continue;
+            }
+
+            var block = buffer.ToString();
+            buffer.Clear();
+
+            var name = block.Split('\n')
+                .FirstOrDefault(l => l.StartsWith("event:", StringComparison.Ordinal))?
+                .Substring("event:".Length).Trim() ?? string.Empty;
+            var data = string.Join(
+                "\n",
+                block.Split('\n')
+                    .Where(l => l.StartsWith("data:", StringComparison.Ordinal))
+                    .Select(l => l.Substring("data:".Length).TrimStart()));
+
+            events.Add((name, data));
+
+            // 关键断言：**事件到达时这道题已经在库里**。
+            // 顺序反了的话，界面上会出现「已生成」但刷新就没了的题。
+            if (name == "question")
+            {
+                var item = JsonDocument.Parse(data).RootElement;
+                var questionId = item.GetProperty("questionId").GetInt64();
+
+                using var scope = _factory.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var saved = await db.Questions.FirstOrDefaultAsync(q => q.Id == questionId);
+
+                saved.ShouldNotBeNull($"事件里的题目 {questionId} 还没落库。");
+                saved!.Source.ShouldBe(QuestionSource.Generated);
+            }
+        }
+
+        // 两道题各一条事件，最后一条是「完成」。
+        events.Count.ShouldBe(3);
+        events[0].Name.ShouldBe("question");
+        events[1].Name.ShouldBe("question");
+        events[2].Name.ShouldBe("done");
+
+        var done = JsonDocument.Parse(events[2].Data).RootElement;
+        done.GetProperty("requested").GetInt32().ShouldBe(2);
+        done.GetProperty("succeeded").GetInt32().ShouldBe(2);
+        done.GetProperty("failed").GetInt32().ShouldBe(0);
+
+        // 两道题都进了候选题队列。
+        var questions = await _client.GetAsync("/api/v1/questions?status=draft");
+        var list = await questions.Content.ReadFromJsonAsync<JsonElement>();
+        list.GetProperty("total").GetInt32().ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task 流式生成_参数不合法按同一套规则拒绝()
+    {
+        await LoginAsync();
+
+        _factory.AiProvider.Content = "[]";
+
+        // 一次最多 10 道：超了直接拒，不去调模型。
+        var response = await _client.PostAsJsonAsync(
+            "/api/v1/ai/generations/stream",
+            new
+            {
+                provider = "stub",
+                model = "stub-model",
+                count = 50,
+                type = "single",
+                difficultyTagId = _difficultyTagId,
+                tagIds = Array.Empty<long>(),
+                prompt = "出题",
+            });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("errorCode").GetInt32().ShouldBe(20001);
+        body.GetProperty("errors").GetProperty("Count")[0].GetString()!.ShouldContain("10");
     }
 
     private async Task LoginAsync()
