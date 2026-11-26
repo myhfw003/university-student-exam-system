@@ -12,6 +12,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import {
+  AI_GENERATION_TIMEOUT_MS,
   generateAiQuestions,
   loadAiProviders,
   toAiGenerationResult,
@@ -122,6 +123,31 @@ describe("aiApi · 生成试题", () => {
     expect(result.items[0]!.succeeded).toBe(true);
     expect(result.items[1]!.succeeded).toBe(false);
     expect(result.items[1]!.errors[0]).toContain("正确选项");
+  });
+
+  it("用长超时：模型调用要几十秒，默认的 15 秒会一直报「请求超时」", async () => {
+    const post = vi.fn(async (_path: string, _body?: unknown) => GENERATION);
+    const client = { get: vi.fn(), post } as unknown as AiClient;
+
+    await generateAiQuestions(
+      {
+        provider: "minimax",
+        model: "MiniMax-M3",
+        count: 8,
+        type: "single",
+        difficultyTagId: "12",
+        tagIds: ["34"],
+        prompt: "围绕 TCP 三次握手出单选题",
+      },
+      client,
+    );
+
+    const options = post.mock.calls[0]![2] as { timeoutMs?: number } | undefined;
+
+    // 实测 8 道题要 25–60 秒，15 秒的默认超时会让界面次次报「请求超时」，
+    // 而服务端其实已经把题出好了。
+    expect(options?.timeoutMs).toBe(AI_GENERATION_TIMEOUT_MS);
+    expect(options!.timeoutMs!).toBeGreaterThan(60_000);
   });
 
   it("空结果也不会崩", () => {

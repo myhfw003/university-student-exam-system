@@ -171,7 +171,13 @@ public static class DependencyInjection
 
         var aiOptions = aiSection.Get<AiGenerationOptions>() ?? new AiGenerationOptions();
 
-        services.AddHttpClient(OpenAiCompatibleGenerationProvider.HttpClientName)
+        services.AddHttpClient(OpenAiCompatibleGenerationProvider.HttpClientName, client =>
+            {
+                // 超时由供应商配置说了算（AiProviderOptions.TimeoutSeconds，
+                // 默认 300 秒）：模型出题要几十秒，HttpClient 默认的 100 秒
+                // 会先一步掐断，把「还在算」报成失败。
+                client.Timeout = Timeout.InfiniteTimeSpan;
+            })
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
             {
                 PooledConnectionLifetime = TimeSpan.FromMinutes(5),

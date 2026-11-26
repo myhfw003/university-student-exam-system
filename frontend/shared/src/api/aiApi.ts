@@ -18,6 +18,20 @@ import { httpClient } from "./httpClient";
 /** AI 接口所需的客户端。 */
 export type AiClient = Pick<typeof httpClient, "get" | "post">;
 
+/**
+ * AI 生成的请求超时。
+ *
+ * <para>
+ * 默认的 15s 是给普通接口用的，**模型调用远不止**：实测 8 道题
+ * MiniMax-M2.7 要 25 秒、M3 要 60 秒。沿用默认超时的话，
+ * 界面每次都只会报「请求超时，请稍后重试」，而服务端其实已经把题出好了。
+ * </para>
+ *
+ * <para>比服务端的超时（300 秒）留一点余量：宁可让服务端自己的错误
+ * （502 / 27102）先到，也不要被浏览器先掐断。</para>
+ */
+export const AI_GENERATION_TIMEOUT_MS = 330_000;
+
 type Dto = Record<string, unknown>;
 
 function str(value: unknown, fallback = ""): string {
@@ -127,17 +141,22 @@ export async function generateAiQuestions(
   },
   client: AiClient = httpClient,
 ): Promise<AiGenerationResult> {
-  const res = await client.post<Dto>(ENDPOINTS.ai.generations, {
-    provider: input.provider,
-    model: input.model,
-    count: input.count,
-    type: input.type,
-    // 标签主键是数字：前端内部一律用字符串 ID，发出前转成数字
-    // （与题目接口同一口径；发字符串服务端绑定不上，会直接 400）。
-    difficultyTagId: Number(input.difficultyTagId),
-    tagIds: input.tagIds.map(Number),
-    prompt: input.prompt,
-  });
+  const res = await client.post<Dto>(
+    ENDPOINTS.ai.generations,
+    {
+      provider: input.provider,
+      model: input.model,
+      count: input.count,
+      type: input.type,
+      // 标签主键是数字：前端内部一律用字符串 ID，发出前转成数字
+      // （与题目接口同一口径；发字符串服务端绑定不上，会直接 400）。
+      difficultyTagId: Number(input.difficultyTagId),
+      tagIds: input.tagIds.map(Number),
+      prompt: input.prompt,
+    },
+    // 模型调用要几十秒，不能用默认的 15 秒超时。
+    { timeoutMs: AI_GENERATION_TIMEOUT_MS },
+  );
 
   return toAiGenerationResult(res);
 }

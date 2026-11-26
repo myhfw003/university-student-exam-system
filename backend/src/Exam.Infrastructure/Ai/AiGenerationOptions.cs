@@ -46,8 +46,14 @@ public sealed class AiProviderOptions
     /// <summary>单次生成的最大 token 数。</summary>
     public int MaxTokens { get; set; } = 8192;
 
-    /// <summary>调用超时（秒）。</summary>
-    public int TimeoutSeconds { get; set; } = 180;
+    /// <summary>
+    /// 调用超时（秒）。
+    /// <para>
+    /// 实测 8 道题要 25–60 秒，慢模型更久；给足余量，
+    /// 否则用户会看到「生成失败」，而模型其实还在算。
+    /// </para>
+    /// </summary>
+    public int TimeoutSeconds { get; set; } = 300;
 
     /// <summary>是否要求模型输出 JSON 对象（response_format=json_object）。</summary>
     public bool JsonMode { get; set; } = true;
