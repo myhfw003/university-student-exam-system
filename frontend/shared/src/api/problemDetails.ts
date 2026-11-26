@@ -45,6 +45,8 @@ export const ERROR_MESSAGE_MAP: Readonly<Record<number, string>> = Object.freeze
   25101: "切屏次数超限",
   26001: "判分异常，请联系管理员并提供 traceId",
   27001: "导入行数据非法",
+  27101: "AI 服务未配置，请联系管理员在服务端配置 API Key",
+  27102: "调用 AI 服务失败，请稍后重试",
   28001: "标签层级成环",
   28002: "标签被引用，不可删除",
 });

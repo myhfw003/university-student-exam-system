@@ -1659,6 +1659,22 @@ const GENERATION_SAMPLE: GenerationSample[] = [
   },
 ];
 
+/**
+ * mock 模式下的「AI 供应商」。
+ *
+ * mock 模式不调真实大模型，生成的是固定样例。这里给出与真实模式**同形**的
+ * 供应商与模型，界面上的选择器在两种模式里长得一样。
+ */
+export const MOCK_AI_PROVIDERS = [
+  {
+    name: "mock",
+    displayName: "示例数据",
+    configured: true,
+    defaultModel: "mock-sample",
+    models: ["mock-sample"],
+  },
+];
+
 /** 创建生成批次。 */
 export function createGeneration(input: {
   count?: number;

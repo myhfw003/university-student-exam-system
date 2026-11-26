@@ -8,8 +8,14 @@ public sealed record ParsedOption(string Key, string Text, bool IsCorrect);
 /// <summary>导入解析出的评分要点。</summary>
 public sealed record ParsedKeypoint(string Text, IReadOnlyList<string> Keywords);
 
-/// <summary>导入解析出的评分步骤。</summary>
-public sealed record ParsedStep(string Code, string Prompt, decimal Score);
+/// <summary>
+/// 导入解析出的评分步骤。
+/// <para>
+/// 参考答案是第四段（可选）：「编码|提示|分值|参考答案」。
+/// 没有它时题目能导入，但发布校验过不去（每个步骤都要有参考答案）。
+/// </para>
+/// </summary>
+public sealed record ParsedStep(string Code, string Prompt, decimal Score, string? ReferenceAnswer = null);
 
 /// <summary>导入解析出的一道题（尚未落库）。</summary>
 public sealed record ParsedQuestion(
@@ -59,9 +65,11 @@ public static class QuestionImportParser
             ["code"] = "code",
             ["题型"] = "type",
             ["类型"] = "type",
+            ["题目类型"] = "type",
             ["type"] = "type",
             ["题干"] = "stem",
             ["题目"] = "stem",
+            ["试题题干"] = "stem",
             ["stem"] = "stem",
             ["选项"] = "options",
             ["options"] = "options",
@@ -69,6 +77,7 @@ public static class QuestionImportParser
             ["正确答案"] = "answer",
             ["answer"] = "answer",
             ["步骤"] = "steps",
+            ["评分步骤"] = "steps",
             ["steps"] = "steps",
             ["解析"] = "analysis",
             ["答案解析"] = "analysis",
@@ -81,6 +90,7 @@ public static class QuestionImportParser
             ["难度"] = "difficulty",
             ["difficulty"] = "difficulty",
             ["知识点"] = "tags",
+            ["知识点标签"] = "tags",
             ["标签"] = "tags",
             ["tags"] = "tags",
         };
@@ -183,6 +193,23 @@ public static class QuestionImportParser
                 break;
         }
 
+        // 综合题的分值必须等于步骤分值之和（发布校验就是这么判的）：
+        // 没填分值时按步骤之和算，填了却不一致算这一行的错。
+        if (type == QuestionType.Comprehensive && steps.Count > 0)
+        {
+            var stepTotal = steps.Sum(s => s.Score);
+            if (string.IsNullOrEmpty(scoreText))
+            {
+                score = stepTotal;
+            }
+            else if (score != stepTotal)
+            {
+                errors.Add(new ImportRowError(
+                    "score",
+                    $"综合题的分值（{score}）必须等于步骤分值之和（{stepTotal}）。"));
+            }
+        }
+
         var tagNames = (tagsText ?? string.Empty)
             .Split(['，', ',', '、', '；', ';', '|'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(t => t.Length > 0)
@@ -269,6 +296,7 @@ public static class QuestionImportParser
 
     /// <summary>
     /// 解析评分步骤。格式：<c>s1|提示|分值</c>，多步用换行分隔。
+    /// <para>第四段是参考答案（可选）：<c>s1|提示|分值|参考答案</c>。</para>
     /// </summary>
     public static IReadOnlyList<ParsedStep> ParseSteps(
         string? text,
@@ -299,7 +327,13 @@ public static class QuestionImportParser
                 continue;
             }
 
-            steps.Add(new ParsedStep(parts[0], parts[1], score));
+            // 第四段是参考答案（可选）：没有它题目能导入，但发布校验过不去
+            // （每个评分步骤都要有参考答案），老师得再手工补一遍。
+            var reference = parts.Length >= 4 && !string.IsNullOrWhiteSpace(parts[3])
+                ? parts[3].Trim()
+                : null;
+
+            steps.Add(new ParsedStep(parts[0], parts[1], score, reference));
             index++;
         }
 

@@ -25,12 +25,20 @@ export const ENDPOINTS = {
     tags: "/tags",
     /** 试题导入批次：上传 → 调列映射 → 采纳。 */
     imports: "/imports",
+    /** 导入模板：列说明 + 可下载的 CSV。 */
+    importTemplate: "/imports/template",
     banks: "/question-banks",
     questions: "/questions",
     papers: "/papers",
     /** 卷型模板：套用与另存。 */
     paperTemplates: "/paper-templates",
     questionFilters: "/questions/filters",
+  },
+  ai: {
+    /** 可用的 AI 供应商与模型（切换模型靠它）。 */
+    providers: "/ai/providers",
+    /** 生成试题。 */
+    generations: "/ai/generations",
   },
   delivery: {
     examSessions: "/exam-sessions",

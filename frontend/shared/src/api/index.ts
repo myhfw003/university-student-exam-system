@@ -181,6 +181,7 @@ export {
   adoptImportBatch,
   loadImportBatches,
   loadImportBatch,
+  loadImportTemplate,
   toImportBatch,
   toImportBatchDetail,
   updateImportMapping,
@@ -190,7 +191,20 @@ export {
   type ImportBatchDetail,
   type ImportClient,
   type ImportRow,
+  type ImportTemplate,
+  type ImportTemplateColumn,
 } from "./importApi";
+export {
+  generateAiQuestions,
+  loadAiProviders,
+  toAiGenerationResult,
+  toAiProvider,
+  type AiClient,
+  type AiGenerationItem,
+  type AiGenerationResult,
+  type AiProvider,
+} from "./aiApi";
+export { toQuestionSource } from "./questionSource";
 export {
   createAdminTag,
   deleteAdminTag,

@@ -28,6 +28,7 @@
 | [ADR-020](0020-tag-tree-cross-dimension.md) | 标签树允许内容维度之间跨维度挂接 | 已接受 |
 | [ADR-021](0021-shared-original-password-for-reset.md) | 重置密码统一置为系统设定的原始密码，响应里不带密码 | 已接受 |
 | [ADR-022](0022-registration-password-vs-system-original.md) | 注册时给的密码就是该账号的登录密码；重置一律回系统原始密码 | 已接受 |
+| [ADR-023](0023-ai-generation-real-model.md) | AI 生成试题接入真实大模型；产出走与导入相同的校验 | 已接受 |
 
 ## 格式约定
 

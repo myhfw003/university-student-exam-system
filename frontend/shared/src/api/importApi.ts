@@ -96,6 +96,51 @@ export function toImportBatch(dto: Dto): ImportBatch {
   };
 }
 
+/** 导入模板里的一列。 */
+export interface ImportTemplateColumn {
+  /** 字段名（与服务端一致）。 */
+  field: string;
+  /** 表头文字。 */
+  header: string;
+  /** 是否必填。 */
+  required: boolean;
+  /** 这一列该写什么。 */
+  description: string;
+  /** 示例值。 */
+  example: string;
+}
+
+/** 导入模板：列说明 + 可下载的 CSV。 */
+export interface ImportTemplate {
+  fileName: string;
+  /** CSV 文本（服务端已带 BOM）。 */
+  csv: string;
+  columns: ImportTemplateColumn[];
+  notes: string[];
+}
+
+/** 读取导入模板。 */
+export async function loadImportTemplate(
+  client: Pick<typeof httpClient, "get"> = httpClient,
+): Promise<ImportTemplate> {
+  const res = await client.get<Dto>(ENDPOINTS.catalog.importTemplate);
+
+  return {
+    fileName: str(res.fileName, "试题导入模板.csv"),
+    csv: str(res.csv),
+    columns: Array.isArray(res.columns)
+      ? (res.columns as Dto[]).map((c) => ({
+          field: str(c.field),
+          header: str(c.header),
+          required: c.required === true,
+          description: str(c.description),
+          example: str(c.example),
+        }))
+      : [],
+    notes: Array.isArray(res.notes) ? res.notes.map((n) => str(n)) : [],
+  };
+}
+
 /** 读取导入批次列表（看板上的「最近生产批次」）。 */
 export async function loadImportBatches(
   params: { page?: number | undefined; size?: number | undefined } = {},

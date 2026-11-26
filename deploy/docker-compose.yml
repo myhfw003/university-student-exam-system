@@ -206,6 +206,11 @@ services:
       ObjectStorage__SecretKey: ${MINIO_ROOT_PASSWORD:?必须设置 MINIO_ROOT_PASSWORD}
       ObjectStorage__Bucket: ${OBJECT_STORAGE_BUCKET:-exam-attachments}
       ObjectStorage__UseSsl: ${OBJECT_STORAGE_USE_SSL:-false}
+      # AI 生成试题（可选）。API Key **只从环境变量给**，不进版本库。
+      # 供应商与模型清单在 appsettings.json 的 AiGeneration:Providers 下，
+      # 换模型改配置即可，不用改代码。
+      AiGeneration__Enabled: ${AI_GENERATION_ENABLED:-true}
+      AiGeneration__Providers__minimax__ApiKey: ${AI_GENERATION_API_KEY:-}
     depends_on:
       db-grants:
         condition: service_completed_successfully

@@ -2,7 +2,7 @@ namespace Exam.Domain.SharedKernel.Exceptions;
 
 /// <summary>
 /// 领域错误码。码段划分：2xxxx 通用、21xxx 状态流转、22xxx 唯一性、23xxx 题目、
-/// 24xxx 试卷、25xxx 会话、26xxx 评分、27xxx 导入、28xxx 标签、29xxx 身份。
+/// 24xxx 试卷、25xxx 会话、26xxx 评分、27xxx 导入与 AI 生成、28xxx 标签、29xxx 身份。
 /// </summary>
 public static class ErrorCodes
 {
@@ -34,6 +34,8 @@ public static class ErrorCodes
     public const int ScoringFailed = 26001;
 
     public const int ImportRowInvalid = 27001;
+    public const int AiProviderNotConfigured = 27101;
+    public const int AiGenerationFailed = 27102;
 
     public const int TagCycleDetected = 28001;
     public const int TagReferenced = 28002;

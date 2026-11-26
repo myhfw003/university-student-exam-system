@@ -37,6 +37,110 @@
         "x-required-permission": "attempt:read-own"
       }
     },
+    "/api/v1/ai/providers": {
+      "get": {
+        "tags": [
+          "AiGenerations"
+        ],
+        "summary": "列出可用的供应商与可切换的模型。",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderListDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderListDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderListDto"
+                }
+              }
+            }
+          }
+        },
+        "x-required-permission": "ai:generate"
+      }
+    },
+    "/api/v1/ai/generations": {
+      "post": {
+        "tags": [
+          "AiGenerations"
+        ],
+        "summary": "生成试题。通过校验的题直接成为候选题（草稿），\n通不过的题逐条给出原因，不落库。",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateAiQuestionsRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateAiQuestionsRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateAiQuestionsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiGenerationResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiGenerationResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiGenerationResultDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway"
+          }
+        },
+        "x-required-permission": "ai:generate"
+      }
+    },
     "/api/v1/attempts": {
       "get": {
         "tags": [
@@ -2358,6 +2462,37 @@
           }
         },
         "x-required-permission": "exam:publish"
+      }
+    },
+    "/api/v1/imports/template": {
+      "get": {
+        "tags": [
+          "ImportBatches"
+        ],
+        "summary": "取回导入模板：列说明 + 可下载的 CSV。\n\n老师不知道文件该长什么样时，先看这个：哪些列必填、每列写什么、\n怎么分隔，模板里都写着；CSV 可直接下载填写。",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportTemplateDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportTemplateDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportTemplateDto"
+                }
+              }
+            }
+          }
+        },
+        "x-required-permission": "import:run"
       }
     },
     "/api/v1/imports": {
@@ -8552,6 +8687,117 @@
         },
         "additionalProperties": false
       },
+      "AiGenerationItemDto": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "succeeded": {
+            "type": "boolean"
+          },
+          "questionId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "stem": {
+            "type": "string",
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiGenerationResultDto": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "nullable": true
+          },
+          "providerName": {
+            "type": "string",
+            "nullable": true
+          },
+          "model": {
+            "type": "string",
+            "nullable": true
+          },
+          "requested": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "succeeded": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "failed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiGenerationItemDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiProviderDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "defaultModel": {
+            "type": "string",
+            "nullable": true
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiProviderListDto": {
+        "type": "object",
+        "properties": {
+          "providers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiProviderDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "AnswerPayload": {
         "type": "object",
         "properties": {
@@ -10936,6 +11182,45 @@
         },
         "additionalProperties": false
       },
+      "GenerateAiQuestionsRequest": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "nullable": true
+          },
+          "model": {
+            "type": "string",
+            "nullable": true
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "difficultyTagId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tagIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "nullable": true
+          },
+          "prompt": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "生成试题的请求。"
+      },
       "GenerateBlueprintResponse": {
         "type": "object",
         "properties": {
@@ -11346,6 +11631,59 @@
           },
           "reason": {
             "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ImportTemplateColumnDto": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "nullable": true
+          },
+          "header": {
+            "type": "string",
+            "nullable": true
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "example": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ImportTemplateDto": {
+        "type": "object",
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "nullable": true
+          },
+          "csv": {
+            "type": "string",
+            "nullable": true
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImportTemplateColumnDto"
+            },
+            "nullable": true
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
             "nullable": true
           }
         },
@@ -14984,6 +15322,9 @@
   "tags": [
     {
       "name": "Abilities"
+    },
+    {
+      "name": "AiGenerations"
     },
     {
       "name": "Attempts"

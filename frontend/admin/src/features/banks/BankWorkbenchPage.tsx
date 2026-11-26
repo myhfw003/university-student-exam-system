@@ -7,7 +7,7 @@
      内容生产  —— CSV 导入与 AI 生成（均产出草稿候选题）
    ========================================================================== */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   Badge,
@@ -24,17 +24,27 @@ import {
   TagFilter,
   TextArea,
   TextInput,
+  downloadText,
+  hasPermission,
   toast,
+  useAuth,
 } from "@exam/shared";
 import {
   adoptImportBatch,
+  generateAiQuestions,
   isBackendEnabled,
+  loadAiProviders,
+  loadImportTemplate,
   updateImportMapping,
   uploadImportBatch,
+  type AiGenerationResult,
+  type AiProvider,
   type ImportBatchDetail,
   type ImportRow,
+  type ImportTemplate,
 } from "@exam/shared/api";
 import {
+  MOCK_AI_PROVIDERS,
   commitGeneration,
   commitImport,
   createGeneration,
@@ -42,6 +52,12 @@ import {
   updateImportBatch,
   useCatalog,
 } from "@exam/shared/mock/catalog";
+import {
+  IMPORT_TEMPLATE_COLUMNS,
+  IMPORT_TEMPLATE_FILE_NAME,
+  IMPORT_TEMPLATE_NOTES,
+  importTemplateCsv,
+} from "@exam/shared/mock/importTemplate";
 import type { Question, TagMatchMode } from "@exam/shared/domain/types";
 import { Icon } from "@/app/Icon";
 import { DifficultyChip, SourceBadge, StatusBadge, TagChips, TypeBadge } from "../shared/bits";
@@ -150,6 +166,9 @@ export function BankWorkbenchPage() {
 
   const tab = (params.get("tab") as WorkbenchTab) || "questions";
   const remote = isBackendEnabled();
+  // AI 生成是独立权限点：没有就不给入口（而不是给进去再报 403）。
+  const roles = useAuth((state) => state.user?.roles);
+  const canGenerateAi = hasPermission(roles, "ai:generate");
   // 标签目录：HTTP 模式来自服务端（标签 ID 是数字主键）。
   const { tags } = useCatalogTags();
   const imports = useCatalog((state) => state.imports);
@@ -226,10 +245,20 @@ export function BankWorkbenchPage() {
   const [targetBank, setTargetBank] = useState(bankId === "__all__" ? (banks[0]?.id ?? "") : bankId);
   const [genType, setGenType] = useState("single");
   const [genCount, setGenCount] = useState(3);
-  const [genDifficulty, setGenDifficulty] = useState("中等");
   const [genPrompt, setGenPrompt] = useState("");
   const [genTags, setGenTags] = useState<string[]>([]);
   const [batchId, setBatchId] = useState("");
+  /** 难度标签（两种模式都有：mock 用本地目录，HTTP 用服务端目录）。 */
+  const [genDifficultyTagId, setGenDifficultyTagId] = useState("");
+  /** 可切换的 AI 供应商与模型。 */
+  const [providers, setProviders] = useState<AiProvider[]>([]);
+  const [genProvider, setGenProvider] = useState("");
+  const [genModel, setGenModel] = useState("");
+  /** 最近一次生成的逐题结果（HTTP 模式）。 */
+  const [genResult, setGenResult] = useState<AiGenerationResult | null>(null);
+  const [genBusy, setGenBusy] = useState(false);
+  /** 导入模板：HTTP 模式取服务端那份，mock 模式用本地同样的定义。 */
+  const [template, setTemplate] = useState<ImportTemplate | null>(null);
 
   const setTab = (next: string) => {
     const nextParams = new URLSearchParams(params);
@@ -256,6 +285,102 @@ export function BankWorkbenchPage() {
   );
 
   /* ----------------------------------------------------------- 内容生产 */
+
+  /** 难度标签：客观题都要挂一个难度维度的标签。 */
+  const difficultyTags = useMemo(
+    () => tags.filter((tag) => tag.group === "difficulty"),
+    [tags],
+  );
+
+  /** 难度默认选中「中等」（没有就选第一个）。 */
+  useEffect(() => {
+    if (genDifficultyTagId) return;
+    const preferred = difficultyTags.find((tag) => tag.level === 2) ?? difficultyTags[0];
+    if (preferred) setGenDifficultyTagId(preferred.id);
+  }, [difficultyTags, genDifficultyTagId]);
+
+  /** 当前选中的供应商。 */
+  const currentProvider = useMemo(
+    () => providers.find((provider) => provider.name === genProvider) ?? null,
+    [providers, genProvider],
+  );
+
+  /**
+   * 导入模板。
+   *
+   * HTTP 模式取服务端那份（模板与解析规则同源）；mock 模式没有服务端，
+   * 用本地同样的定义——两份由 `scripts/check-question-import-columns.py` 盯着。
+   */
+  useEffect(() => {
+    if (!remote) {
+      setTemplate({
+        fileName: IMPORT_TEMPLATE_FILE_NAME,
+        csv: importTemplateCsv(),
+        columns: IMPORT_TEMPLATE_COLUMNS.map((column) => ({ ...column })),
+        notes: [...IMPORT_TEMPLATE_NOTES],
+      });
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const loaded = await loadImportTemplate();
+        if (!cancelled) setTemplate(loaded);
+      } catch {
+        // 模板拿不到不影响上传：只是没有「下载模板」与列说明。
+        if (!cancelled) setTemplate(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [remote]);
+
+  /** 可用的 AI 供应商与模型（模型在供应商配置里列着，可随时切）。 */
+  useEffect(() => {
+    if (!remote) {
+      setProviders(MOCK_AI_PROVIDERS);
+      setGenProvider((current) => current || MOCK_AI_PROVIDERS[0]?.name || "");
+      setGenModel((current) => current || MOCK_AI_PROVIDERS[0]?.defaultModel || "");
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const loaded = await loadAiProviders();
+        if (cancelled) return;
+        setProviders(loaded);
+        const first = loaded[0];
+        setGenProvider((current) => current || first?.name || "");
+        setGenModel((current) => current || first?.defaultModel || "");
+      } catch {
+        if (!cancelled) setProviders([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [remote]);
+
+  /** 换供应商：模型跟着回到该供应商的默认模型。 */
+  const handleProviderChange = (name: string): void => {
+    setGenProvider(name);
+    const provider = providers.find((item) => item.name === name);
+    setGenModel(provider?.defaultModel || provider?.models[0] || "");
+  };
+
+  /** 下载导入模板。 */
+  const handleDownloadTemplate = (): void => {
+    if (!template) {
+      toast.error("模板还没加载好，请稍后再试");
+      return;
+    }
+    downloadText(template.fileName, template.csv, "text/csv;charset=utf-8");
+  };
 
   const activeBatch = useMemo(() => {
     if (!batchId) return null;
@@ -398,11 +523,58 @@ export function BankWorkbenchPage() {
     );
   };
 
-  const handleGenerate = () => {
+  /**
+   * 生成候选题。
+   *
+   * HTTP 模式走服务端：模型产的题按**与文件导入相同的规则**校验，
+   * 通过的题直接落成草稿候选题，不通过的逐条说明原因。
+   * mock 模式没有模型，返回固定样例。
+   */
+  const handleGenerate = async () => {
+    if (remote) {
+      if (!genProvider) {
+        toast.error("请选择 AI 供应商");
+        return;
+      }
+      if (!genDifficultyTagId) {
+        toast.error("请选择难度");
+        return;
+      }
+      if (!genPrompt.trim()) {
+        toast.error("请填写出题要求");
+        return;
+      }
+
+      setGenBusy(true);
+      try {
+        const result = await generateAiQuestions({
+          provider: genProvider,
+          model: genModel,
+          count: genCount,
+          type: genType,
+          difficultyTagId: genDifficultyTagId,
+          tagIds: genTags,
+          prompt: genPrompt,
+        });
+        setGenResult(result);
+        if (result.failed > 0) {
+          toast.error(`已生成 ${result.succeeded} 道候选题，${result.failed} 道未通过校验`);
+        } else {
+          toast.ok(`已生成 ${result.succeeded} 道候选题，请到候选题队列审核`);
+        }
+        candidateQuery.refresh();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "生成失败");
+      } finally {
+        setGenBusy(false);
+      }
+      return;
+    }
+
     const result = createGeneration({
       count: genCount,
       type: genType as "single",
-      difficulty: genDifficulty,
+      difficulty: difficultyTags.find((tag) => tag.id === genDifficultyTagId)?.name ?? "中等",
       prompt: genPrompt,
       tagIds: genTags,
       operator: "陈砚之",
@@ -922,7 +1094,7 @@ export function BankWorkbenchPage() {
                 }}
                 options={[
                   { value: "import", label: "导入试题" },
-                  { value: "gen", label: "AI 生成" },
+                  { value: "gen", label: "AI 生成", disabled: !canGenerateAi },
                 ]}
               />
 
@@ -942,6 +1114,49 @@ export function BankWorkbenchPage() {
                         onChange={(event) => void handleFilePick(event.target.files?.[0] ?? null)}
                       />
                     </Field>
+                    {/* 模板：先下载照着填，列怎么写也说清楚。 */}
+                    <div>
+                      <div className="row">
+                        <Button size="sm" onClick={handleDownloadTemplate} disabled={!template}>
+                          <Icon name="document" />
+                          下载导入模板
+                        </Button>
+                        <span className="text-sm text-3">
+                          不知道文件该长什么样？先下载模板，按列填好再上传。
+                        </span>
+                      </div>
+                      {template ? (
+                        <div className="table-wrap" style={{ marginTop: "var(--sp-3)" }}>
+                          <table className="table">
+                            <thead>
+                              <tr>
+                                <th scope="col">列</th>
+                                <th scope="col">必填</th>
+                                <th scope="col">怎么填</th>
+                                <th scope="col">示例</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {template.columns.map((column) => (
+                                <tr key={column.field}>
+                                  <td>{column.header}</td>
+                                  <td>{column.required ? "是" : "否"}</td>
+                                  <td>{column.description}</td>
+                                  <td className="text-xs text-3">{column.example}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : null}
+                      {template && template.notes.length > 0 ? (
+                        <ul className="section-note">
+                          {template.notes.map((note) => (
+                            <li key={note}>{note}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
                     {parseError ? (
                       <Callout tone="danger" title="文件解析失败">
                         {parseError}
@@ -1021,12 +1236,17 @@ export function BankWorkbenchPage() {
                     <Field label="难度" htmlFor="gen-difficulty">
                       <SelectInput
                         id="gen-difficulty"
-                        value={genDifficulty}
-                        onChange={(event) => setGenDifficulty(event.target.value)}
+                        value={genDifficultyTagId}
+                        onChange={(event) => setGenDifficultyTagId(event.target.value)}
                       >
-                        <option value="基础">基础</option>
-                        <option value="中等">中等</option>
-                        <option value="较难">较难</option>
+                        {difficultyTags.length === 0 ? (
+                          <option value="">（没有难度标签）</option>
+                        ) : null}
+                        {difficultyTags.map((tag) => (
+                          <option key={tag.id} value={tag.id}>
+                            {tag.name}
+                          </option>
+                        ))}
                       </SelectInput>
                     </Field>
                   </div>
@@ -1035,6 +1255,48 @@ export function BankWorkbenchPage() {
 
               {produceMode === "gen" ? (
                 <div style={{ marginTop: "var(--sp-4)" }}>
+                  <div className="grid-3">
+                    <Field label="AI 供应商" htmlFor="gen-provider" hint="服务端配置了哪些模型服务。">
+                      <SelectInput
+                        id="gen-provider"
+                        value={genProvider}
+                        onChange={(event) => handleProviderChange(event.target.value)}
+                      >
+                        {providers.length === 0 ? (
+                          <option value="">（没有可用的 AI 服务）</option>
+                        ) : null}
+                        {providers.map((provider) => (
+                          <option key={provider.name} value={provider.name}>
+                            {provider.displayName}
+                            {provider.configured ? "" : "（未配置 API Key）"}
+                          </option>
+                        ))}
+                      </SelectInput>
+                    </Field>
+                    <Field
+                      label="模型"
+                      htmlFor="gen-model"
+                      hint="同一供应商的不同模型，质量与速度不一样，可随时切。"
+                    >
+                      <SelectInput
+                        id="gen-model"
+                        value={genModel}
+                        onChange={(event) => setGenModel(event.target.value)}
+                      >
+                        {(currentProvider?.models ?? []).map((model) => (
+                          <option key={model} value={model}>
+                            {model}
+                          </option>
+                        ))}
+                      </SelectInput>
+                    </Field>
+                  </div>
+                  {remote && currentProvider && !currentProvider.configured ? (
+                    <Callout tone="warn" title="AI 服务未配置">
+                      服务端没有配置 {currentProvider.displayName} 的 API Key，生成会失败。
+                      请让管理员在服务端配置后再试。
+                    </Callout>
+                  ) : null}
                   <Field
                     label="知识点标签"
                     hint="标签决定生成题目的归类与难度层级，最多 5 个。"
@@ -1099,19 +1361,88 @@ export function BankWorkbenchPage() {
                     </Button>
                   )
                 ) : (
-                  <Button variant="primary" onClick={handleGenerate}>
+                  <Button
+                    variant="primary"
+                    disabled={genBusy}
+                    onClick={() => void handleGenerate()}
+                  >
                     <Icon name="flag" />
-                    生成候选题
+                    {genBusy ? "生成中…" : "生成候选题"}
                   </Button>
                 )}
                 <span className="text-sm text-3">
                   {produceMode === "import"
                     ? "解析为真实文件解析：逐行校验，错误行标红并给出原因，不阻断整批。"
-                    : "生成结果为示例数据，不接入真实大模型。"}
+                    : remote
+                      ? "生成结果按与文件导入相同的规则校验；通过的题直接进入候选题队列。"
+                      : "mock 模式：生成的是示例数据，不调用真实大模型。"}
                 </span>
               </div>
             </div>
           </section>
+
+          {produceMode === "gen" && remote && genResult ? (
+            <section className="card" style={{ marginTop: "var(--sp-4)" }}>
+              <div className="card-head">
+                <h2 className="card-title">生成结果</h2>
+                <span className="text-sm text-3">
+                  {genResult.providerName} · {genResult.model} · 成功 {genResult.succeeded} 道 / 未通过{" "}
+                  {genResult.failed} 道
+                </span>
+              </div>
+              <div className="card-body">
+                <div className="table-wrap">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th scope="col">#</th>
+                        <th scope="col">题干</th>
+                        <th scope="col">题号</th>
+                        <th scope="col">结果</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {genResult.items.length === 0 ? (
+                        <tr>
+                          <td colSpan={4}>
+                            <div className="empty">
+                              <span className="empty-title">模型没有给出题目</span>
+                              <span className="empty-body">换一下出题要求再试一次。</span>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        genResult.items.map((item) => (
+                          <tr key={item.index}>
+                            <td className="num">{item.index}</td>
+                            <td>{item.stem ?? "—"}</td>
+                            <td>{item.code ?? "—"}</td>
+                            <td>
+                              {item.succeeded ? (
+                                <Badge tone="ok">已成候选题</Badge>
+                              ) : (
+                                <Badge tone="danger">未通过</Badge>
+                              )}
+                              {item.errors.length > 0 ? (
+                                <div className="text-xs" style={{ color: "var(--c-danger)" }}>
+                                  {item.errors.join("；")}
+                                </div>
+                              ) : null}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="row" style={{ marginTop: "var(--sp-4)" }}>
+                  <span className="text-sm text-3">
+                    通过校验的题已经是草稿候选题，在「候选题」标签页审核后发布。
+                  </span>
+                </div>
+              </div>
+            </section>
+          ) : null}
 
           {activeBatch || serverImport ? (
             <section className="card" style={{ marginTop: "var(--sp-4)" }}>

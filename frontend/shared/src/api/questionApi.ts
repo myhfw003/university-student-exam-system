@@ -14,6 +14,7 @@
 
 import { ENDPOINTS } from "./endpoints";
 import { httpClient } from "./httpClient";
+import { toQuestionSource } from "./questionSource";
 import type {
   Question,
   QuestionAttachment,
@@ -88,7 +89,7 @@ export function toQuestionSummary(dto: Dto): AdminQuestionSummary {
     score: num(dto.defaultScore, 5),
     status: str(dto.status, "draft"),
     statusLabel: str(dto.statusLabel),
-    source: str(dto.source, "manual"),
+    source: toQuestionSource(dto.source),
     difficultyTagId: str(dto.difficultyTagId),
     tagIds: numList(dto.tagIds),
     createdAt: str(dto.createdAt),
@@ -151,7 +152,7 @@ export function toFrontendQuestion(detail: AdminQuestionDetail): Question {
     type: detail.type,
     score: detail.score,
     status: detail.status as Question["status"],
-    source: detail.source as Question["source"],
+    source: toQuestionSource(detail.source),
     tags: detail.tagIds,
     stem: detail.stem,
     options: detail.options,

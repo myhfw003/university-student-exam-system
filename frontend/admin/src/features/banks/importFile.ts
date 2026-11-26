@@ -45,11 +45,11 @@ export interface ImportFieldDef {
  */
 export const IMPORT_FIELDS: readonly ImportFieldDef[] = [
   { key: "code", label: "题号", required: false, keywords: ["题号", "编号", "code"] },
-  { key: "stem", label: "题干", required: true, keywords: ["题干", "题目", "stem"] },
   { key: "type", label: "题型", required: true, keywords: ["题型", "类型", "题目类型", "type"] },
+  { key: "stem", label: "题干", required: true, keywords: ["题干", "题目", "试题题干", "stem"] },
   { key: "options", label: "选项", required: false, keywords: ["选项", "option"] },
   { key: "answer", label: "答案", required: true, keywords: ["答案", "正确答案", "answer"] },
-  { key: "steps", label: "评分步骤", required: false, keywords: ["步骤", "step"] },
+  { key: "steps", label: "评分步骤", required: false, keywords: ["评分步骤", "步骤", "step"] },
   { key: "analysis", label: "解析", required: false, keywords: ["解析", "答案解析", "analysis"] },
   {
     key: "referenceAnswer",
@@ -59,7 +59,7 @@ export const IMPORT_FIELDS: readonly ImportFieldDef[] = [
   },
   { key: "score", label: "分值", required: false, keywords: ["分值", "分数", "score"] },
   { key: "difficulty", label: "难度", required: true, keywords: ["难度", "difficulty"] },
-  { key: "tags", label: "知识点 / 标签", required: false, keywords: ["知识点", "标签", "tag"] },
+  { key: "tags", label: "知识点", required: false, keywords: ["知识点", "知识点标签", "标签", "tag"] },
 ];
 
 /** 题型取值（中英文标签都认）。 */

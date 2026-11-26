@@ -21,6 +21,18 @@ public sealed class ImportBatchesController : ControllerBase
 
     public ImportBatchesController(IMediator mediator) => _mediator = mediator;
 
+    /// <summary>
+    /// 取回导入模板：列说明 + 可下载的 CSV。
+    /// <para>
+    /// 老师不知道文件该长什么样时，先看这个：哪些列必填、每列写什么、
+    /// 怎么分隔，模板里都写着；CSV 可直接下载填写。
+    /// </para>
+    /// </summary>
+    [HttpGet("template")]
+    [Authorize(Policy = PermissionCatalog.ImportRun)]
+    [ProducesResponseType(typeof(ImportTemplateDto), StatusCodes.Status200OK)]
+    public ImportTemplateDto Template() => ImportTemplateDto.FromTemplate();
+
     /// <summary>分页查询导入批次。</summary>
     [HttpGet]
     [Authorize(Policy = PermissionCatalog.ImportRun)]

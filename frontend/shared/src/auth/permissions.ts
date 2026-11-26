@@ -21,6 +21,7 @@ export type PermissionPoint =
   | "bank:write"
   | "import:run"
   | "import:adopt"
+  | "ai:generate"
   | "paper:read"
   | "paper:write"
   | "paper:publish"
@@ -66,6 +67,7 @@ export const PERMISSION_DISPLAY_NAMES: Record<PermissionPoint, string> = {
   "bank:write": "编辑题库",
   "import:run": "导入试题",
   "import:adopt": "采纳试题",
+  "ai:generate": "AI 生成试题",
   "paper:read": "查看试卷",
   "paper:write": "编辑试卷",
   "paper:publish": "发布试卷",
@@ -122,6 +124,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly PermissionPoint[]> = {
     "bank:write",
     "import:run",
     "import:adopt",
+    "ai:generate",
     "paper:read",
     "paper:write",
     "paper:publish",
@@ -159,6 +162,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly PermissionPoint[]> = {
     "bank:write",
     "import:run",
     "import:adopt",
+    "ai:generate",
     "paper:read",
     "paper:write",
     "paper:publish",
@@ -195,6 +199,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly PermissionPoint[]> = {
     "bank:write",
     "import:run",
     "import:adopt",
+    "ai:generate",
     "paper:read",
     "paper:write",
     "paper:publish",

@@ -14,6 +14,7 @@
 
 import { httpClient } from "./httpClient";
 import { ENDPOINTS } from "./endpoints";
+import { toQuestionSource } from "./questionSource";
 import type { Bank, ExamPaper, PaperMode, Practice, Question, Tag } from "../domain/types";
 
 /** 分页响应。 */
@@ -76,7 +77,7 @@ function toQuestion(dto: Dto): Question {
     type: str(dto.type, "single") as Question["type"],
     score: num(dto.defaultScore, 5),
     status: str(dto.status, "draft") as Question["status"],
-    source: str(dto.source, "manual") as Question["source"],
+    source: toQuestionSource(dto.source),
     tags: ids(dto, "tagIds"),
     stem: str(dto.stem),
     answer: [],

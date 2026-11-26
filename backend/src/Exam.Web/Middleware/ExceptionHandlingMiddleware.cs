@@ -48,6 +48,12 @@ public sealed class ExceptionHandlingMiddleware
             _logger.LogInformation("并发冲突：{ErrorCode}", ex.ErrorCode);
             await WriteProblemAsync(context, ex.ErrorCode, ex.Message, StatusCodes.Status409Conflict, null);
         }
+        catch (Application.Common.Exceptions.AiGenerationFailedException ex)
+        {
+            // 上游模型服务的问题：报 502（网关错误），别混进 422 的业务规则里。
+            _logger.LogWarning(ex, "AI 服务调用失败：{ErrorCode}", ex.ErrorCode);
+            await WriteProblemAsync(context, ex.ErrorCode, ex.Message, StatusCodes.Status502BadGateway, null);
+        }
         catch (Exam.Domain.Delivery.AttemptDeadlineExceededException ex)
         {
             // 超时不是业务规则错误，是状态冲突：前端应立即触发交卷。

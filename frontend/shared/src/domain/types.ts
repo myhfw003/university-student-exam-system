@@ -548,6 +548,7 @@ export type AuditAction =
   | "blueprint.save"
   | "import.upload"
   | "import.adopt"
+  | "ai.generate"
   | "exam_session.create"
   | "exam_session.update"
   | "exam_session.publish"

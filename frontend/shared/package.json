@@ -26,6 +26,7 @@
     "./engine/blueprint": "./src/engine/blueprint.ts",
     "./mock/adminOps": "./src/mock/adminOps.ts",
     "./mock/catalog": "./src/mock/catalog.ts",
+    "./mock/importTemplate": "./src/mock/importTemplate.ts",
     "./mock/roster": "./src/mock/roster.ts",
     "./mock/seed": "./src/mock/seed.ts",
     "./mock/settings": "./src/mock/settings.ts",

@@ -182,6 +182,62 @@ public sealed class ImportBatchEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task 采纳判断题与综合题_选项正确项与步骤参考答案都对()
+    {
+        await LoginAsync();
+
+        // 判断题的两个选项由聚合根固定创建（A 正确 / B 错误）：
+        // 导入时若按文件里的选项再添加一遍，就会「选项 A 重复」而整行失败。
+        // 综合题的每个评分步骤都要有参考答案，否则这道题永远发布不了。
+        var csv = string.Join("\n", [
+            "题干,题型,选项,答案,评分步骤,分值,难度",
+            "TCP 用两次握手就能建立连接。,判断题,A. 正确|B. 错误,B,,5,基础",
+            "简述 TCP 三次握手的过程。,综合题,,,s1|说明握手过程|10|客户端先发 SYN,10,基础",
+        ]);
+
+        var upload = await PostFileAsync("/api/v1/imports", csv, "试题.csv");
+        upload.StatusCode.ShouldBe(HttpStatusCode.OK, await upload.Content.ReadAsStringAsync());
+
+        var uploaded = await upload.Content.ReadFromJsonAsync<JsonElement>();
+        uploaded.GetProperty("batch").GetProperty("invalidRows").GetInt32().ShouldBe(0);
+
+        var batchId = uploaded.GetProperty("batch").GetProperty("id").GetInt64();
+        var adopt = await _client.PostAsync($"/api/v1/imports/{batchId}/adopt", null);
+        adopt.StatusCode.ShouldBe(HttpStatusCode.OK, await adopt.Content.ReadAsStringAsync());
+
+        var adopted = await adopt.Content.ReadFromJsonAsync<JsonElement>();
+        adopted.GetProperty("adopted").GetInt32().ShouldBe(2);
+
+        var list = await (await _client.GetAsync("/api/v1/questions?status=draft"))
+            .Content.ReadFromJsonAsync<JsonElement>();
+        var items = list.GetProperty("items").EnumerateArray().ToList();
+        items.Count.ShouldBe(2);
+
+        var judge = items.Single(i => i.GetProperty("type").GetString() == "judge");
+        var judgeDetail = await (await _client.GetAsync($"/api/v1/questions/{judge.GetProperty("id").GetInt64()}"))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        var options = judgeDetail.GetProperty("options").EnumerateArray().ToList();
+        options.Count.ShouldBe(2);
+        options[0].GetProperty("key").GetString().ShouldBe("A");
+        options[0].GetProperty("text").GetString().ShouldBe("正确");
+        options[0].GetProperty("isCorrect").GetBoolean().ShouldBeFalse();
+        options[1].GetProperty("key").GetString().ShouldBe("B");
+        options[1].GetProperty("isCorrect").GetBoolean().ShouldBeTrue();
+
+        var comprehensive = items.Single(i => i.GetProperty("type").GetString() == "comprehensive");
+        var comprehensiveDetail = await (await _client.GetAsync(
+            $"/api/v1/questions/{comprehensive.GetProperty("id").GetInt64()}"))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        // 步骤的参考答案要带进来：没有它这道题发布校验过不去。
+        var steps = comprehensiveDetail.GetProperty("steps").EnumerateArray().ToList();
+        steps.Count.ShouldBe(1);
+        steps[0].GetProperty("referenceAnswer").GetString().ShouldBe("客户端先发 SYN");
+        comprehensiveDetail.GetProperty("question").GetProperty("defaultScore").GetDecimal().ShouldBe(10);
+    }
+
+    [Fact]
     public async Task 上传XLSX_能解析首个工作表()
     {
         await LoginAsync();

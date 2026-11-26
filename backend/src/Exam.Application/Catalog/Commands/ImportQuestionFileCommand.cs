@@ -290,52 +290,19 @@ public sealed class AdoptImportBatchHandler : IRequestHandler<AdoptImportBatchCo
                 continue;
             }
 
-            var question = Question.CreateDraft(
+            // 组装规则与 AI 生成共用（判断题的固定选项、步骤的参考答案都在里面）。
+            var question = QuestionComposer.Compose(
+                QuestionComposer.FromResolved(resolved),
                 code,
-                resolved.Type,
-                resolved.Stem,
-                Score.Question(resolved.Score),
                 resolved.DifficultyTagId,
-                now,
-                _currentUser.UserId,
+                resolved.TagIds,
                 QuestionSource.Import,
-                batch.Id);
-
-            question.UpdateContent(
-                resolved.Stem,
-                resolved.Analysis,
-                resolved.ReferenceAnswer,
-                Score.Question(resolved.Score),
+                batch.Id,
                 now,
                 _currentUser.UserId);
 
-            foreach (var option in resolved.Options)
-            {
-                question.AddOption(
-                    QuestionOption.Create(option.Key, option.Text, option.IsCorrect, 0),
-                    now,
-                    _currentUser.UserId);
-            }
-
-            foreach (var keypoint in resolved.Keypoints)
-            {
-                question.AddKeypoint(
-                    QuestionKeypoint.Create(keypoint.Text, keypoint.Keywords, 0),
-                    now,
-                    _currentUser.UserId);
-            }
-
-            foreach (var step in resolved.Steps)
-            {
-                question.AddStep(
-                    QuestionStep.Create(step.Code, step.Prompt, null, [], Score.Question(step.Score), 0),
-                    now,
-                    _currentUser.UserId);
-            }
-
             foreach (var tagId in resolved.TagIds)
             {
-                question.AttachTag(tagId, now, _currentUser.UserId);
                 tagReferenceCounts[tagId] = tagReferenceCounts.GetValueOrDefault(tagId) + 1;
             }
 

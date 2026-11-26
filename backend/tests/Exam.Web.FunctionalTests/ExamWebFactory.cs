@@ -1,3 +1,4 @@
+using Exam.Application.Catalog.Services;
 using Exam.Application.Common.Interfaces;
 using Exam.Infrastructure.Audit;
 using Exam.Infrastructure.Messaging;
@@ -20,6 +21,12 @@ namespace Exam.Web.FunctionalTests;
 /// </summary>
 public sealed class ExamWebFactory : WebApplicationFactory<Program>
 {
+    /// <summary>
+    /// 测试用的 AI 供应商。真实实现要发 HTTP 调模型，功能测试里换成可控的假货：
+    /// 模型返回什么由测试自己写，生成的请求也留着可查。
+    /// </summary>
+    internal StubAiProvider AiProvider { get; } = new();
+
     private readonly string _connectionString;
     private readonly string _redisConnectionString;
     private readonly IDictionary<string, string?> _configuration;
@@ -81,6 +88,10 @@ public sealed class ExamWebFactory : WebApplicationFactory<Program>
             // 真实实现是 MinIO；测试用内存实现，不需要真对象存储。
             services.RemoveAll<IObjectStorage>();
             services.AddSingleton<IObjectStorage, InMemoryObjectStorage>();
+
+            // 真实的 AI 供应商要发 HTTP 调模型服务；测试换成可控的假供应商。
+            services.RemoveAll<IQuestionGenerationProvider>();
+            services.AddSingleton<IQuestionGenerationProvider>(AiProvider);
 
             // 测试专用的「来源地址」注入：TestServer 没有真实的远端地址，
             // 验证受信任代理的边界时需要模拟「请求来自某个地址」。

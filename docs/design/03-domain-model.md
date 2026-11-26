@@ -285,9 +285,16 @@ public abstract record ValueObject
 
 **领域方法**：`MapColumns(mapping)`、`Parse()`（调用 `IQuestionFileParser` 抽象，解析规则在领域外但校验在域内）、`Adopt()`（生成草稿题并标记 `Source=Import`、`BatchId`）。
 
-### 3.5 GenerationBatch（AI 生成批次）聚合根
+### 3.5 AI 生成（不落独立批次表）
 
-本期仅建模，不接真实模型。字段：`Prompt`、`QuestionType`、`DifficultyTagId`、`Quantity`、`TagIds`、`Status`（`Generated` → `Adopted`）、`Provider`（占位实现名）、`Rows[]`。
+AI 生成**不建独立的批次表**：生成的题通过校验后直接成为**候选题（草稿）**，
+来源标记 `QuestionSource.Generated`（存储值 `generated`）；生成动作留在审计日志
+（动作码 `ai.generate`，目标类型 `question`）与候选题队列里。生成历史即候选题本身。
+
+生成内容先由 `AiQuestionDraftParser` 从模型原文里取出草稿（容忍思考段、Markdown 代码块、
+对象式选项 `{"A":"…"}`），再翻译成**导入行**交给 `QuestionImportParser`——
+于是模型产的题与老师上传的题受**同一套规则**管。最后由 `QuestionComposer`
+组装成草稿题（判断题固定两个选项、综合题分值与评分步骤都在这里定）。
 
 ---
 
@@ -819,6 +826,8 @@ Analytics 只读，不写业务表。读模型落后于原始作答数据时，�
 | 25101 | `FocusLimitExceededException` | 422 | 切屏次数超限 |
 | 26001 | `ScoringException` | 500 | 判分异常 |
 | 27001 | `ImportRowInvalidException` | 422 | 导入行数据非法 |
+| 27101 | `AiProviderNotConfiguredException` | 422 | AI 服务未配置（缺 API Key 或没有可用供应商） |
+| 27102 | `AiGenerationFailedException` | 502 | 调用 AI 服务失败（上游报错、网络不通、返回读不出来） |
 | 28001 | `TagCycleException` | 422 | 标签层级成环 |
 | 28002 | `TagInUseException` | 422 | 标签被引用，不可删除 |
 | 29005 | `OriginalPasswordNotConfiguredException` | 422 | 未配置原始密码，无法重置密码 |

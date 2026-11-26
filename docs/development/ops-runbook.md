@@ -181,6 +181,28 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.secrets.yml
 `deploy/secrets/` 已在 `.gitignore` 中，绝不入库。目录权限 `0700`、密钥文件 `0644`
 （容器内进程以 uid 1654 运行，需要能读挂载进来的文件；宿主机侧的访问控制由目录权限保证）。
 
+### AI 生成试题（可选）
+
+「内容生产 → AI 生成」要调真实大模型，**API Key 只从环境变量给**，不写进配置文件、不入库。
+
+```bash
+# deploy/.env 里加一行（.env 已在 .gitignore 中）
+AI_GENERATION_API_KEY=<厂商的 API Key>
+```
+
+compose 会把它注入成应用配置：`AiGeneration__Providers__minimax__ApiKey`。
+
+供应商、模型清单、Base URL 都在 `appsettings.json` 的 `AiGeneration:Providers` 下，
+改模型清单不用改代码；换厂商就加一段同结构的配置。**没配 Key 时功能是通的**：
+界面列出供应商并标「未配置 API Key」，生成请求返回 422（`27101`）。
+
+要注意的两件事：
+
+- **容器要能出网**。模型服务在公网，容器网络没有 DNS / 出网时（公测机就是这种形态），
+  调用会超时或连不上，报 502（`27102`）。
+- **Key 会出现在进程环境里**。不要把它打进镜像、不要写进 compose 文件，
+  更不要贴进工单或聊天记录。
+
 ### 写入种子数据
 
 ```bash

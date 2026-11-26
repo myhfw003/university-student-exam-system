@@ -1,4 +1,5 @@
 using Exam.Application.Authoring.Services;
+using Exam.Application.Catalog.Services;
 using Exam.Application.Delivery.Services;
 using Exam.Application.Common.Interfaces;
 using Exam.Application.Grading.Services;
@@ -7,6 +8,7 @@ using Exam.Application.Messaging;
 using Exam.Domain.Grading.Events;
 using Exam.Application.Identity.Services;
 using Exam.Domain.SharedKernel.Abstractions;
+using Exam.Infrastructure.Ai;
 using Exam.Infrastructure.Audit;
 using Exam.Infrastructure.Caching;
 using Exam.Infrastructure.Configuration;
@@ -160,6 +162,35 @@ public static class DependencyInjection
             configurationOptions.ConnectTimeout = 3000;
             return ConnectionMultiplexer.Connect(configurationOptions);
         });
+
+        // ---- AI 生成（试题）----
+        // 供应商按配置逐个注册：换厂商就是多一段配置，不用改代码。
+        // API Key 不写进配置文件，由环境变量给（见 deploy/.env.example）。
+        var aiSection = configuration.GetSection(AiGenerationOptions.SectionName);
+        services.Configure<AiGenerationOptions>(aiSection);
+
+        var aiOptions = aiSection.Get<AiGenerationOptions>() ?? new AiGenerationOptions();
+
+        services.AddHttpClient(OpenAiCompatibleGenerationProvider.HttpClientName)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+            });
+
+        if (aiOptions.Enabled)
+        {
+            foreach (var (providerName, providerOptions) in aiOptions.Providers)
+            {
+                var name = providerName;
+                var options = providerOptions;
+
+                services.AddSingleton<IQuestionGenerationProvider>(sp =>
+                    new OpenAiCompatibleGenerationProvider(
+                        name,
+                        options,
+                        sp.GetRequiredService<IHttpClientFactory>()));
+            }
+        }
 
         return services;
     }

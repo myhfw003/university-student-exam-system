@@ -308,6 +308,7 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 | PUT | `/imports/{id}/mapping` | `import:run` | 调整列映射并重新解析 |
 | POST | `/imports/{id}/adopt` | `import:adopt` | 采纳为候选题 |
 | GET | `/imports` | `import:run` | 批次列表 |
+| GET | `/imports/template` | `import:run` | 导入模板：列说明 + 可下载的 CSV |
 
 **`POST /imports`**（multipart，字段 `file`）
 
@@ -325,6 +326,103 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
   ]
 }
 ```
+
+**`GET /imports/template`**
+
+模板是老师拿到手的第一份说明：列名、哪些必填、每列怎么写、示例值。
+服务端是这份说明的**权威来源**（模板与解析规则同源），前端按它渲染列说明与下载按钮。
+
+```json
+{
+  "fileName": "试题导入模板.csv",
+  "csv": "题号,题型,题干,选项,答案,…\r\nQ-001,单选题,下列关于 TCP 三次握手的说法,…",
+  "columns": [
+    {
+      "field": "type",
+      "header": "题型",
+      "required": true,
+      "description": "必填。取值：单选题 / 多选题 / 判断题 / 简答题 / 综合题。",
+      "example": "单选题"
+    }
+  ],
+  "notes": ["本模板的列名与系统的解析规则一致：按表头自动映射。"]
+}
+```
+
+---
+
+### 5.2 AI 生成
+
+| 方法 | 路径 | 权限 | 说明 |
+|---|---|---|---|
+| GET | `/ai/providers` | `ai:generate` | 可用的供应商与可切换的模型 |
+| POST | `/ai/generations` | `ai:generate` | 生成试题 |
+
+**`GET /ai/providers`**
+
+没配 API Key 的供应商也会列出来（`configured` 为 `false`）——界面据此提示
+「服务端未配置」，而不是装作没有这个功能。
+
+```json
+{
+  "providers": [
+    {
+      "name": "minimax",
+      "displayName": "MiniMax",
+      "configured": true,
+      "defaultModel": "MiniMax-M2.7",
+      "models": ["MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M3"]
+    }
+  ]
+}
+```
+
+**`POST /ai/generations`**
+
+```json
+{
+  "provider": "minimax",
+  "model": "MiniMax-M2.7",
+  "count": 3,
+  "type": "single",
+  "difficultyTagId": 12,
+  "tagIds": [34],
+  "prompt": "围绕 TCP 三次握手出单选题"
+}
+```
+
+响应：逐题给结论。**通不过校验的题不落库**，并说明哪里不合法。
+
+```json
+{
+  "provider": "minimax",
+  "providerName": "MiniMax",
+  "model": "MiniMax-M2.7",
+  "requested": 3,
+  "succeeded": 2,
+  "failed": 1,
+  "items": [
+    {
+      "index": 1,
+      "succeeded": true,
+      "questionId": 900,
+      "code": "AI-20261126103000-01",
+      "stem": "TCP 建立连接时采用三次握手，其主要目的是：",
+      "errors": []
+    },
+    {
+      "index": 2,
+      "succeeded": false,
+      "questionId": null,
+      "code": null,
+      "stem": "……",
+      "errors": ["选项：客观题必须填写选项。"]
+    }
+  ]
+}
+```
+
+错误：未配置 API Key 返回 422（`27101`）；调用上游失败返回 502（`27102`）。
 
 ---
 

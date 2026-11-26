@@ -18,6 +18,8 @@ public static class PermissionCatalog
     public const string ImportRun = "import:run";
     public const string ImportAdopt = "import:adopt";
 
+    public const string AiGenerate = "ai:generate";
+
     public const string PaperRead = "paper:read";
     public const string PaperWrite = "paper:write";
     public const string PaperPublish = "paper:publish";
@@ -64,6 +66,7 @@ public static class PermissionCatalog
         TagRead, TagWrite,
         BankRead, BankWrite,
         ImportRun, ImportAdopt,
+        AiGenerate,
         PaperRead, PaperWrite, PaperPublish,
         BlueprintGenerate,
         PracticeRead, PracticeWrite,
@@ -90,6 +93,7 @@ public static class PermissionCatalog
                 TagRead, TagWrite,
                 BankRead, BankWrite,
                 ImportRun, ImportAdopt,
+                AiGenerate,
                 PaperRead, PaperWrite, PaperPublish,
                 BlueprintGenerate,
                 PracticeRead, PracticeWrite,
@@ -107,6 +111,7 @@ public static class PermissionCatalog
                 TagRead, TagWrite,
                 BankRead, BankWrite,
                 ImportRun, ImportAdopt,
+                AiGenerate,
                 PaperRead, PaperWrite, PaperPublish,
                 BlueprintGenerate,
                 PracticeRead, PracticeWrite,
@@ -155,6 +160,7 @@ public static class PermissionCatalog
             [BankWrite] = "编辑题库",
             [ImportRun] = "导入试题",
             [ImportAdopt] = "采纳试题",
+            [AiGenerate] = "AI 生成试题",
             [PaperRead] = "查看试卷",
             [PaperWrite] = "编辑试卷",
             [PaperPublish] = "发布试卷",
