@@ -185,75 +185,23 @@ public static class AiQuestionDraftParser
             }
         }
 
-        // 找第一个 JSON 起始符；数组优先（模型最常见的是直接给数组）。
-        var arrayStart = text.IndexOf('[', StringComparison.Ordinal);
-        var objectStart = text.IndexOf('{', StringComparison.Ordinal);
+        // 题目数组：认「后面紧跟对象」的左方括号（[{"…），不是裸的 [。
+        // 说明段里的 [TCP]、思考段里的 [1] 都不算——认错了会整段解析失败。
+        // 规则与流式那条路一致（AiJsonPayload），两边不能各认各的。
+        var itemsStart = AiJsonPayload.FindItemsArrayStart(text);
+        if (itemsStart >= 0)
+        {
+            return AiJsonPayload.SliceBalanced(text, itemsStart, '[', ']');
+        }
 
-        if (arrayStart < 0 && objectStart < 0)
+        // 没有题目数组：退回第一个对象（模型只给了一道题的情况）。
+        var objectStart = text.IndexOf('{', StringComparison.Ordinal);
+        if (objectStart < 0)
         {
             return null;
         }
 
-        if (arrayStart >= 0 && (objectStart < 0 || arrayStart < objectStart))
-        {
-            return SliceBalanced(text, arrayStart, '[', ']');
-        }
-
-        return SliceBalanced(text, objectStart, '{', '}');
-    }
-
-    /// <summary>从起始位置截取一段括号配平的 JSON 文本。</summary>
-    private static string? SliceBalanced(string text, int start, char open, char close)
-    {
-        var depth = 0;
-        var inString = false;
-        var escaped = false;
-
-        for (var i = start; i < text.Length; i++)
-        {
-            var ch = text[i];
-
-            if (inString)
-            {
-                if (escaped)
-                {
-                    escaped = false;
-                }
-                else if (ch == '\\')
-                {
-                    escaped = true;
-                }
-                else if (ch == '"')
-                {
-                    inString = false;
-                }
-
-                continue;
-            }
-
-            if (ch == '"')
-            {
-                inString = true;
-                continue;
-            }
-
-            if (ch == open)
-            {
-                depth++;
-                continue;
-            }
-
-            if (ch == close)
-            {
-                depth--;
-                if (depth == 0)
-                {
-                    return text[start..(i + 1)];
-                }
-            }
-        }
-
-        return null;
+        return AiJsonPayload.SliceBalanced(text, objectStart, '{', '}');
     }
 
     /// <summary>在解析结果里找到题目数组。</summary>

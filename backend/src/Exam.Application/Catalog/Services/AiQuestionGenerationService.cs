@@ -3,6 +3,7 @@ using Exam.Application.Catalog.Contracts;
 using Exam.Application.Common.Exceptions;
 using Exam.Application.Common.Interfaces;
 using Exam.Domain.Catalog;
+using Microsoft.Extensions.Logging;
 using Exam.Domain.SharedKernel.Abstractions;
 using Exam.Domain.SharedKernel.Exceptions;
 
@@ -29,6 +30,7 @@ public sealed class AiQuestionGenerationService
     private readonly IAuditRecorder _audit;
     private readonly IClock _clock;
     private readonly ICurrentUser _currentUser;
+    private readonly ILogger<AiQuestionGenerationService> _logger;
 
     public AiQuestionGenerationService(
         IEnumerable<IQuestionGenerationProvider> providers,
@@ -37,7 +39,8 @@ public sealed class AiQuestionGenerationService
         IUnitOfWork unitOfWork,
         IAuditRecorder audit,
         IClock clock,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        ILogger<AiQuestionGenerationService> logger)
     {
         _providers = providers;
         _questions = questions;
@@ -46,6 +49,7 @@ public sealed class AiQuestionGenerationService
         _audit = audit;
         _clock = clock;
         _currentUser = currentUser;
+        _logger = logger;
     }
 
     /// <summary>
@@ -177,6 +181,13 @@ public sealed class AiQuestionGenerationService
             model);
     }
 
+    /// <summary>日志里记模型原文时的截断长度。</summary>
+    private const int MaxLoggedRawLength = 600;
+
+    /// <summary>截断：模型原文可能很长，日志只留前面一段。</summary>
+    private static string Truncate(string text) =>
+        text.Length <= MaxLoggedRawLength ? text : text[..MaxLoggedRawLength] + "…";
+
     /// <summary>一道题：解析 → 校验 → 落库 → 产出事件。</summary>
     private async Task<(AiGenerationEvent Event, bool Ok)> HandleQuestionAsync(
         string json,
@@ -189,6 +200,14 @@ public sealed class AiQuestionGenerationService
         var draft = AiQuestionDraftParser.ParseQuestion(json);
         if (!draft.Succeeded || draft.Draft is null)
         {
+            // 把模型原文记下来：只报「缺少题干」，支持的人无从下手——
+            // 得看得到模型到底吐了什么，才知道是格式变了还是流被截断了。
+            _logger.LogWarning(
+                "AI 产出的第 {Index} 题解析失败（{Error}）。模型原文：{Raw}",
+                index,
+                draft.Error ?? "未知原因",
+                Truncate(json));
+
             return (new AiQuestionFailedEvent(index, draft.Error ?? "模型没有给出这一题。"), false);
         }
 

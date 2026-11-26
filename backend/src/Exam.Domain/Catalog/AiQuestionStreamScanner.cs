@@ -11,8 +11,11 @@ namespace Exam.Domain.Catalog;
 /// 而不是盯着一个转圈等一分多钟。
 /// </para>
 /// <para>
-/// 只认第一层「数组里的对象」：模型爱把结果包成 <c>{"questions":[…]}</c>，
-/// 那个外层对象不是题，不能当题收。
+/// **题目数组的认法与非流式那条路一致**（见 <see cref="AiJsonPayload"/>）：
+/// 认的是「后面紧跟对象」的左方括号 <c>[{</c>，不是裸的 <c>[</c>。
+/// 之前认裸方括号，模型思考段里带一个 <c>[TCP]</c> 就把整个
+/// <c>{"questions":[…]}</c> 包装对象当成了一道题——题一道都没出来，
+/// 只报一句「第 1 题缺少题干」。
 /// </para>
 /// </summary>
 public sealed class AiQuestionStreamScanner
@@ -82,21 +85,30 @@ public sealed class AiQuestionStreamScanner
                 continue;
             }
 
-            if (ch == '[' && !_inItems)
-            {
-                // 第一个数组就是题目数组（外层 {"questions":[…]} 的括号在它前面）。
-                // 深度从 0 重新数：外层包装对象的括号不参与配平，
-                // 否则数组里那道题会被当成「包装对象的一部分」而永远凑不齐。
-                _inItems = true;
-                _depth = 0;
-                _itemStart = -1;
-                _cursor++;
-                continue;
-            }
-
             if (!_inItems)
             {
-                // 数组之前的内容（多半是 {"questions": 这样的包装）不参与配平。
+                if (ch != '[')
+                {
+                    _cursor++;
+                    continue;
+                }
+
+                // 找题目数组：左方括号后面（跳过空白）得紧跟一个对象。
+                var next = AiJsonPayload.NextNonWhitespace(text, _cursor + 1);
+                if (next < 0)
+                {
+                    // 后面还没内容，看不出是不是对象：等下一段再判断。
+                    // 停在这里不动（不推进游标），下一段接着看。
+                    break;
+                }
+
+                if (text[next] == '{')
+                {
+                    _inItems = true;
+                    _depth = 0;
+                    _itemStart = -1;
+                }
+
                 _cursor++;
                 continue;
             }
@@ -115,9 +127,13 @@ public sealed class AiQuestionStreamScanner
 
             if (ch == '}')
             {
-                _depth--;
+                // 深度不为负：包装对象在数组之后的那个收尾括号不算题目的一部分。
+                if (_depth > 0)
+                {
+                    _depth--;
+                }
 
-                if (_inItems && _depth == 0 && _itemStart >= 0)
+                if (_depth == 0 && _itemStart >= 0)
                 {
                     completed.Add(text[_itemStart..(_cursor + 1)]);
                     _itemStart = -1;
