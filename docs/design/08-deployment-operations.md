@@ -93,6 +93,30 @@ docker compose up -d                          # 不启用，API 直连 PG
    因为事务池会把客户端连接复用为 `default_pool_size` 条后端连接。连接串里的
    `Maximum Pool Size` / `Minimum Pool Size` 由 `DB_MAX_POOL_SIZE` / `DB_MIN_POOL_SIZE` 注入。
 
+### 1.3 前端静态资源的缓存策略（两头相反，不能配错）
+
+前端产物文件名**带内容哈希**（`index-a1b2c3.js`）：内容变了，文件名就变。
+这条性质决定了缓存策略必须**两头相反**：
+
+| 资源 | 策略 | 理由 |
+|---|---|---|
+| 入口 HTML（`/`、`/admin/`、`/portal/`） | `Cache-Control: no-cache` | 它里面写死了产物文件名，缓存住就会去取**已经不在的**旧文件名 |
+| 哈希产物（`/assets/`、`/admin/assets/`） | `Cache-Control: public, immutable`（7 天） | 名字变了就是内容变了，可以放心长期缓存 |
+
+**两头配错的后果都是整页白屏**，而且单测与 e2e 都发现不了：
+
+- 入口页被缓存住 → 浏览器去请求上一版的 chunk 文件名 → 该文件已经不存在。
+  若产物目录**没有** `try_files $uri =404`，这个请求会落进 SPA 回退、拿到一份
+  `index.html` —— 浏览器按 JS 去执行 HTML，报 MIME 错误，React 根本不挂载。
+- 产物目录不设 `immutable` → 每次发版所有老师都要重新下载全部产物。
+
+2026-11-27 发新前端产物时撞上了第一种：老师的浏览器里还存着 11-26 的
+`/admin/index.html`，它引用的旧 chunk 已经不在了。
+
+**落地位置**：`frontend/nginx.conf`（web 容器自己的 nginx，不经过两层反代）。
+`scripts/check-web-cache-headers.py` 把这套策略当门禁盯着——CI 的渲染冒烟检查
+抓不到，它自起的静态服务器**不发任何缓存头**。
+
 ---
 
 ## 2. 容量模型
