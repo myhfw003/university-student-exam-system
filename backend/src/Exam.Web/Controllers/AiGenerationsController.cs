@@ -13,6 +13,7 @@ using Exam.Domain.SharedKernel.Exceptions;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace Exam.Web.Controllers;
 
@@ -46,11 +47,16 @@ public sealed class AiGenerationsController : ControllerBase
 
     private readonly IMediator _mediator;
     private readonly AiQuestionGenerationService _generation;
+    private readonly ILogger<AiGenerationsController> _logger;
 
-    public AiGenerationsController(IMediator mediator, AiQuestionGenerationService generation)
+    public AiGenerationsController(
+        IMediator mediator,
+        AiQuestionGenerationService generation,
+        ILogger<AiGenerationsController> logger)
     {
         _mediator = mediator;
         _generation = generation;
+        _logger = logger;
     }
 
     /// <summary>列出可用的供应商与可切换的模型。</summary>
@@ -110,6 +116,14 @@ public sealed class AiGenerationsController : ControllerBase
 
         if (errors.Count > 0)
         {
+            // 把是哪个字段不合法记下来：只回一句「请求参数校验失败」，
+            // 前端与运维都无从下手（2026-11-26 公测机上就为这个卡了半天）。
+            _logger.LogWarning(
+                "AI 生成请求校验失败：{Errors}",
+                string.Join(
+                    "；",
+                    errors.Select(pair => $"{pair.Key}：{string.Join("/", pair.Value)}")));
+
             throw new ValidationException(errors);
         }
 

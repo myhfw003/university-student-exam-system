@@ -176,15 +176,21 @@ describe("generateAiQuestionsStream · 消费 SSE", () => {
     expect(errors).toEqual([{ errorCode: 27102, message: "调用 MiniMax 返回 500。" }]);
   });
 
-  it("响应不是 2xx 时抛错", async () => {
+  it("响应不是 2xx 时抛错，并说清是哪个字段不合法", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: false,
       status: 400,
       body: null,
-      json: async () => ({ errorCode: 20001, title: "请求参数校验失败。", status: 400 }),
+      json: async () => ({
+        errorCode: 20001,
+        title: "请求参数校验失败。",
+        status: 400,
+        errors: { Prompt: ["出题要求过长。"], TagIds: ["知识点标签不能超过 5 个。"] },
+      }),
     }));
     vi.stubGlobal("fetch", fetchMock);
 
+    // 光一句「请求参数校验失败」没人知道是哪儿错了。
     await expect(
       generateAiQuestionsStream(
         {
@@ -198,7 +204,7 @@ describe("generateAiQuestionsStream · 消费 SSE", () => {
         },
         {},
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/出题要求：出题要求过长。/);
   });
 
   it("标签主键发的是数字而不是字符串", async () => {

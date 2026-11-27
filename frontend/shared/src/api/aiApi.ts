@@ -48,6 +48,45 @@ function num(value: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+/**
+ * 校验失败时字段名 → 中文说明。
+ * <para>
+ * 服务端回的是字段名（前后端共用的契约），直接甩给老师看是英文的，
+ * 等于没提示。这里翻成中文。
+ * </para>
+ */
+const AI_FIELD_LABELS: Record<string, string> = {
+  Provider: "AI 供应商",
+  Model: "模型",
+  Count: "生成数量",
+  Type: "题型",
+  DifficultyTagId: "难度",
+  TagIds: "知识点标签",
+  Prompt: "出题要求",
+};
+
+/**
+ * 把字段级校验错误拼成一句人话。
+ * <p>
+ * 只说「请求参数校验失败」，用户不知道是哪儿错了——出题要求写太长？
+ * 标签选多了？都看不出来。
+ * </p>
+ */
+export function describeValidationErrors(
+  errors: Record<string, string[]> | undefined,
+): string | undefined {
+  if (!errors) return undefined;
+
+  const parts = Object.entries(errors)
+    .map(([field, messages]) => {
+      const label = AI_FIELD_LABELS[field] ?? field;
+      return `${label}：${messages.join("、")}`;
+    })
+    .filter((part) => part.length > 0);
+
+  return parts.length > 0 ? parts.join("；") : undefined;
+}
+
 /** 可用的供应商。 */
 export interface AiProvider {
   /** 供应商标识（服务端配置里的名字）。 */
@@ -163,6 +202,12 @@ export async function generateAiQuestions(
 
   return toAiGenerationResult(res);
 }
+
+/** 出题要求最长多少字（与服务端同一份限制）。 */
+export const AI_PROMPT_MAX_LENGTH = 2000;
+
+/** 知识点标签最多选几个（与服务端同一份限制）。 */
+export const AI_MAX_TAGS = 5;
 
 /* --------------------------------------------------------------- 流式生成 */
 
@@ -332,7 +377,9 @@ export async function generateAiQuestionsStream(
 
     if (!response.ok || !response.body) {
       const problem = await response.json().catch(() => null);
-      throw new HttpError(normalizeProblem(problem));
+      const normalized = normalizeProblem(problem);
+      const detail = describeValidationErrors(normalized.errors);
+      throw new HttpError(detail ? { ...normalized, message: detail } : normalized);
     }
 
     const reader = response.body.getReader();

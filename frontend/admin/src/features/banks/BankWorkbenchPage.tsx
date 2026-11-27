@@ -31,6 +31,8 @@ import {
   useAuth,
 } from "@exam/shared";
 import {
+  AI_MAX_TAGS,
+  AI_PROMPT_MAX_LENGTH,
   adoptImportBatch,
   generateAiQuestionsStream,
   isBackendEnabled,
@@ -548,6 +550,20 @@ export function BankWorkbenchPage() {
       }
       if (!genPrompt.trim()) {
         toast.error("请填写出题要求");
+        return;
+      }
+      // 这三条与服务端的校验一一对应：界面上先拦住，
+      // 免得发出去只换来一句「请求参数校验失败」，还不知道是哪儿错了。
+      if (genPrompt.length > AI_PROMPT_MAX_LENGTH) {
+        toast.error(`出题要求最长 ${AI_PROMPT_MAX_LENGTH} 字，现在 ${genPrompt.length} 字`);
+        return;
+      }
+      if (genTags.length > AI_MAX_TAGS) {
+        toast.error(`知识点标签最多 ${AI_MAX_TAGS} 个`);
+        return;
+      }
+      if (genCount < 1 || genCount > 10) {
+        toast.error("生成数量要在 1 到 10 之间");
         return;
       }
 
@@ -1342,11 +1358,17 @@ export function BankWorkbenchPage() {
                     <TagPicker
                       selected={genTags}
                       onToggle={(tagId) =>
-                        setGenTags((prev) =>
-                          prev.includes(tagId)
-                            ? prev.filter((t) => t !== tagId)
-                            : [...prev, tagId],
-                        )
+                        setGenTags((prev) => {
+                          if (prev.includes(tagId)) {
+                            return prev.filter((t) => t !== tagId);
+                          }
+                          // 超过上限就别加了：加了也是白发一趟（服务端会拒）。
+                          if (prev.length >= AI_MAX_TAGS) {
+                            toast.error(`知识点标签最多 ${AI_MAX_TAGS} 个`);
+                            return prev;
+                          }
+                          return [...prev, tagId];
+                        })
                       }
                       groups={["domain", "knowledge_point"]}
                       label="知识点标签"
@@ -1354,10 +1376,15 @@ export function BankWorkbenchPage() {
                     />
                   </Field>
                   <div style={{ marginTop: "var(--sp-4)" }}>
-                    <Field label="生成指令" htmlFor="gen-prompt">
+                    <Field
+                      label="生成指令"
+                      htmlFor="gen-prompt"
+                      hint={`最多 ${AI_PROMPT_MAX_LENGTH} 字，当前 ${genPrompt.length} 字`}
+                    >
                       <TextArea
                         id="gen-prompt"
                         value={genPrompt}
+                        maxLength={AI_PROMPT_MAX_LENGTH}
                         placeholder="例如 围绕 TCP 三次握手与四次挥手生成单选题"
                         onChange={(event) => setGenPrompt(event.target.value)}
                       />
