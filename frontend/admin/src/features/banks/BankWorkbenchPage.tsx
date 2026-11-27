@@ -31,6 +31,7 @@ import {
   useAuth,
 } from "@exam/shared";
 import {
+  AI_MAX_COUNT,
   AI_MAX_TAGS,
   AI_PROMPT_MAX_LENGTH,
   adoptImportBatch,
@@ -562,8 +563,8 @@ export function BankWorkbenchPage() {
         toast.error(`知识点标签最多 ${AI_MAX_TAGS} 个`);
         return;
       }
-      if (genCount < 1 || genCount > 10) {
-        toast.error("生成数量要在 1 到 10 之间");
+      if (genCount < 1 || genCount > AI_MAX_COUNT) {
+        toast.error(`生成数量要在 1 到 ${AI_MAX_COUNT} 之间`);
         return;
       }
 
@@ -1277,12 +1278,16 @@ export function BankWorkbenchPage() {
                         <option value="comprehensive">综合操作题</option>
                       </SelectInput>
                     </Field>
-                    <Field label="生成数量" htmlFor="gen-count">
+                    <Field
+                      label="生成数量"
+                      htmlFor="gen-count"
+                      hint={`最多 ${AI_MAX_COUNT} 道`}
+                    >
                       <TextInput
                         id="gen-count"
                         type="number"
                         min={1}
-                        max={8}
+                        max={AI_MAX_COUNT}
                         value={genCount}
                         onChange={(event) => setGenCount(Number(event.target.value) || 1)}
                       />

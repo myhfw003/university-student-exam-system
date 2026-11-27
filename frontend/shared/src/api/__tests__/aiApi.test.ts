@@ -15,6 +15,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   AI_GENERATION_TIMEOUT_MS,
+  AI_MAX_COUNT,
+  AI_MAX_TAGS,
+  AI_PROMPT_MAX_LENGTH,
+  describeValidationErrors,
   generateAiQuestions,
   loadAiProviders,
   parseSseBlock,
@@ -189,5 +193,53 @@ describe("parseSseBlock · 解析一段 SSE", () => {
     const parsed = parseSseBlock('data: {"x":1}');
 
     expect(parsed?.event).toBe("message");
+  });
+});
+
+describe("describeValidationErrors · 把字段级错误翻成人话", () => {
+  // 2026-11-26 公测机上老师点「生成候选题」收到 400，界面上只有一句
+  // 「请求参数校验失败」——既不知道是数量超了还是标签选多了，排查只能靠猜。
+  it("把字段名翻成中文并带上原因", () => {
+    const message = describeValidationErrors({ Count: ["一次最多生成 10 道题。"] });
+
+    expect(message).toBe("生成数量：一次最多生成 10 道题。");
+  });
+
+  it("多个字段用分号隔开", () => {
+    const message = describeValidationErrors({
+      Prompt: ["出题要求过长。"],
+      TagIds: ["知识点标签不能超过 5 个。"],
+    });
+
+    expect(message).toBe("出题要求：出题要求过长。；知识点标签：知识点标签不能超过 5 个。");
+  });
+
+  it("同一个字段有多条原因时用顿号隔开", () => {
+    const message = describeValidationErrors({ Prompt: ["请填写出题要求。", "出题要求过长。"] });
+
+    expect(message).toBe("出题要求：请填写出题要求。、出题要求过长。");
+  });
+
+  it("没有字段级错误时不编一句话", () => {
+    expect(describeValidationErrors(undefined)).toBeUndefined();
+    expect(describeValidationErrors({})).toBeUndefined();
+  });
+
+  it("认不出的字段名原样带出来，不吞掉", () => {
+    const message = describeValidationErrors({ SomethingNew: ["出了点问题。"] });
+
+    expect(message).toBe("SomethingNew：出了点问题。");
+  });
+});
+
+describe("AI 生成的数量上限常量", () => {
+  // 这三个常量与服务端 `AiGenerationRequestRules` 是同一份限制：
+  // 界面先按它们拦一道，服务端再按同一套放行或拒绝。
+  // 两边对不上就会出现「界面上能填、服务端却拒」的尴尬——
+  // 2026-11-26 公测机上就是老师填了 11 道、被服务端按「一次最多 10 道题」拒了。
+  it("与服务端限制一致", () => {
+    expect(AI_MAX_COUNT).toBe(10);
+    expect(AI_PROMPT_MAX_LENGTH).toBe(2000);
+    expect(AI_MAX_TAGS).toBe(5);
   });
 });

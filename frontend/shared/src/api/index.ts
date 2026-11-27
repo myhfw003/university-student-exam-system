@@ -196,6 +196,7 @@ export {
 } from "./importApi";
 export {
   AI_GENERATION_IDLE_TIMEOUT_MS,
+  AI_MAX_COUNT,
   AI_MAX_TAGS,
   AI_PROMPT_MAX_LENGTH,
   describeValidationErrors,
