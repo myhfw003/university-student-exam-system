@@ -6,7 +6,7 @@
    ========================================================================== */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
@@ -133,8 +133,11 @@ describe("管理端阅卷中心 · HTTP 模式", () => {
     await waitFor(() => {
       expect(screen.getByText("端到端学生")).toBeInTheDocument();
     });
+    // 考试名在「卷宗队列」的行里和右侧卷宗细节里各出现一次，
+    // 整页找会撞上两个匹配，所以把范围收到队列卡片里。
+    const queue = screen.getByRole("heading", { name: "卷宗队列" }).closest("section")!;
     // 队列行里考试名与题型在同一行（文本被拆开），按片段找。
-    expect(screen.getByText(/计算机网络期中考试/)).toBeInTheDocument();
+    expect(within(queue).getByText(/计算机网络期中考试/)).toBeInTheDocument();
     // 计数来自服务端。
     expect(screen.getByText(/待阅卷 3/)).toBeInTheDocument();
   });
