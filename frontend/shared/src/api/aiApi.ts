@@ -212,11 +212,14 @@ export const AI_MAX_TAGS = 5;
 /**
  * 一次最多生成几道（与服务端同一份限制）。
  * <para>
- * 2026-11-26 公测机上老师把「生成数量」填成 11，服务端按「一次最多
- * 10 道题」拒了（HTTP 400），而界面上的数字输入框写着 max=8、提示语
- * 写着「1 到 10 之间」——三处对不上，老师既不知道自己被哪儿拒了，
- * 也不知道到底能填几。这里与后端 `AiGenerationRequestRules.MaxCount`
- * 同源，改一处要改两处（`scripts/check-ai-generation-limits.py` 盯着）。
+ * 2026-11-26 公测机上老师把「生成数量」填出了服务端允许的范围，服务端
+ * 按「一次最多 10 道题」拒了（HTTP 400）；而当时界面上的数字输入框写着
+ * max=8（服务端的上限是 10），两边对不上——老师既不知道自己被哪儿拒了，
+ * 也不知道到底能填几。
+ * </para>
+ * <para>
+ * 这里与后端 `AiGenerationRequestRules.MaxCount` 同源，改一处要改两处
+ * （`scripts/check-ai-generation-limits.py` 盯着）。
  * </para>
  */
 export const AI_MAX_COUNT = 10;
