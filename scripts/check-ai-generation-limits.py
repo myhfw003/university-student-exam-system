@@ -32,6 +32,7 @@ BACKEND_QUESTION = ROOT / "backend/src/Exam.Domain/Catalog/Question.cs"
 FRONTEND_API = ROOT / "frontend/shared/src/api/aiApi.ts"
 FRONTEND_ADMIN = ROOT / "frontend/admin/src/features/banks/BankWorkbenchPage.tsx"
 DOC = ROOT / "docs/design/05-api.md"
+TEACHER_MANUAL = ROOT / "docs/guide/teacher-manual.md"
 
 
 def backend_const(text, name):
@@ -52,6 +53,7 @@ def main():
     api_text = FRONTEND_API.read_text(encoding="utf-8")
     admin_text = FRONTEND_ADMIN.read_text(encoding="utf-8")
     doc_text = DOC.read_text(encoding="utf-8")
+    manual_text = TEACHER_MANUAL.read_text(encoding="utf-8")
 
     problems = []
 
@@ -131,6 +133,18 @@ def main():
                 f"与后端的 {backend_max_prompt} 不一致"
             )
 
+    # ---- 教师手册也写着这个上限 ----
+    # 老师照手册填数字：手册说 10 而服务端只认 8（或者反过来），
+    # 老师填的数就会被服务端拒掉——和这次公测机上的事故同一类。
+    manual_max_count = re.search(r"一次最多\s*(\d+)\s*道", manual_text)
+    if manual_max_count is None:
+        problems.append("教师手册里找不到「一次最多 N 道」这一句")
+    elif backend_max_count is not None and int(manual_max_count.group(1)) != backend_max_count:
+        problems.append(
+            f"教师手册写的「一次最多 {manual_max_count.group(1)} 道」"
+            f"与后端的 {backend_max_count} 不一致"
+        )
+
     # ---- 后端 ↔ 前端逐项比对 ----
     for label, backend_value, frontend_value, backend_name, frontend_name in (
         ("生成数量", backend_max_count, frontend_max_count, "MaxCount", "AI_MAX_COUNT"),
@@ -155,7 +169,7 @@ def main():
             "或 Question.MaxTagCount 时，同步改 frontend/shared/src/api/aiApi.ts "
             "里的 AI_MAX_COUNT / AI_PROMPT_MAX_LENGTH / AI_MAX_TAGS；"
             "管理端页面一律用这些共享常量，不要写死数字；"
-            "接口文档 §5 里的那两句也要跟着改。"
+            "接口文档 §5 里的那两句与教师手册 §2.3 也要跟着改。"
         )
         return 1
 
