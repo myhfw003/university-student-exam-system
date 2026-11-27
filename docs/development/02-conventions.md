@@ -294,6 +294,47 @@ CI 把它作为**门禁**（缺浏览器即失败，不静默跳过）。新增�
 4. **越权流程**：学生 A 直接访问学生 B 的 `attemptId` → 404；学生访问管理端端点 → 403。
 5. **阅卷流程**：交卷 → 阅卷队列出现主观题 → 阅卷给分 → 发布成绩 → 学生端看到主观题分。
 
+### 4.8 CI 失败了怎么看（免管理员权限）
+
+**作业日志与 artifact 只有仓库管理员能下载，注解（annotation）却对所有人可见。**
+所以 CI 偶发变红时，失败详情已经贴成注解，直接看运行页上的红色条目即可；
+不用管理员权限，也不用猜是哪条用例挂了。
+
+三个测试作业（后端、前端、端到端）都按同一套两段式接：
+
+```yaml
+- name: 某某测试
+  id: xxx_test
+  run: bash ../scripts/ci-run-logged.sh /tmp/xxx.log pnpm test
+- name: 某某测试失败详情（写进注解，免管理员权限也能看到）
+  if: failure() && steps.xxx_test.outcome == 'failure'
+  run: bash ../scripts/ci-annotate-failure.sh /tmp/xxx.log "某某测试失败"
+```
+
+**接的时候有三个坑**：
+
+1. `cmd | tee log` 会把退出码换成 tee 的 **0**——测试失败会变成「步骤成功」，
+   CI 绿灯而问题没被发现。`ci-run-logged.sh` 显式取 `PIPESTATUS[0]`。
+2. **路径随作业的工作目录而变**：backend/frontend 作业的默认工作目录是
+   `backend/` 与 `frontend/`，脚本要写 `../scripts/...`；端到端作业没有默认
+   工作目录（=仓库根），要写 `scripts/...`。
+3. **注解步骤要盯着自己那一步**（上面的 `id` + `outcome` 判断）。只写
+   `if: failure()` 的话，作业里后面任何一步红了都会触发它，把一份**通过的**
+   日志当成失败清单贴出来。
+
+**前端偶发变红**多半是断言撞上了同名元素。页面上同一个名字常渲染两次
+（列表行 + 详情面板），`getByText` 撞上两个就报 `Found multiple elements`。
+HTTP 模式的详情是异步取回的，取没取回是**竞态**，CPU 一忙就翻车。修法是
+把查询**收进各自的区域**：
+
+```tsx
+const queue = screen.getByRole("heading", { name: "卷宗队列" }).closest("section")!;
+expect(within(queue).getByText(/考试名/)).toBeInTheDocument();
+```
+
+本地复现偶发失败要压 CPU：`taskset -c 0,1` 把 vitest 限到两个核，
+循环跑几轮就能稳定复现。
+
 ---
 
 ## 5. Git 规范
