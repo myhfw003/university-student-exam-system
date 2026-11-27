@@ -56,7 +56,7 @@ describe("generateAiQuestionsStream · 消费 SSE", () => {
         questionEvent(1, 101),
         questionEvent(2, 102),
         'event: done\ndata: {"requested":2,"succeeded":2,"failed":0,"provider":"minimax",' +
-          '"providerName":"MiniMax","model":"MiniMax-M2.7"}\n\n',
+          '"providerName":"MiniMax","model":"MiniMax-M3.1-Flash"}\n\n',
       ]),
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -68,7 +68,7 @@ describe("generateAiQuestionsStream · 消费 SSE", () => {
     await generateAiQuestionsStream(
       {
         provider: "minimax",
-        model: "MiniMax-M2.7",
+        model: "MiniMax-M3.1-Flash",
         count: 2,
         type: "single",
         difficultyTagId: "12",
@@ -102,7 +102,7 @@ describe("generateAiQuestionsStream · 消费 SSE", () => {
     await generateAiQuestionsStream(
       {
         provider: "minimax",
-        model: "MiniMax-M2.7",
+        model: "MiniMax-M3.1-Flash",
         count: 1,
         type: "single",
         difficultyTagId: "12",
@@ -123,7 +123,7 @@ describe("generateAiQuestionsStream · 消费 SSE", () => {
         'event: failed\ndata: {"index":1,"succeeded":false,"questionId":null,"code":null,' +
           '"type":null,"stem":null,"score":null,"errors":["选项：客观题必须填写选项。"]}\n\n',
         'event: done\ndata: {"requested":1,"succeeded":0,"failed":1,"provider":"minimax",' +
-          '"providerName":"MiniMax","model":"MiniMax-M2.7"}\n\n',
+          '"providerName":"MiniMax","model":"MiniMax-M3.1-Flash"}\n\n',
       ]),
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -133,7 +133,7 @@ describe("generateAiQuestionsStream · 消费 SSE", () => {
     await generateAiQuestionsStream(
       {
         provider: "minimax",
-        model: "MiniMax-M2.7",
+        model: "MiniMax-M3.1-Flash",
         count: 1,
         type: "single",
         difficultyTagId: "12",
@@ -161,7 +161,7 @@ describe("generateAiQuestionsStream · 消费 SSE", () => {
     await generateAiQuestionsStream(
       {
         provider: "minimax",
-        model: "MiniMax-M2.7",
+        model: "MiniMax-M3.1-Flash",
         count: 1,
         type: "single",
         difficultyTagId: "12",
@@ -195,7 +195,7 @@ describe("generateAiQuestionsStream · 消费 SSE", () => {
       generateAiQuestionsStream(
         {
           provider: "minimax",
-          model: "MiniMax-M2.7",
+          model: "MiniMax-M3.1-Flash",
           count: 50,
           type: "single",
           difficultyTagId: "12",
@@ -216,7 +216,7 @@ describe("generateAiQuestionsStream · 消费 SSE", () => {
     await generateAiQuestionsStream(
       {
         provider: "minimax",
-        model: "MiniMax-M2.7",
+        model: "MiniMax-M3.1-Flash",
         count: 1,
         type: "single",
         difficultyTagId: "12",

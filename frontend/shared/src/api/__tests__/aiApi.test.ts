@@ -29,8 +29,8 @@ const PROVIDERS = {
       name: "minimax",
       displayName: "MiniMax",
       configured: true,
-      defaultModel: "MiniMax-M2.7",
-      models: ["MiniMax-M2.7", "MiniMax-M3"],
+      defaultModel: "MiniMax-M3.1-Flash",
+      models: ["MiniMax-M3.1-Flash", "MiniMax-M3"],
     },
     {
       name: "other",
@@ -46,7 +46,7 @@ const PROVIDERS = {
 const GENERATION = {
   provider: "minimax",
   providerName: "MiniMax",
-  model: "MiniMax-M2.7",
+  model: "MiniMax-M3.1-Flash",
   requested: 2,
   succeeded: 1,
   failed: 1,
@@ -80,8 +80,8 @@ describe("aiApi · 供应商列表", () => {
     expect(get.mock.calls[0]![0]).toBe("/ai/providers");
     expect(providers).toHaveLength(2);
     expect(providers[0]!.name).toBe("minimax");
-    expect(providers[0]!.models).toEqual(["MiniMax-M2.7", "MiniMax-M3"]);
-    expect(providers[0]!.defaultModel).toBe("MiniMax-M2.7");
+    expect(providers[0]!.models).toEqual(["MiniMax-M3.1-Flash", "MiniMax-M3"]);
+    expect(providers[0]!.defaultModel).toBe("MiniMax-M3.1-Flash");
   });
 
   it("没配 API Key 的供应商也列出来，并标成未配置", async () => {
@@ -104,7 +104,7 @@ describe("aiApi · 生成试题", () => {
     const result = await generateAiQuestions(
       {
         provider: "minimax",
-        model: "MiniMax-M2.7",
+        model: "MiniMax-M3.1-Flash",
         count: 2,
         type: "single",
         difficultyTagId: "12",

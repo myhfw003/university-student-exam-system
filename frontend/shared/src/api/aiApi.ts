@@ -26,7 +26,7 @@ export type AiClient = Pick<typeof httpClient, "get" | "post">;
  *
  * <para>
  * 默认的 15s 是给普通接口用的，**模型调用远不止**：实测 8 道题
- * MiniMax-M2.7 要 25 秒、M3 要 60 秒。沿用默认超时的话，
+ * MiniMax-M3.1-Flash 要 7 秒、M3 要 49 秒。沿用默认超时的话，
  * 界面每次都只会报「请求超时，请稍后重试」，而服务端其实已经把题出好了。
  * </para>
  *

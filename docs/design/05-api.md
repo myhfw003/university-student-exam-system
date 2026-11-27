@@ -371,8 +371,8 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
       "name": "minimax",
       "displayName": "MiniMax",
       "configured": true,
-      "defaultModel": "MiniMax-M2.7",
-      "models": ["MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M3"]
+      "defaultModel": "MiniMax-M3.1-Flash",
+      "models": ["MiniMax-M3.1-Flash", "MiniMax-M3"]
     }
   ]
 }
@@ -383,7 +383,7 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 ```json
 {
   "provider": "minimax",
-  "model": "MiniMax-M2.7",
+  "model": "MiniMax-M3.1-Flash",
   "count": 3,
   "type": "single",
   "difficultyTagId": 12,
@@ -398,7 +398,7 @@ CSV 列定义：`account`（必填，登录账号）、`name`（必填，姓名�
 {
   "provider": "minimax",
   "providerName": "MiniMax",
-  "model": "MiniMax-M2.7",
+  "model": "MiniMax-M3.1-Flash",
   "requested": 3,
   "succeeded": 2,
   "failed": 1,
@@ -441,7 +441,7 @@ event: question
 data: {"index":1,"succeeded":true,"questionId":900,"code":"AI-20261126103000-01","type":"single","stem":"TCP 建立连接时采用三次握手，其主要目的是：","score":5,"errors":[]}
 
 event: done
-data: {"requested":3,"succeeded":2,"failed":1,"provider":"minimax","providerName":"MiniMax","model":"MiniMax-M2.7"}
+data: {"requested":3,"succeeded":2,"failed":1,"provider":"minimax","providerName":"MiniMax","model":"MiniMax-M3.1-Flash"}
 ```
 
 要点：
