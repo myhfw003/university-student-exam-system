@@ -27,6 +27,7 @@ jobs:
       - name: 构建（警告视为错误）
         run: dotnet build ExamManager.slnx -c Release --no-restore
       - name: 测试与覆盖率
+        id: backend_test
         # 这一步要跑两个多小时，失败时最难查：作业日志要管理员权限，
         # 而它是唯一说明「哪条用例挂了」的地方。所以输出另存一份日志，
         # 失败时贴成注解（注解谁都能看到）。
@@ -37,7 +38,9 @@ jobs:
             --results-directory ./TestResults \
             --logger "trx;LogFileName=test-results.trx"
       - name: 后端测试失败详情（写进注解，免管理员权限也能看到）
-        if: failure()
+        # 只在测试这一步自己失败时才贴：作业里后面任何一步红了，
+        # 都可能把一份「通过」的日志当成失败清单贴出来。
+        if: failure() && steps.backend_test.outcome == 'failure'
         run: bash ../scripts/ci-annotate-failure.sh /tmp/backend-test.log "后端测试失败"
       - name: 上传覆盖率报告
         uses: actions/upload-artifact@v4
@@ -178,12 +181,14 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - name: 前端单元测试
+        id: frontend_test
         # 输出同时落一份日志文件：作业日志要管理员权限才看得到，
         # 而前端测试偶发变红时，那份日志是唯一能定位到「哪条用例挂了」的东西。
         # 脚本自己保留被测命令的退出码（管道会把退出码换成 tee 的 0）。
         run: bash ../scripts/ci-run-logged.sh /tmp/frontend-test.log pnpm test
       - name: 前端测试失败详情（写进注解，免管理员权限也能看到）
-        if: failure()
+        # 只在单测这一步自己失败时才贴（理由同上）。
+        if: failure() && steps.frontend_test.outcome == 'failure'
         run: bash ../scripts/ci-annotate-failure.sh /tmp/frontend-test.log "前端单元测试失败"
       - run: pnpm build
       - name: 前端镜像的数据源配置
@@ -307,6 +312,7 @@ jobs:
         working-directory: frontend
         run: npx --yes playwright@1.65.0 install --with-deps chromium
       - name: 端到端测试（接口全景巡检与越权访问）
+        id: e2e_test
         # 起真实后端再打真实接口：越权与错误结构在 mock 模式下验不出来。
         # API 与测试放同一个步骤：CI 会在步骤结束时回收后台进程。
         working-directory: frontend
@@ -364,7 +370,8 @@ jobs:
       - name: 端到端失败详情（写进注解，免管理员权限也能看到）
         # 作业日志与 artifact 都只有管理员能下载，注解却对所有人可见。
         # 端到端偶发变红时，这就是唯一能看出「哪条用例、哪一步挂了」的地方。
-        if: failure()
+        # 只在端到端这一步自己失败时才贴（理由同上）。
+        if: failure() && steps.e2e_test.outcome == 'failure'
         run: |
           for f in /tmp/e2e-api.log /tmp/e2e-ui.log; do
             [ -f "$f" ] && bash scripts/ci-annotate-failure.sh "$f" "端到端测试失败"
